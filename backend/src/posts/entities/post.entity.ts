@@ -9,21 +9,21 @@ import {
   OneToMany,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { Comment } from '../../comments/entities/comment.entity';
+import { Comment } from '../../comments/entities/comment.entity'; 
 
 @Entity('posts')
 export class Post {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: 'author_id' })
-  author_id: number;
+  @Column({ name: 'author_id', nullable: true })
+  author_id: number | null;
 
-  @ManyToOne(() => User, (user) => user.posts, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, (user) => user.posts, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'author_id' })
-  author: User;
+  author: User | null;
 
-  @Column({ type: 'varchar', length: 50 })
+  @Column({ type: 'varchar', length: 100 }) 
   title: string;
 
   @CreateDateColumn({ type: 'timestamp', name: 'created_at', default: () => 'CURRENT_TIMESTAMP' })

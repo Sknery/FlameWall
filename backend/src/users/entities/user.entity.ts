@@ -1,12 +1,5 @@
 import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  OneToMany,
-  BeforeInsert,
-  Index,
+  Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, Index 
 } from 'typeorm';
 import { Ranks } from '../../common/enums/ranks.enum';
 import { Post } from '../../posts/entities/post.entity';
@@ -58,7 +51,8 @@ export class User {
   @Column({ type: 'varchar', length: 255, name: 'password_hash', select: false }) 
   password_hash: string;
 
-  password?: string; 
+  // Убрали: password?: string;
+  // Убрали: @BeforeInsert() async hashPasswordMethod() { ... }
 
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 255, unique: true })
@@ -103,15 +97,8 @@ export class User {
   @OneToMany(() => Purchase, (purchase) => purchase.user)
   purchases: Purchase[];
 
-  @BeforeInsert()
-  async hashPasswordMethod() { 
-    if (this.password) {
-      this.password_hash = await bcrypt.hash(this.password, 10);
-      this.password = undefined; 
-    }
-  }
-
   async validatePassword(passwordToValidate: string): Promise<boolean> { 
+    if (!this.password_hash) return false; 
     return bcrypt.compare(passwordToValidate, this.password_hash);
   }
 }

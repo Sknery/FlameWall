@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException, InternalServerErrorException } from 
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { UsersService } from '../users/users.service';
+import { UsersService, PublicUser } from '../users/users.service'; 
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -15,18 +15,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new InternalServerErrorException('JWT_SECRET is not defined in environment variables. Application cannot start.');
     }
 
-    super({
+    super({ 
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: jwtSecret,
-    }); 
+    });
   }
 
-  async validate(payload: any) {
-    const user = await this.usersService.findOne(payload.sub);
+  async validate(payload: any): Promise<{ userId: number; username: string; rank: string }> {
+    console.log('JWT Strategy - validate method called with payload:', payload);
+    const user: PublicUser | null = await this.usersService.findOne(payload.sub); 
+    console.log('User found by strategy:', user);
     if (!user) {
+        console.error('JWT Strategy - User not found for id:', payload.sub);
         throw new UnauthorizedException('User not found or token invalid');
     }
-    return { userId: payload.sub, username: payload.username, rank: user.rank };
+    return { userId: user.id, username: user.username, rank: user.rank };
   }
 }

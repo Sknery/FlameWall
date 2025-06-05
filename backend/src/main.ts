@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { DocumentBuilder, SwaggerModule, SwaggerCustomOptions } from '@nestjs/swagger'; // Добавлен SwaggerCustomOptions
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -22,7 +22,14 @@ async function bootstrap() {
     .addBearerAuth() 
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api-docs', app, document);
+
+  const customOptions: SwaggerCustomOptions = {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  };
+
+  SwaggerModule.setup('api-docs', app, document, customOptions); 
 
   const port = configService.get<number>('API_PORT') || 3000;
   await app.listen(port);
@@ -30,4 +37,3 @@ async function bootstrap() {
   console.log(`Swagger documentation is available at: ${await app.getUrl()}/api-docs`);
 }
 bootstrap();
-

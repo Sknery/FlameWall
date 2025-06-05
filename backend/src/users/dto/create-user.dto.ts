@@ -1,49 +1,36 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength, IsEnum, MaxLength, IsUUID } from 'class-validator';
-import { Ranks } from '../../common/enums/ranks.enum';
+import { IsEmail, IsNotEmpty, IsString, MinLength, MaxLength } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateUserDto {
+  @ApiProperty({ 
+    example: 'Player123', 
+    description: 'The username of the user', 
+    minLength: 3, 
+    maxLength: 50 
+  })
   @IsNotEmpty()
   @IsString()
   @MinLength(3)
   @MaxLength(50)
   username: string;
 
-  @IsOptional()
-  @IsString()
-  @IsUUID()
-  minecraft_uuid?: string;
-  
-  @IsOptional()
-  @IsString()
-  @MaxLength(70)
-  description?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  pfp_url?: string;
-  
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  banner_url?: string;
-
-  @IsOptional()
-  @IsEnum(Ranks)
-  rank?: Ranks = Ranks.DEFAULT;
-  
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  skin_url?: string;
-
-  @IsNotEmpty()
-  @IsString()
-  @MinLength(8)
-  password: string; 
-
+  @ApiProperty({ 
+    example: 'user@example.com', 
+    description: 'User email address', 
+    maxLength: 255 
+  })
   @IsNotEmpty()
   @IsEmail()
   @MaxLength(255)
   email: string;
+
+  @ApiProperty({ 
+    example: 'SecurePassword123!', 
+    description: 'User password (min 8 characters)', 
+    minLength: 8 
+  })
+  @IsNotEmpty()
+  @IsString()
+  @MinLength(8)
+  password: string;
 }

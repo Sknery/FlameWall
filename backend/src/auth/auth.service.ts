@@ -1,9 +1,9 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { UsersService } from '../users/users.service';
+import { UsersService, PublicUser } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { LoginDto } from './dto/login.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto'; 
-import { User } from '../users/entities/user.entity';
+import { User } from '../users/entities/user.entity'; 
 
 @Injectable()
 export class AuthService {
@@ -12,28 +12,30 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async validateUser(email: string, pass: string): Promise<Omit<User, 'password_hash' | 'password' | 'validatePassword' | 'hashPasswordMethod'> | null> {
-    const user = await this.usersService.findOneWithPasswordByEmail(email);
+  async validateUser(email: string, pass: string): Promise<PublicUser | null> {
+    const user: User | null = await this.usersService.findOneWithPasswordByEmail(email);
+    
     if (user && await user.validatePassword(pass)) {
-      const { password_hash, password, validatePassword, hashPasswordMethod, ...result } = user;
-      return result;
+      const { password_hash, validatePassword, ...publicData } = user;
+      return publicData as PublicUser; 
     }
     return null;
   }
 
   async login(loginDto: LoginDto) {
-    const userPayload = await this.validateUser(loginDto.email, loginDto.password);
+    const userPayload: PublicUser | null = await this.validateUser(loginDto.email, loginDto.password);
     if (!userPayload) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    const payload = { username: userPayload.username, sub: userPayload.id, rank: userPayload.rank };
+    
+    const jwtTokenPayload = { username: userPayload.username, sub: userPayload.id, rank: userPayload.rank };
     return {
-      access_token: this.jwtService.sign(payload),
-      user: userPayload
+      access_token: this.jwtService.sign(jwtTokenPayload),
+      user: userPayload 
     };
   }
 
-  async register(createUserDto: CreateUserDto) {
+  async register(createUserDto: CreateUserDto): Promise<PublicUser> {
     return this.usersService.create(createUserDto);
   }
 }
