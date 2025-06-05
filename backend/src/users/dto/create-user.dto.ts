@@ -40,7 +40,7 @@ export class CreateUserDto {
   @IsNotEmpty()
   @IsString()
   @MinLength(8)
-  password_hash: string;
+  password: string; 
 
   @IsNotEmpty()
   @IsEmail()

@@ -8,5 +8,5 @@ export class LoginDto {
   @IsNotEmpty()
   @IsString()
   @MinLength(8)
-  password_hash: string;
+  password: string; 
 }

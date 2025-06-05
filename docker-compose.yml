@@ -5,6 +5,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: development
+    command: npm run start:dev
     container_name: flamewall_backend
     ports:
       - "${API_PORT:-3000}:${API_PORT:-3000}"
@@ -18,7 +20,7 @@ services:
     environment:
       - NODE_ENV=development 
     restart: unless-stopped
-    networks: # <--- Добавлено
+    networks:
       - flamewall_net
 
   db:
@@ -33,7 +35,7 @@ services:
       - "${DB_PORT:-5432}:5432" 
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks: # <--- Добавлено
+    networks:
       - flamewall_net
 
   pgadmin:
@@ -49,13 +51,13 @@ services:
       - db
     volumes:
       - pgadmin_data:/var/lib/pgadmin
-    networks: # <--- Добавлено
+    networks:
       - flamewall_net
 
 volumes:
   postgres_data:
   pgadmin_data:
 
-networks: # <--- Добавлено определение сети
+networks:
   flamewall_net:
     driver: bridge

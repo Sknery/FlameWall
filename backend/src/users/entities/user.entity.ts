@@ -55,8 +55,10 @@ export class User {
   @Column({ type: 'integer', default: 0 })
   balance: number;
 
-  @Column({ type: 'varchar', length: 255, name: 'password_hash' })
+  @Column({ type: 'varchar', length: 255, name: 'password_hash', select: false }) 
   password_hash: string;
+
+  password?: string; 
 
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 255, unique: true })
@@ -102,13 +104,14 @@ export class User {
   purchases: Purchase[];
 
   @BeforeInsert()
-  async hashPassword() {
-    if (this.password_hash) {
-      this.password_hash = await bcrypt.hash(this.password_hash, 10);
+  async hashPasswordMethod() { 
+    if (this.password) {
+      this.password_hash = await bcrypt.hash(this.password, 10);
+      this.password = undefined; 
     }
   }
 
-  async validatePassword(password: string): Promise<boolean> {
-    return bcrypt.compare(password, this.password_hash);
+  async validatePassword(passwordToValidate: string): Promise<boolean> { 
+    return bcrypt.compare(passwordToValidate, this.password_hash);
   }
 }

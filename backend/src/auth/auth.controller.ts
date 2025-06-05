@@ -1,12 +1,16 @@
-import { Controller, Post, Body, UsePipes, ValidationPipe, Request, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, UsePipes, ValidationPipe, Request, UseGuards, Get } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard'; 
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { UsersService, PublicUser } from '../users/users.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+      private authService: AuthService,
+      private usersService: UsersService, 
+    ) {}
 
   @Post('register')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
@@ -21,8 +25,9 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post('profile')
-  getProfile(@Request() req) {
-    return req.user;
+  @Get('profile') 
+  async getProfile(@Request() req): Promise<PublicUser> {
+    const userId = req.user.userId; 
+    return this.usersService.findOne(userId);
   }
 }

@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 
-type PublicUser = Omit<User, 'password_hash' | 'validatePassword' | 'hashPassword'>;
+export type PublicUser = Omit<User, 'password_hash' | 'validatePassword' | 'hashPasswordMethod' | 'password'>;
 
 @Injectable()
 export class UsersService {
@@ -15,26 +15,26 @@ export class UsersService {
 
   async create(createUserDto: CreateUserDto): Promise<PublicUser> {
     const { email, username } = createUserDto;
-    const existingUserByEmail = await this.usersRepository.findOne({ where: { email } });
-    if (existingUserByEmail) {
+    let existingUser = await this.usersRepository.findOne({ where: { email } });
+    if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
-    const existingUserByUsername = await this.usersRepository.findOne({ where: { username } });
-    if (existingUserByUsername) {
+    existingUser = await this.usersRepository.findOne({ where: { username } });
+    if (existingUser) {
       throw new ConflictException('User with this username already exists');
     }
 
-    const user = this.usersRepository.create(createUserDto);
+    const user = this.usersRepository.create(createUserDto); 
     const savedUser = await this.usersRepository.save(user);
     
-    const { password_hash, validatePassword, hashPassword, ...result } = savedUser;
+    const { password_hash, password, validatePassword, hashPasswordMethod, ...result } = savedUser;
     return result as PublicUser;
   }
 
   async findAll(): Promise<PublicUser[]> {
     const users = await this.usersRepository.find();
     return users.map(user => {
-        const { password_hash, validatePassword, hashPassword, ...result } = user;
+        const { password_hash, password, validatePassword, hashPasswordMethod, ...result } = user;
         return result as PublicUser;
     });
   }
@@ -44,7 +44,7 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
-    const { password_hash, validatePassword, hashPassword, ...result } = user;
+    const { password_hash, password, validatePassword, hashPasswordMethod, ...result } = user;
     return result as PublicUser;
   }
   
@@ -52,7 +52,17 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { username } });
   }
 
-  async findOneByEmailWithPassword(email: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { email } });
+  async findOneWithPasswordByEmail(email: string): Promise<User | null> { 
+    return this.usersRepository.createQueryBuilder("user")
+        .addSelect("user.password_hash")
+        .where("user.email = :email", { email })
+        .getOne();
+  }
+
+  async findOneWithPasswordById(id: number): Promise<User | null> {
+    return this.usersRepository.createQueryBuilder("user")
+        .addSelect("user.password_hash")
+        .where("user.id = :id", { id })
+        .getOne();
   }
 }
