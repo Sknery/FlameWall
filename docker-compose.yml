@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flamewall_backend
+    ports:
+      - "${API_PORT:-3000}:${API_PORT:-3000}"
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules 
+    env_file:
+      - ./backend/.env
+    environment:
+      - NODE_ENV=development 
+    restart: unless-stopped
+    networks: # <--- Добавлено
+      - flamewall_net
+
+  db:
+    image: postgres:15
+    container_name: flamewall_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${DB_PORT:-5432}:5432" 
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: # <--- Добавлено
+      - flamewall_net
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: flamewall_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks: # <--- Добавлено
+      - flamewall_net
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+
+networks: # <--- Добавлено определение сети
+  flamewall_net:
+    driver: bridge
