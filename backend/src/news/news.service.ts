@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { News } from './entities/news.entity';
@@ -14,26 +14,34 @@ export class NewsService {
     private usersRepository: Repository<User>,
   ) {}
 
-  async create(createNewsDto: CreateNewsDto, userId?: number): Promise<News> {
-    const newsItem = this.newsRepository.create(createNewsDto);
-    if (userId) {
-        const author = await this.usersRepository.findOne({ where: { id: userId } });
-        if (!author) throw new NotFoundException(`Author with ID ${userId} not found`);
-        newsItem.author = author;
-    } else if (createNewsDto.author_id) {
-        const author = await this.usersRepository.findOne({ where: { id: createNewsDto.author_id } });
-        if (!author) throw new NotFoundException(`Author with ID ${createNewsDto.author_id} not found`);
-        newsItem.author = author;
+  async create(createNewsDto: CreateNewsDto, authorId: number): Promise<News> {
+    const author = await this.usersRepository.findOne({ where: { id: authorId } });
+    if (!author) {
+      throw new ForbiddenException('Authenticated user not found.');
     }
+
+    const newsItem = this.newsRepository.create({
+      ...createNewsDto, 
+      author: author,   
+    });
+
     return this.newsRepository.save(newsItem);
   }
 
   async findAll(): Promise<News[]> {
-    return this.newsRepository.find({ relations: ['author'] });
+    return this.newsRepository.find({ 
+      relations: ['author'],
+      order: {
+        created_at: 'DESC',
+      }
+    });
   }
 
   async findOne(id: number): Promise<News> {
-    const newsItem = await this.newsRepository.findOne({ where: { id }, relations: ['author'] });
+    const newsItem = await this.newsRepository.findOne({ 
+      where: { id },
+      relations: ['author'] 
+    });
     if (!newsItem) {
       throw new NotFoundException(`News item with ID ${id} not found`);
     }

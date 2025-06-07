@@ -1,6 +1,13 @@
 import {
-  Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, Index 
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  OneToMany,
+  Index,
 } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 import { Ranks } from '../../common/enums/ranks.enum';
 import { Post } from '../../posts/entities/post.entity';
 import { News } from '../../news/entities/news.entity';
@@ -9,15 +16,24 @@ import { Message } from '../../messages/entities/message.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
 import { Comment } from '../../comments/entities/comment.entity';
 import { Purchase } from '../../purchases/entities/purchase.entity';
-import * as bcrypt from 'bcrypt';
 
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'varchar', length: 50, unique: true })
+  @Column({ type: 'varchar', length: 50 })
   username: string;
+
+  @Index({ unique: true, where: '"profile_slug" IS NOT NULL' })
+  @Column({
+    type: 'varchar',
+    length: 50,
+    unique: true,
+    nullable: true,
+    name: 'profile_slug',
+  })
+  profile_slug: string | null;
 
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 36, unique: true, nullable: true })
@@ -42,17 +58,11 @@ export class User {
   })
   rank: Ranks;
 
-  @Column({ type: 'varchar', length: 100, nullable: true, name: 'skin_url' })
-  skin_url: string | null;
-
   @Column({ type: 'integer', default: 0 })
   balance: number;
 
-  @Column({ type: 'varchar', length: 255, name: 'password_hash', select: false }) 
+  @Column({ type: 'varchar', length: 255, name: 'password_hash', select: false })
   password_hash: string;
-
-  // Убрали: password?: string;
-  // Убрали: @BeforeInsert() async hashPasswordMethod() { ... }
 
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 255, unique: true })
@@ -97,8 +107,8 @@ export class User {
   @OneToMany(() => Purchase, (purchase) => purchase.user)
   purchases: Purchase[];
 
-  async validatePassword(passwordToValidate: string): Promise<boolean> { 
-    if (!this.password_hash) return false; 
+  async validatePassword(passwordToValidate: string): Promise<boolean> {
+    if (!this.password_hash) return false;
     return bcrypt.compare(passwordToValidate, this.password_hash);
   }
 }

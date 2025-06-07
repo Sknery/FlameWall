@@ -22,8 +22,8 @@ export class PostsService {
     }
 
     const post = this.postsRepository.create({
-      ...createPostDto, // title, content
-      author: author,   // Связываем пост с автором
+      ...createPostDto, 
+      author: author,
     });
 
     return this.postsRepository.save(post);
@@ -31,9 +31,9 @@ export class PostsService {
 
   async findAll(): Promise<Post[]> {
     return this.postsRepository.find({
-      relations: ['author'], // Загружаем информацию об авторе
+      relations: ['author'], 
       order: {
-        created_at: 'DESC', // Сортируем посты: сначала новые
+        created_at: 'DESC',
       },
     });
   }
@@ -41,8 +41,7 @@ export class PostsService {
   async findOne(id: number): Promise<Post> {
     const post = await this.postsRepository.findOne({
       where: { id },
-      relations: ['author'], // Загружаем информацию об авторе
-      // Позже сюда можно будет добавить 'comments', 'comments.author'
+      relations: ['author'],
     });
 
     if (!post) {
@@ -52,14 +51,10 @@ export class PostsService {
   }
 
   async update(id: number, updatePostDto: UpdatePostDto, userId: number): Promise<Post> {
-    const post = await this.findOne(id); // findOne уже содержит проверку на NotFoundException и загружает автора
+    const post = await this.findOne(id); 
 
     if (post.author_id !== userId) {
-      // Здесь можно добавить проверку на роль администратора/модератора, если они могут редактировать чужие посты
-      // const user = await this.usersRepository.findOne({ where: { id: userId } });
-      // if (user.rank !== Ranks.ADMIN && user.rank !== Ranks.MODERATOR) { // Потребуется импорт Ranks
-      //   throw new ForbiddenException('You are not authorized to update this post.');
-      // }
+
       throw new ForbiddenException('You are not authorized to update this post.');
     }
 
@@ -68,10 +63,9 @@ export class PostsService {
   }
 
   async remove(id: number, userId: number): Promise<void> {
-    const post = await this.findOne(id); // findOne уже содержит проверку на NotFoundException
+    const post = await this.findOne(id); 
 
     if (post.author_id !== userId) {
-      // Аналогично, здесь может быть проверка на роль администратора/модератора
       throw new ForbiddenException('You are not authorized to delete this post.');
     }
 
