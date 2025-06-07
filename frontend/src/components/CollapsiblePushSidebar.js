@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { NavLink, Outlet } from 'react-router-dom'; 
 import {
   Box,
   Sheet,
@@ -73,42 +74,48 @@ const adminNavItem = {
   path: '/admin',
 };
 
-const CollapsiblePushSidebar = ({ children }) => {
+
+const MainLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [openCategories, setOpenCategories] = useState({ Community: true }); 
+  const [openCategories, setOpenCategories] = useState({ Community: true });
 
-  const isLoggedIn = true; 
-  const isAdmin = true; 
+  const isLoggedIn = true;
+  const isAdmin = true;
 
-  const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
-  };
+  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
+  const toggleCategory = (categoryName) => setOpenCategories((prev) => ({ ...prev, [categoryName]: !prev[categoryName] }));
 
-  const toggleCategory = (categoryName) => {
-    setOpenCategories((prev) => ({
-      ...prev,
-      [categoryName]: !prev[categoryName],
-    }));
-  };
-  
   const renderNavItems = (items) => {
     return items.map((item) => (
       <ListItem key={item.name} nested={!!item.subItems}>
-        <ListItemButton
-          onClick={() => item.subItems ? toggleCategory(item.name) : console.log(`Maps to ${item.path}`)}
-        >
-          {item.icon && <ListItemDecorator>{item.icon}</ListItemDecorator>}
-          <ListItemContent>{item.name}</ListItemContent>
-          {item.subItems && (openCategories[item.name] ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />)}
-        </ListItemButton>
+        {item.subItems ? (
+          <ListItemButton onClick={() => toggleCategory(item.name)}>
+            {item.icon && <ListItemDecorator>{item.icon}</ListItemDecorator>}
+            <ListItemContent>{item.name}</ListItemContent>
+            {openCategories[item.name] ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+          </ListItemButton>
+        ) : (
+          <NavLink to={item.path} style={{ textDecoration: 'none', color: 'inherit' }}>
+            {({ isActive }) => (
+              <ListItemButton selected={isActive}>
+                {item.icon && <ListItemDecorator>{item.icon}</ListItemDecorator>}
+                <ListItemContent>{item.name}</ListItemContent>
+              </ListItemButton>
+            )}
+          </NavLink>
+        )}
         {item.subItems && openCategories[item.name] && (
           <List sx={{ '--List-nestedInsetStart': '20px', pt: 0.5 }}>
             {item.subItems.map((subItem) => (
               <ListItem key={subItem.name}>
-                <ListItemButton onClick={() => console.log(`Maps to ${subItem.path}`)}>
-                  {subItem.icon && <ListItemDecorator sx={{ color: 'text.tertiary' }}>{subItem.icon}</ListItemDecorator>}
-                  <ListItemContent>{subItem.name}</ListItemContent>
-                </ListItemButton>
+                <NavLink to={subItem.path} style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}>
+                   {({ isActive }) => (
+                    <ListItemButton selected={isActive}>
+                      {subItem.icon && <ListItemDecorator sx={{ color: 'text.tertiary' }}>{subItem.icon}</ListItemDecorator>}
+                      <ListItemContent>{subItem.name}</ListItemContent>
+                    </ListItemButton>
+                   )}
+                </NavLink>
               </ListItem>
             ))}
           </List>
@@ -116,7 +123,6 @@ const CollapsiblePushSidebar = ({ children }) => {
       </ListItem>
     ));
   };
-
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -129,8 +135,7 @@ const CollapsiblePushSidebar = ({ children }) => {
           position: 'sticky',
           top: 0,
           zIndex: 1100,
-          overflowX: 'hidden',
-          overflowY: 'auto',
+          overflow: 'auto',
           transition: 'width 0.3s ease, min-width 0.3s ease',
           boxShadow: 'md',
           p: sidebarOpen ? 2 : 0,
@@ -141,30 +146,9 @@ const CollapsiblePushSidebar = ({ children }) => {
       >
         {sidebarOpen && (
           <>
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                mb: 2,
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <AdbIcon sx={{ fontSize: 'xl2', color: 'primary.plainColor' }} />
-                <Typography component="h2" fontWeight="lg">
-                  FlameWall
-                </Typography>
-              </Box>
-              <IconButton
-                onClick={toggleSidebar}
-                variant="plain"
-                color="neutral"
-                size="sm"
-              >
-                <ChevronLeftIcon />
-              </IconButton>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <IconButton onClick={toggleSidebar} variant="plain" color="neutral" size="sm"><ChevronLeftIcon /></IconButton>
             </Box>
-            
             <List sx={{ '--List-nestedInsetStart': '20px' }}>
               {renderNavItems(navItems)}
               {isLoggedIn && renderNavItems([userNavItems])}
@@ -174,91 +158,34 @@ const CollapsiblePushSidebar = ({ children }) => {
         )}
       </Sheet>
 
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: { xs: 2, md: 3 },
-        }}
-      >
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            mb: 4, 
-            height: LARGE_ICON_BUTTON_HEIGHT,
-            px: { xs: 0, sm: 1 },
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
-            {!sidebarOpen && (
-              <IconButton
-                onClick={toggleSidebar}
-                variant="plain"
-                color="neutral"
-                size="lg"
-              >
-                <ChevronRightIcon />
-              </IconButton>
-            )}
-            <Input
-              size="md" 
-              placeholder="Search..."
-              startDecorator={<SearchIcon />}
-              sx={{
-                width: { xs: '100px', sm: '150px', md: '200px' },
-                display: { xs: 'none', sm: 'inline-flex' }
-              }}
-            />
+      <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, md: 3 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 4, height: LARGE_ICON_BUTTON_HEIGHT, px: { xs: 0, sm: 1 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0, minWidth: {md: '200px'} }}>
+            {!sidebarOpen && (<IconButton onClick={toggleSidebar} variant="plain" color="neutral" size="lg"><ChevronRightIcon /></IconButton>)}
+            <Input size="md" placeholder="Search..." startDecorator={<SearchIcon />} sx={{ display: { xs: 'none', md: 'inline-flex' } }}/>
+          </Box>
+          
+          <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+            <AdbIcon color="primary" sx={{ fontSize: 'xl4' }} />
+            <Typography fontWeight="lg" level="h2" component="div">FlameWall</Typography>
           </Box>
 
-          <Box sx={{ display: 'flex', gap: {xs: 0.5, sm: 1.5}, alignItems: 'center', flexShrink: 0 }}>
-            {isLoggedIn ? (
-               <Button
-                variant="plain"
-                color="neutral"
-                size="md" 
-                onClick={() => console.log('Logout button clicked')}
-                startDecorator={<AccountCircleIcon />}
-              >
-                Sknery
-              </Button>
-            ) : (
+          <Box sx={{ display: 'flex', gap: {xs: 0.5, sm: 1.5}, alignItems: 'center', flexShrink: 0, minWidth: {md: '200px'}, justifyContent: 'flex-end' }}>
+            {isLoggedIn ? (<Button variant="plain" color="neutral" size="md" onClick={() => console.log('Logout clicked')} startDecorator={<AccountCircleIcon />}>Sknery</Button>) : (
               <>
-                <Button
-                  variant="outlined"
-                  color="neutral"
-                  size="md" 
-                  onClick={() => console.log('Login button clicked')}
-                >
-                  Login
-                </Button>
-                <Button
-                  variant="solid"
-                  color="primary"
-                  size="md"
-                  onClick={() => console.log('Register button clicked')}
-                >
-                  Register
-                </Button>
+                <Button variant="outlined" color="neutral" size="md" onClick={() => console.log('Login clicked')}>Login</Button>
+                <Button variant="solid" color="primary" size="md" onClick={() => console.log('Register clicked')}>Register</Button>
               </>
             )}
           </Box>
         </Box>
 
-        <Box
-          sx={{
-            width: '100%',
-            maxWidth: MAIN_CONTENT_MAX_WIDTH,
-            mx: 'auto',
-          }}
-        >
-          {children}
+        <Box sx={{ width: '100%', maxWidth: MAIN_CONTENT_MAX_WIDTH, mx: 'auto' }}>
+            <Outlet />
         </Box>
       </Box>
     </Box>
   );
 };
 
-export default CollapsiblePushSidebar;
+export default MainLayout;
