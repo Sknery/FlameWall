@@ -3,7 +3,6 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-
 import { User } from './users/entities/user.entity';
 import { ShopItem } from './shop/entities/shop-item.entity';
 import { Post } from './posts/entities/post.entity';
@@ -13,7 +12,6 @@ import { News } from './news/entities/news.entity';
 import { Notification } from './notifications/entities/notification.entity';
 import { Comment } from './comments/entities/comment.entity';
 import { Purchase } from './purchases/entities/purchase.entity';
-
 import { UsersModule } from './users/users.module';
 import { ShopModule } from './shop/shop.module';
 import { PostsModule } from './posts/posts.module';
@@ -24,6 +22,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { CommentsModule } from './comments/comments.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { AuthModule } from './auth/auth.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -32,7 +31,7 @@ import { AuthModule } from './auth/auth.module';
       envFilePath: '.env',
     }),
     TypeOrmModule.forRootAsync({
-      name: 'default', // <--- ДОБАВЬТЕ ЭТУ СТРОКУ
+      name: 'default',
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -67,6 +66,7 @@ import { AuthModule } from './auth/auth.module';
     CommentsModule,
     PurchasesModule,
     AuthModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

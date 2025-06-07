@@ -7,7 +7,7 @@ import { Ranks } from '../common/enums/ranks.enum';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto';
 
-export type PublicUser = Omit<User, 'password_hash' | 'validatePassword'>;
+export type PublicUser = Omit<User, 'password_hash' | 'validatePassword' | 'deleted_at'>;
 
 @Injectable()
 export class UsersService {
@@ -34,7 +34,7 @@ export class UsersService {
     
     const savedUser = await this.usersRepository.save(userToCreate);
     
-    const { password_hash, validatePassword, ...result } = savedUser;
+    const { password_hash, validatePassword, deleted_at, ...result } = savedUser;
     return result as PublicUser;
   }
 
@@ -48,7 +48,7 @@ export class UsersService {
       const existingSlugUser = await this.usersRepository.findOne({
         where: { 
           profile_slug: updateUserDto.profile_slug,
-          id: Not(userId) // Ищем у других пользователей, исключая текущего
+          id: Not(userId)
         }
       });
       if (existingSlugUser) {
@@ -60,14 +60,43 @@ export class UsersService {
 
     const updatedUser = await this.usersRepository.save(user);
 
-    const { password_hash, validatePassword, ...result } = updatedUser;
+    const { password_hash, validatePassword, deleted_at, ...result } = updatedUser;
     return result as PublicUser;
+  }
+
+  async banUser(userId: number): Promise<PublicUser> {
+    const user = await this.usersRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found.`);
+    }
+    user.is_banned = true;
+    const bannedUser = await this.usersRepository.save(user);
+    const { password_hash, validatePassword, deleted_at, ...result } = bannedUser;
+    return result as PublicUser;
+  }
+
+  async unbanUser(userId: number): Promise<PublicUser> {
+    const user = await this.usersRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found.`);
+    }
+    user.is_banned = false;
+    const unbannedUser = await this.usersRepository.save(user);
+    const { password_hash, validatePassword, deleted_at, ...result } = unbannedUser;
+    return result as PublicUser;
+  }
+
+  async softDeleteUser(userId: number): Promise<void> {
+    const result = await this.usersRepository.softDelete(userId);
+    if (result.affected === 0) {
+      throw new NotFoundException(`User with ID ${userId} not found.`);
+    }
   }
 
   async findAll(): Promise<PublicUser[]> {
     const users = await this.usersRepository.find();
     return users.map(user => {
-        const { password_hash, validatePassword, ...result } = user;
+        const { password_hash, validatePassword, deleted_at, ...result } = user;
         return result as PublicUser;
     });
   }
@@ -77,7 +106,7 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
-    const { password_hash, validatePassword, ...result } = user;
+    const { password_hash, validatePassword, deleted_at, ...result } = user;
     return result as PublicUser;
   }
   

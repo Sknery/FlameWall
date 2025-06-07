@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   OneToMany,
   Index,
+  DeleteDateColumn,
 } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Ranks } from '../../common/enums/ranks.enum';
@@ -16,6 +17,7 @@ import { Message } from '../../messages/entities/message.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
 import { Comment } from '../../comments/entities/comment.entity';
 import { Purchase } from '../../purchases/entities/purchase.entity';
+import { Exclude } from 'class-transformer';
 
 @Entity('users')
 export class User {
@@ -58,10 +60,14 @@ export class User {
   })
   rank: Ranks;
 
+  @Column({ type: 'boolean', default: false, name: 'is_banned' })
+  is_banned: boolean;
+
   @Column({ type: 'integer', default: 0 })
   balance: number;
 
-  @Column({ type: 'varchar', length: 255, name: 'password_hash', select: false })
+  @Column({ type: 'varchar', length: 255, name: 'password_hash' })
+  @Exclude({ toPlainOnly: true })
   password_hash: string;
 
   @Index({ unique: true })
@@ -79,6 +85,10 @@ export class User {
 
   @UpdateDateColumn({ type: 'timestamp', name: 'updated_at' })
   updated_at: Date;
+  
+  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  @Exclude({ toPlainOnly: true })
+  deleted_at: Date | null;
 
   @OneToMany(() => Post, (post) => post.author)
   posts: Post[];

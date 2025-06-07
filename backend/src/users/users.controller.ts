@@ -1,15 +1,18 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Param,
-  ParseIntPipe,
-  UsePipes,
-  ValidationPipe,
-  Patch,
-  UseGuards,
+import { 
+  Controller, 
+  Get, 
+  Post, 
+  Body, 
+  Param, 
+  ParseIntPipe, 
+  UsePipes, 
+  ValidationPipe, 
+  Patch, 
+  UseGuards, 
   Request,
+  Delete,
+  HttpCode,
+  HttpStatus
 } from '@nestjs/common';
 import { UsersService, PublicUser } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -29,12 +32,11 @@ export class UsersController {
   @ApiResponse({ status: 409, description: 'Conflict. Email already exists.'})
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
   create(@Body() createUserDto: CreateUserDto) {
-
     return this.usersService.create(createUserDto);
   }
 
-  @Patch('me') 
-  @UseGuards(JwtAuthGuard) 
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update my profile' })
   @ApiResponse({ status: 200, description: 'Profile updated successfully.', type: User })
@@ -43,6 +45,19 @@ export class UsersController {
   updateMyProfile(@Request() req, @Body() updateUserDto: UpdateUserDto): Promise<PublicUser> {
     const userId = req.user.userId;
     return this.usersService.updateProfile(userId, updateUserDto);
+  }
+
+  @Delete('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete my account' })
+  @ApiResponse({ status: 204, description: 'Account deleted successfully.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  deleteMyAccount(@Request() req): Promise<void> {
+    const userId = req.user.userId;
+    return this.usersService.softDeleteUser(userId);
   }
 
   @Get()

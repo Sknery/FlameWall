@@ -5,6 +5,7 @@ import { Post } from './entities/post.entity';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { User } from '../users/entities/user.entity';
+import { Ranks } from '../common/enums/ranks.enum';
 
 @Injectable()
 export class PostsService {
@@ -22,7 +23,7 @@ export class PostsService {
     }
 
     const post = this.postsRepository.create({
-      ...createPostDto, 
+      ...createPostDto,
       author: author,
     });
 
@@ -31,7 +32,7 @@ export class PostsService {
 
   async findAll(): Promise<Post[]> {
     return this.postsRepository.find({
-      relations: ['author'], 
+      relations: ['author'],
       order: {
         created_at: 'DESC',
       },
@@ -51,10 +52,17 @@ export class PostsService {
   }
 
   async update(id: number, updatePostDto: UpdatePostDto, userId: number): Promise<Post> {
-    const post = await this.findOne(id); 
+    const post = await this.findOne(id);
+    const user = await this.usersRepository.findOne({ where: { id: userId }});
 
-    if (post.author_id !== userId) {
+    if (!user) {
+      throw new ForbiddenException('User performing the action not found.');
+    }
 
+    const isAuthor = post.author_id === userId;
+    const canManagePosts = [Ranks.ADMIN, Ranks.MODERATOR, Ranks.OWNER].includes(user.rank);
+
+    if (!isAuthor && !canManagePosts) {
       throw new ForbiddenException('You are not authorized to update this post.');
     }
 
@@ -63,9 +71,17 @@ export class PostsService {
   }
 
   async remove(id: number, userId: number): Promise<void> {
-    const post = await this.findOne(id); 
+    const post = await this.findOne(id);
+    const user = await this.usersRepository.findOne({ where: { id: userId }});
 
-    if (post.author_id !== userId) {
+    if (!user) {
+      throw new ForbiddenException('User performing the action not found.');
+    }
+
+    const isAuthor = post.author_id === userId;
+    const canManagePosts = [Ranks.ADMIN, Ranks.MODERATOR, Ranks.OWNER].includes(user.rank);
+
+    if (!isAuthor && !canManagePosts) {
       throw new ForbiddenException('You are not authorized to delete this post.');
     }
 

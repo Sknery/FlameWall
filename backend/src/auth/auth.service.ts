@@ -1,9 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { UsersService, PublicUser } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { LoginDto } from './dto/login.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto'; 
-import { User } from '../users/entities/user.entity'; 
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class AuthService {
@@ -15,7 +15,13 @@ export class AuthService {
   async validateUser(email: string, pass: string): Promise<PublicUser | null> {
     const user: User | null = await this.usersService.findOneWithPasswordByEmail(email);
     
-    if (user && await user.validatePassword(pass)) {
+    if (!user) return null;
+
+    if (user.is_banned) {
+      throw new ForbiddenException('This account has been banned.');
+    }
+    
+    if (await user.validatePassword(pass)) {
       const { password_hash, validatePassword, ...publicData } = user;
       return publicData as PublicUser; 
     }

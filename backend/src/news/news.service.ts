@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { News } from './entities/news.entity';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { User } from '../users/entities/user.entity';
+import { UpdateNewsDto } from './dto/update-news.dto';
 
 @Injectable()
 export class NewsService {
@@ -21,8 +22,8 @@ export class NewsService {
     }
 
     const newsItem = this.newsRepository.create({
-      ...createNewsDto, 
-      author: author,   
+      ...createNewsDto,
+      author: author,
     });
 
     return this.newsRepository.save(newsItem);
@@ -46,5 +47,19 @@ export class NewsService {
       throw new NotFoundException(`News item with ID ${id} not found`);
     }
     return newsItem;
+  }
+
+  async update(id: number, updateNewsDto: UpdateNewsDto): Promise<News> {
+    const newsItem = await this.findOne(id); 
+    
+    Object.assign(newsItem, updateNewsDto);
+
+    return this.newsRepository.save(newsItem);
+  }
+
+  async remove(id: number): Promise<void> {
+    const newsItem = await this.findOne(id); 
+
+    await this.newsRepository.remove(newsItem);
   }
 }
