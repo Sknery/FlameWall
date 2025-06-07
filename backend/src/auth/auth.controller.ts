@@ -4,9 +4,9 @@ import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UsersService, PublicUser } from '../users/users.service';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'; // <--- Импортируйте ApiBearerAuth и ApiTags
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-@ApiTags('Authentication & Profiles') // <--- Добавим тег для лучшей организации в Swagger
+@ApiTags('Authentication & Profiles')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -28,7 +28,7 @@ export class AuthController {
 
   @Get('profile') 
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth() // <--- ДОБАВЬТЕ ЭТОТ ДЕКОРАТОР
+  @ApiBearerAuth()
   async getProfile(@Request() req): Promise<PublicUser> {
     console.log('AUTH CONTROLLER - getProfile called. req.user:', req.user);
     const userId = req.user.userId; 

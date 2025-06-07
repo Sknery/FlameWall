@@ -1,12 +1,27 @@
 version: '3.8'
 
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: flamewall_frontend
+    ports:
+      - "5173:5173" # Сопоставляем порт 5173 контейнера с портом 5173 на вашем компьютере
+    volumes:
+      - ./frontend:/app # Монтируем всю папку проекта для отслеживания изменений
+      - /app/node_modules # Исключаем node_modules, чтобы использовать установленные внутри контейнера
+    environment:
+      - CHOKIDAR_USEPOLLING=true # Включаем polling для надежного отслеживания изменений файлов в Docker
+    restart: unless-stopped
+    networks:
+      - flamewall_net
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
       target: development
-    command: npm run start:dev
     container_name: flamewall_backend
     ports:
       - "${API_PORT:-3000}:${API_PORT:-3000}"
@@ -19,6 +34,7 @@ services:
       - ./backend/.env
     environment:
       - NODE_ENV=development 
+    command: npm run start:dev
     restart: unless-stopped
     networks:
       - flamewall_net
