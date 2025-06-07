@@ -70,7 +70,7 @@ const userNavItems = {
   icon: <AccountCircleIcon />,
   subItems: [
     { name: 'Profile', icon: <AccountCircleIcon />, path: '/profile/me' },
-    { name: 'Friends', icon: <GroupAddIcon />, path: '/profile/friends' },
+    { name: 'Friends', icon: <GroupAddIcon />, path: '/friends' },
     { name: 'Settings', icon: <SettingsIcon />, path: '/profile/settings' },
   ],
 };

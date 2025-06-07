@@ -9,7 +9,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class FriendshipsController {
-  constructor(private readonly friendshipsService: FriendshipsService) {}
+  constructor(private readonly friendshipsService: FriendshipsService) { }
 
   @Post('requests')
   @ApiOperation({ summary: 'Send a friend request' })
@@ -66,5 +66,18 @@ export class FriendshipsController {
   @ApiOperation({ summary: 'Unblock a user' })
   unblockUser(@Param('userToUnblockId', ParseIntPipe) userToUnblockId: number, @Request() req) {
     return this.friendshipsService.unblockUser(req.user.userId, userToUnblockId);
+  }
+
+  @Get('requests/outgoing')
+  @ApiOperation({ summary: 'Get my pending outgoing friend requests' })
+  getOutgoingRequests(@Request() req) {
+    return this.friendshipsService.getOutgoingRequests(req.user.userId);
+  }
+
+  // НОВЫЙ ЭНДПОИНТ
+  @Get('blocked')
+  @ApiOperation({ summary: 'Get my blocked users list' })
+  listBlockedUsers(@Request() req) {
+    return this.friendshipsService.listBlockedUsers(req.user.userId);
   }
 }

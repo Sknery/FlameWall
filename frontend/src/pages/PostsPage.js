@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
 import axios from 'axios';
+import { useAuth } from '../context/AuthContext'; // Импортируем useAuth
 import {
   Typography,
   List,
@@ -13,9 +14,9 @@ import {
   Divider,
   Avatar,
   Link as JoyLink,
+  Button, // Импортируем Button
 } from '@mui/joy';
-import PersonIcon from '@mui/icons-material/Person';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import AddIcon from '@mui/icons-material/Add'; // Иконка для кнопки
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -23,6 +24,7 @@ function PostsPage() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { isLoggedIn } = useAuth(); // Получаем статус авторизации
 
   useEffect(() => {
     const fetchPosts = async () => {
@@ -52,9 +54,20 @@ function PostsPage() {
 
   return (
     <Box>
-      <Typography level="h1" component="h1" sx={{ mb: 2 }}>
-        Community Posts
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography level="h1" component="h1">
+          Community Posts
+        </Typography>
+        {isLoggedIn && (
+          <Button
+            component={RouterLink}
+            to="/posts/new"
+            startDecorator={<AddIcon />}
+          >
+            Create Post
+          </Button>
+        )}
+      </Box>
       <List variant="outlined" sx={{ borderRadius: 'sm', bgcolor: 'background.body' }}>
         {posts.length > 0 ? (
           posts.map((post, index) => (
@@ -67,8 +80,8 @@ function PostsPage() {
                   </Box>
 
                   <JoyLink
-                    component={Link} 
-                    to={`/posts/${post.id}`} 
+                    component={RouterLink}
+                    to={`/posts/${post.id}`}
                     level="h4"
                     fontWeight="lg"
                     overlay
@@ -92,10 +105,9 @@ function PostsPage() {
                   </Typography>
 
                   <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', color: 'text.tertiary' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <CalendarTodayIcon fontSize="sm" />
-                      <Typography level="body-sm">{new Date(post.created_at).toLocaleDateString()}</Typography>
-                    </Box>
+                    <Typography level="body-xs">
+                      {new Date(post.created_at).toLocaleDateString()}
+                    </Typography>
                   </Box>
                 </Sheet>
               </ListItem>

@@ -19,7 +19,7 @@ export class FriendshipsService {
     private friendshipsRepository: Repository<Friendship>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
-  ) {}
+  ) { }
 
   // ... метод sendRequest остается без изменений ...
   async sendRequest(requesterId: number, receiverId: number): Promise<Friendship> {
@@ -64,7 +64,7 @@ export class FriendshipsService {
     return this.friendshipsRepository.save(request);
   }
   async rejectOrCancelRequest(requestId: number, currentUserId: number): Promise<void> {
-    const request = await this.friendshipsRepository.findOne({ where: { id: requestId, status: FriendStatuses.PENDING }});
+    const request = await this.friendshipsRepository.findOne({ where: { id: requestId, status: FriendStatuses.PENDING } });
     if (!request) {
       throw new NotFoundException(`Pending request with ID ${requestId} not found.`);
     }
@@ -73,7 +73,7 @@ export class FriendshipsService {
     }
     await this.friendshipsRepository.remove(request);
   }
-  
+
 
   async removeFriend(friendshipId: number, currentUserId: number): Promise<void> {
     const friendship = await this.friendshipsRepository.findOneBy({ id: friendshipId, status: FriendStatuses.ACCEPTED });
@@ -85,7 +85,7 @@ export class FriendshipsService {
     }
     await this.friendshipsRepository.remove(friendship);
   }
-  
+
   // ИЗМЕНЕННЫЙ МЕТОД
   async listFriends(userId: number): Promise<FriendWithFriendshipId[]> {
     const friendships = await this.friendshipsRepository.find({
@@ -108,7 +108,7 @@ export class FriendshipsService {
         user: publicFriendData as PublicUser,
       };
     });
-    
+
     return friendsList;
   }
 
@@ -179,7 +179,29 @@ export class FriendshipsService {
     if (!friendship) {
       throw new NotFoundException('You have not blocked this user.');
     }
-    
+
     await this.friendshipsRepository.remove(friendship);
   }
+
+  async getOutgoingRequests(userId: number): Promise<Friendship[]> {
+    return this.friendshipsRepository.find({
+      where: {
+        requester_id: userId,
+        status: FriendStatuses.PENDING,
+      },
+      relations: ['receiver'], // Показываем, кому отправили запрос
+    });
+  }
+
+  // НОВЫЙ МЕТОД
+  async listBlockedUsers(userId: number): Promise<Friendship[]> {
+    return this.friendshipsRepository.find({
+      where: {
+        requester_id: userId,
+        status: FriendStatuses.BLOCKED,
+      },
+      relations: ['receiver'], // Показываем, кого заблокировали
+    });
+  }
 }
+

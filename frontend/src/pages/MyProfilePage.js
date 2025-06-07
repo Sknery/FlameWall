@@ -11,8 +11,10 @@ import {
   Divider,
   Button,
   Chip,
+  Stack, // Используем Stack для удобного расположения кнопок
 } from '@mui/joy';
 import EditIcon from '@mui/icons-material/Edit';
+import AddIcon from '@mui/icons-material/Add'; // Импортируем иконку
 import { Link as RouterLink } from 'react-router-dom';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
@@ -25,7 +27,6 @@ function MyProfilePage() {
 
   useEffect(() => {
     if (!authToken) {
-      // Если по какой-то причине токена нет, не делаем запрос
       setLoading(false);
       setError("Authorization token not found.");
       return;
@@ -35,12 +36,8 @@ function MyProfilePage() {
       try {
         setLoading(true);
         setError(null);
-        // Заголовки авторизации уже должны быть установлены по умолчанию в AuthContext,
-        // но для ясности можно их добавить и здесь.
         const response = await axios.get(`${API_BASE_URL}/auth/profile`, {
-          headers: {
-            Authorization: `Bearer ${authToken}`
-          }
+          headers: { Authorization: `Bearer ${authToken}` }
         });
         setProfile(response.data);
       } catch (err) {
@@ -52,7 +49,7 @@ function MyProfilePage() {
     };
 
     fetchProfile();
-  }, [authToken]); // Перезапускаем эффект, если токен изменился (например, после входа)
+  }, [authToken]);
 
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
@@ -70,10 +67,7 @@ function MyProfilePage() {
     <Box>
       <Sheet variant="outlined" sx={{ p: 4, borderRadius: 'md' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 3 }}>
-          <Avatar
-            src={profile.pfp_url}
-            sx={{ '--Avatar-size': '100px' }}
-          />
+          <Avatar src={profile.pfp_url} sx={{ '--Avatar-size': '100px' }} />
           <Box>
             <Typography level="h2" component="h1">{profile.username}</Typography>
             {profile.profile_slug && (
@@ -83,16 +77,26 @@ function MyProfilePage() {
             )}
             <Chip size="sm" color="primary" sx={{ mt: 1 }}>{profile.rank}</Chip>
           </Box>
-          <Button 
-            component={RouterLink} 
-            to="/profile/settings"
-            variant="outlined" 
-            color="neutral" 
-            startDecorator={<EditIcon />} 
-            sx={{ ml: 'auto' }}
-          >
-            Edit Profile
-          </Button>
+          <Stack spacing={1} direction="row" sx={{ ml: 'auto' }}>
+            <Button 
+              component={RouterLink} 
+              to="/posts/new"
+              variant="solid" 
+              color="primary" 
+              startDecorator={<AddIcon />}
+            >
+              New Post
+            </Button>
+            <Button 
+              component={RouterLink} 
+              to="/profile/settings"
+              variant="outlined" 
+              color="neutral" 
+              startDecorator={<EditIcon />} 
+            >
+              Edit Profile
+            </Button>
+          </Stack>
         </Box>
         <Divider sx={{ my: 2 }}/>
         <Typography level="body-lg">

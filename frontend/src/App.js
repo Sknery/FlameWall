@@ -15,10 +15,9 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import MyProfilePage from './pages/MyProfilePage';
 import PlayersPage from './pages/PlayersPage';
-import PublicProfilePage from './pages/PublicProfilePage'; // <-- Импортируем новую страницу
-
-// ... импорты ...
-import FriendsPage from './pages/FriendsPage'; // <-- Импортируем
+import PublicProfilePage from './pages/PublicProfilePage';
+import CreatePostPage from './pages/CreatePostPage'; // <-- Импортируем новую страницу
+import FriendsPage from './pages/FriendsPage';
 
 function App() {
   return (
@@ -34,14 +33,23 @@ function App() {
               <Route path="posts/:postId" element={<SinglePostPage />} />
               <Route path="players" element={<PlayersPage />} />
               <Route path="users/:userId" element={<PublicProfilePage />} />
+              <Route path="friends" element={<FriendsPage />} />              
               
               <Route 
-                path="/profile/me" 
-                element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} 
+                path="posts/new" // <-- Добавлен этот роут
+                element={
+                  <ProtectedRoute>
+                    <CreatePostPage />
+                  </ProtectedRoute>
+                } 
               />
               <Route 
-                path="/profile/friends" // <-- Добавлен этот роут
-                element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} 
+                path="profile/me" 
+                element={
+                  <ProtectedRoute>
+                    <MyProfilePage />
+                  </ProtectedRoute>
+                } 
               />
             </Route>
             
