@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom'; 
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import {
   Box,
   Sheet,
@@ -11,7 +12,12 @@ import {
   IconButton,
   Typography,
   Button,
-  Input
+  Input,
+  Dropdown,
+  Menu,
+  MenuItem,
+  MenuButton,
+  Divider,
 } from '@mui/joy';
 
 import HomeIcon from '@mui/icons-material/Home';
@@ -31,6 +37,7 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import AdbIcon from '@mui/icons-material/Adb';
 import DiamondIcon from '@mui/icons-material/Diamond';
+import LogoutIcon from '@mui/icons-material/Logout';
 
 const SIDEBAR_WIDTH = 280;
 const MAIN_CONTENT_MAX_WIDTH = '1000px';
@@ -75,16 +82,22 @@ const adminNavItem = {
 };
 
 
-const MainLayout = () => {
+const CollapsiblePushSidebar = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [openCategories, setOpenCategories] = useState({ Community: true });
+  const [openCategories, setOpenCategories] = useState({ Community: true }); 
+  const navigate = useNavigate();
+  const { isLoggedIn, user, logout } = useAuth(); 
 
-  const isLoggedIn = true;
-  const isAdmin = true;
+  const isAdmin = isLoggedIn && user && ['ADMIN', 'MODERATOR', 'OWNER'].includes(user.rank);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
-  const toggleCategory = (categoryName) => setOpenCategories((prev) => ({ ...prev, [categoryName]: !prev[categoryName] }));
+  const toggleCategory = (categoryName) => setOpenCategories((prev) => ({...prev, [categoryName]: !prev[categoryName]}));
 
+  const handleLogout = () => {
+    logout(); 
+    navigate('/');
+  };
+  
   const renderNavItems = (items) => {
     return items.map((item) => (
       <ListItem key={item.name} nested={!!item.subItems}>
@@ -124,6 +137,7 @@ const MainLayout = () => {
     ));
   };
 
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <Sheet
@@ -147,8 +161,13 @@ const MainLayout = () => {
         {sidebarOpen && (
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <AdbIcon sx={{ fontSize: 'xl2', color: 'primary.plainColor' }} />
+                <Typography component="h2" fontWeight="lg">FlameWall</Typography>
+              </Box>
               <IconButton onClick={toggleSidebar} variant="plain" color="neutral" size="sm"><ChevronLeftIcon /></IconButton>
             </Box>
+            
             <List sx={{ '--List-nestedInsetStart': '20px' }}>
               {renderNavItems(navItems)}
               {isLoggedIn && renderNavItems([userNavItems])}
@@ -171,21 +190,42 @@ const MainLayout = () => {
           </Box>
 
           <Box sx={{ display: 'flex', gap: {xs: 0.5, sm: 1.5}, alignItems: 'center', flexShrink: 0, minWidth: {md: '200px'}, justifyContent: 'flex-end' }}>
-            {isLoggedIn ? (<Button variant="plain" color="neutral" size="md" onClick={() => console.log('Logout clicked')} startDecorator={<AccountCircleIcon />}>Sknery</Button>) : (
+            {isLoggedIn ? (
+              <Dropdown>
+                <MenuButton
+                  slots={{ root: Button }}
+                  slotProps={{ root: { variant: 'plain', color: 'neutral', size: 'md', startDecorator: <AccountCircleIcon /> } }}
+                >
+                  {user?.username}
+                </MenuButton>
+                <Menu>
+                  <MenuItem component={NavLink} to="/profile/me">Profile</MenuItem>
+                  <MenuItem component={NavLink} to="/profile/settings">Settings</MenuItem>
+                  <Divider />
+                  <MenuItem onClick={handleLogout} sx={{ color: 'danger.500' }}>
+                    <ListItemDecorator><LogoutIcon /></ListItemDecorator>
+                    Logout
+                  </MenuItem>
+                </Menu>
+              </Dropdown>
+            ) : (
               <>
-                <Button variant="outlined" color="neutral" size="md" onClick={() => console.log('Login clicked')}>Login</Button>
-                <Button variant="solid" color="primary" size="md" onClick={() => console.log('Register clicked')}>Register</Button>
+                <Button component={NavLink} to="/login" variant="outlined" color="neutral" size="md">
+                  Login
+                </Button>
+                <Button component={NavLink} to="/register" variant="solid" color="primary" size="md">
+                  Register
+                </Button>
               </>
             )}
           </Box>
         </Box>
 
         <Box sx={{ width: '100%', maxWidth: MAIN_CONTENT_MAX_WIDTH, mx: 'auto' }}>
-            <Outlet />
+            {children}
         </Box>
       </Box>
     </Box>
   );
 };
-
-export default MainLayout;
+export default CollapsiblePushSidebar;
