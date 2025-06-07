@@ -39,10 +39,19 @@ export class PostsService {
     });
   }
 
-  async findOne(id: number): Promise<Post> {
+ async findOne(id: number): Promise<Post> {
     const post = await this.postsRepository.findOne({
       where: { id },
-      relations: ['author'],
+      relations: [
+        'author', 
+        'comments', 
+        'comments.author'
+      ],
+      order: {
+        comments: {
+          created_at: "ASC"
+        }
+      }
     });
 
     if (!post) {

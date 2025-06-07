@@ -67,6 +67,8 @@ import { AdminModule } from './admin/admin.module';
     PurchasesModule,
     AuthModule,
     AdminModule,
+    CommentsModule,
+    FriendshipsModule
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -5,11 +5,14 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { FriendStatuses } from '../../common/enums/friend-statuses.enum';
 
 @Entity('friendships')
+@Index(['requester_id', 'receiver_id'], { unique: true }) 
 export class Friendship {
   @PrimaryGeneratedColumn()
   id: number;
@@ -35,6 +38,9 @@ export class Friendship {
   })
   status: FriendStatuses;
 
-  @CreateDateColumn({ type: 'timestamp', name: 'created_at', default: () => 'CURRENT_TIMESTAMP' })
+  @CreateDateColumn({ name: 'created_at' })
   created_at: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updated_at: Date;
 }

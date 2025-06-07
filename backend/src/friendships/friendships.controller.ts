@@ -1,34 +1,49 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UseGuards, Request, ParseIntPipe, Patch } from '@nestjs/common';
 import { FriendshipsService } from './friendships.service';
-import { CreateFriendshipDto } from './dto/create-friendship.dto';
-import { UpdateFriendshipDto } from './dto/update-friendship.dto';
+import { CreateFriendRequestDto } from './dto/create-friend-request.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
+@ApiTags('Friendships')
 @Controller('friendships')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class FriendshipsController {
   constructor(private readonly friendshipsService: FriendshipsService) {}
 
-  @Post()
-  create(@Body() createFriendshipDto: CreateFriendshipDto) {
-    return this.friendshipsService.create(createFriendshipDto);
+  @Post('requests')
+  @ApiOperation({ summary: 'Send a friend request' })
+  sendRequest(@Body() createDto: CreateFriendRequestDto, @Request() req) {
+    return this.friendshipsService.sendRequest(req.user.userId, createDto.receiverId);
+  }
+
+  @Get('requests/pending')
+  @ApiOperation({ summary: 'Get my pending incoming friend requests' })
+  getPendingRequests(@Request() req) {
+    return this.friendshipsService.getPendingRequests(req.user.userId);
+  }
+
+  @Patch('requests/:id/accept')
+  @ApiOperation({ summary: 'Accept a friend request' })
+  acceptRequest(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.friendshipsService.acceptRequest(id, req.user.userId);
+  }
+
+  @Delete('requests/:id')
+  @ApiOperation({ summary: 'Reject an incoming request or cancel an outgoing request' })
+  rejectOrCancelRequest(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.friendshipsService.rejectOrCancelRequest(id, req.user.userId);
   }
 
   @Get()
-  findAll() {
-    return this.friendshipsService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.friendshipsService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateFriendshipDto: UpdateFriendshipDto) {
-    return this.friendshipsService.update(+id, updateFriendshipDto);
+  @ApiOperation({ summary: 'Get my friends list' })
+  listFriends(@Request() req) {
+    return this.friendshipsService.listFriends(req.user.userId);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.friendshipsService.remove(+id);
+  @ApiOperation({ summary: 'Remove a friend' })
+  removeFriend(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.friendshipsService.removeFriend(id, req.user.userId);
   }
 }
