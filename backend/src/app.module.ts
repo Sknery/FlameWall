@@ -3,6 +3,8 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+
 import { User } from './users/entities/user.entity';
 import { ShopItem } from './shop/entities/shop-item.entity';
 import { Post } from './posts/entities/post.entity';
@@ -12,6 +14,7 @@ import { News } from './news/entities/news.entity';
 import { Notification } from './notifications/entities/notification.entity';
 import { Comment } from './comments/entities/comment.entity';
 import { Purchase } from './purchases/entities/purchase.entity';
+
 import { UsersModule } from './users/users.module';
 import { ShopModule } from './shop/shop.module';
 import { PostsModule } from './posts/posts.module';
@@ -23,14 +26,18 @@ import { CommentsModule } from './comments/comments.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
-import { ChatGateway } from './chat/chat.gateway';
 import { ChatModule } from './chat/chat.module';
+// Удалили: import { ChatGateway } from './chat/chat.gateway';
 
 @Module({
   imports: [
+    // Системные модули
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+    }),
+    EventEmitterModule.forRoot({
+      global: true,
     }),
     TypeOrmModule.forRootAsync({
       name: 'default',
@@ -44,21 +51,18 @@ import { ChatModule } from './chat/chat.module';
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_DATABASE'),
         entities: [
-          User,
-          ShopItem,
-          Post,
-          Friendship,
-          Message,
-          News,
-          Notification,
-          Comment,
-          Purchase,
+          User, ShopItem, Post, Friendship, Message, News, Notification, Comment, Purchase,
         ],
         synchronize: true,
         autoLoadEntities: true,
       }),
     }),
+
+    // Модули нашего приложения
     UsersModule,
+    AuthModule,
+    AdminModule,
+    ChatModule,
     ShopModule,
     PostsModule,
     FriendshipsModule,
@@ -67,13 +71,8 @@ import { ChatModule } from './chat/chat.module';
     NotificationsModule,
     CommentsModule,
     PurchasesModule,
-    AuthModule,
-    AdminModule,
-    CommentsModule,
-    FriendshipsModule,
-    ChatModule
   ],
   controllers: [AppController],
-  providers: [AppService, ChatGateway],
+  providers: [AppService], // <-- Удалили ChatGateway отсюда
 })
 export class AppModule {}

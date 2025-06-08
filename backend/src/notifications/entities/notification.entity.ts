@@ -13,25 +13,26 @@ export class Notification {
   @PrimaryGeneratedColumn({ name: 'notification_id' })
   notification_id: number;
 
-  @Column({ name: 'user_id' })
-  user_id: number;
-
   @ManyToOne(() => User, (user) => user.notifications, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
+  @Column({ name: 'user_id' })
+  user_id: number;
+  
   @Column({ type: 'varchar', length: 50 })
   title: string;
 
-  @Column({ type: 'varchar' })
-  messages: string;
+  // Убедимся, что колонка называется 'message'
+  @Column({ type: 'varchar', length: 255 })
+  message: string;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   type: string | null;
 
-  @CreateDateColumn({ type: 'timestamp', name: 'created_at', default: () => 'CURRENT_TIMESTAMP' })
-  created_at: Date;
-
   @Column({ type: 'boolean', default: false })
   read: boolean;
+
+  @CreateDateColumn({ name: 'created_at' })
+  created_at: Date;
 }
