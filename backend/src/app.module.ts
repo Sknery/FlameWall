@@ -23,6 +23,8 @@ import { CommentsModule } from './comments/comments.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
+import { ChatGateway } from './chat/chat.gateway';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -68,9 +70,10 @@ import { AdminModule } from './admin/admin.module';
     AuthModule,
     AdminModule,
     CommentsModule,
-    FriendshipsModule
+    FriendshipsModule,
+    ChatModule
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, ChatGateway],
 })
 export class AppModule {}

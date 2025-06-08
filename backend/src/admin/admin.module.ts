@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
-import { UsersModule } from '../users/users.module'; 
+// UsersModule больше импортировать не нужно
 
 @Module({
-  imports: [UsersModule], 
+  imports: [], // <-- Теперь массив импортов пуст
   controllers: [AdminController]
 })
 export class AdminModule {}

@@ -38,6 +38,7 @@ import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import AdbIcon from '@mui/icons-material/Adb';
 import DiamondIcon from '@mui/icons-material/Diamond';
 import LogoutIcon from '@mui/icons-material/Logout';
+import MailIcon from '@mui/icons-material/Mail'; // Иконка для сообщений
 
 const SIDEBAR_WIDTH = 280;
 const MAIN_CONTENT_MAX_WIDTH = '1000px';
@@ -70,6 +71,7 @@ const userNavItems = {
   icon: <AccountCircleIcon />,
   subItems: [
     { name: 'Profile', icon: <AccountCircleIcon />, path: '/profile/me' },
+    { name: 'Messages', icon: <MailIcon />, path: '/messages' }, // <-- Добавлена ссылка
     { name: 'Friends', icon: <GroupAddIcon />, path: '/friends' },
     { name: 'Settings', icon: <SettingsIcon />, path: '/profile/settings' },
   ],
@@ -84,20 +86,20 @@ const adminNavItem = {
 
 const CollapsiblePushSidebar = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [openCategories, setOpenCategories] = useState({ Community: true }); 
+  const [openCategories, setOpenCategories] = useState({ Community: true });
   const navigate = useNavigate();
-  const { isLoggedIn, user, logout } = useAuth(); 
+  const { isLoggedIn, user, logout } = useAuth();
 
   const isAdmin = isLoggedIn && user && ['ADMIN', 'MODERATOR', 'OWNER'].includes(user.rank);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
-  const toggleCategory = (categoryName) => setOpenCategories((prev) => ({...prev, [categoryName]: !prev[categoryName]}));
+  const toggleCategory = (categoryName) => setOpenCategories((prev) => ({ ...prev, [categoryName]: !prev[categoryName] }));
 
   const handleLogout = () => {
-    logout(); 
+    logout();
     navigate('/');
   };
-  
+
   const renderNavItems = (items) => {
     return items.map((item) => (
       <ListItem key={item.name} nested={!!item.subItems}>
@@ -122,12 +124,12 @@ const CollapsiblePushSidebar = ({ children }) => {
             {item.subItems.map((subItem) => (
               <ListItem key={subItem.name}>
                 <NavLink to={subItem.path} style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}>
-                   {({ isActive }) => (
+                  {({ isActive }) => (
                     <ListItemButton selected={isActive}>
                       {subItem.icon && <ListItemDecorator sx={{ color: 'text.tertiary' }}>{subItem.icon}</ListItemDecorator>}
                       <ListItemContent>{subItem.name}</ListItemContent>
                     </ListItemButton>
-                   )}
+                  )}
                 </NavLink>
               </ListItem>
             ))}
@@ -167,7 +169,7 @@ const CollapsiblePushSidebar = ({ children }) => {
               </Box>
               <IconButton onClick={toggleSidebar} variant="plain" color="neutral" size="sm"><ChevronLeftIcon /></IconButton>
             </Box>
-            
+
             <List sx={{ '--List-nestedInsetStart': '20px' }}>
               {renderNavItems(navItems)}
               {isLoggedIn && renderNavItems([userNavItems])}
@@ -179,17 +181,17 @@ const CollapsiblePushSidebar = ({ children }) => {
 
       <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, md: 3 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 4, height: LARGE_ICON_BUTTON_HEIGHT, px: { xs: 0, sm: 1 } }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0, minWidth: {md: '200px'} }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0, minWidth: { md: '200px' } }}>
             {!sidebarOpen && (<IconButton onClick={toggleSidebar} variant="plain" color="neutral" size="lg"><ChevronRightIcon /></IconButton>)}
-            <Input size="md" placeholder="Search..." startDecorator={<SearchIcon />} sx={{ display: { xs: 'none', md: 'inline-flex' } }}/>
+            <Input size="md" placeholder="Search..." startDecorator={<SearchIcon />} sx={{ display: { xs: 'none', md: 'inline-flex' } }} />
           </Box>
-          
+
           <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
             <AdbIcon color="primary" sx={{ fontSize: 'xl4' }} />
             <Typography fontWeight="lg" level="h2" component="div">FlameWall</Typography>
           </Box>
 
-          <Box sx={{ display: 'flex', gap: {xs: 0.5, sm: 1.5}, alignItems: 'center', flexShrink: 0, minWidth: {md: '200px'}, justifyContent: 'flex-end' }}>
+          <Box sx={{ display: 'flex', gap: { xs: 0.5, sm: 1.5 }, alignItems: 'center', flexShrink: 0, minWidth: { md: '200px' }, justifyContent: 'flex-end' }}>
             {isLoggedIn ? (
               <Dropdown>
                 <MenuButton
@@ -222,7 +224,7 @@ const CollapsiblePushSidebar = ({ children }) => {
         </Box>
 
         <Box sx={{ width: '100%', maxWidth: MAIN_CONTENT_MAX_WIDTH, mx: 'auto' }}>
-            {children}
+          {children}
         </Box>
       </Box>
     </Box>

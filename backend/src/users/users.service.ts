@@ -127,4 +127,8 @@ export class UsersService {
         .where("user.id = :id", { id })
         .getOne();
   }
+
+    async findUserEntityById(id: number): Promise<User | null> {
+    return this.usersRepository.findOneBy({ id });
+  }
 }

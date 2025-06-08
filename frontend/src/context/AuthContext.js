@@ -1,64 +1,66 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import axios from 'axios';
 
-// Создаем сам контекст
 const AuthContext = createContext(null);
 
-// Создаем "Провайдер" - компонент, который будет хранить состояние и предоставлять его дочерним элементам
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(undefined);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('authToken') || null);
 
   useEffect(() => {
-    // Этот эффект запускается один раз при загрузке приложения
+    console.log(`%c[AuthContext] useEffect: Запустился. Токен: ${authToken ? 'ЕСТЬ' : 'НЕТ'}`, 'color: blue');
     if (authToken) {
       try {
         const decodedToken = jwtDecode(authToken);
-        // Проверяем, не истек ли срок действия токена
         if (decodedToken.exp * 1000 < Date.now()) {
-          logout(); // Если истек, выходим
+          console.log('%c[AuthContext] useEffect: Токен истек, выходим из системы.', 'color: orange');
+          logout();
         } else {
-          // Если токен валиден, устанавливаем данные пользователя и заголовок для axios
-          setUser({
+          const userData = {
             id: decodedToken.sub,
             username: decodedToken.username,
             rank: decodedToken.rank,
-          });
+          };
+          console.log('%c[AuthContext] useEffect: Токен валиден. Устанавливаю пользователя:', 'color: blue', userData);
+          setUser(userData);
           axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
         }
       } catch (error) {
-        console.error("Invalid token found in localStorage", error);
-        logout(); // Если токен невалидный, выходим
+        console.error("[AuthContext] useEffect: Невалидный токен.", error);
+        logout();
       }
+    } else {
+        console.log('%c[AuthContext] useEffect: Токен не найден, пользователь - гость.', 'color: blue');
+        setUser(null);
     }
   }, [authToken]);
 
-  const login = (token) => {
+  const login = useCallback((token) => {
+    console.log('%c[AuthContext] login: Функция вызвана. Устанавливаю токен.', 'color: green');
     localStorage.setItem('authToken', token);
     setAuthToken(token);
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
+    console.log('%c[AuthContext] logout: Функция вызвана. Очищаю токен и пользователя.', 'color: red');
     localStorage.removeItem('authToken');
     setAuthToken(null);
     setUser(null);
     delete axios.defaults.headers.common['Authorization'];
-  };
+  }, []);
 
-  // Значения, которые мы делаем доступными для всего приложения
-  const value = {
+  const value = useMemo(() => ({
     isLoggedIn: !!user,
     user,
     authToken,
     login,
     logout,
-  };
+  }), [user, authToken, login, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Кастомный хук для удобного использования контекста в других компонентах
 export const useAuth = () => {
   return useContext(AuthContext);
 };
