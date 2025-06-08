@@ -6,13 +6,16 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
   ConnectedSocket,
+
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { UseGuards, Logger } from '@nestjs/common';
 import { MessagesService } from '../messages/messages.service';
+import { WsGuard } from '../auth/guards/ws.guard';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
+import { processedSockets } from './connection-lock'; // <-- Импортируем наш замок
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -26,15 +29,21 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly messagesService: MessagesService,
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
-  ) {}
-  
-  // Теперь вся логика аутентификации здесь
+  ) { }
+
   async handleConnection(client: Socket) {
-    // Получаем токен из специального поля 'auth'
+
+    
+    if (processedSockets.has(client.id)) {
+      this.logger.warn(`Duplicate connection event for SID: ${client.id}. Ignoring.`);
+      return;
+    }
+    processedSockets.add(client.id);
+    // Получаем токен из специального поля 'auth', а не из заголовков
     const token = client.handshake.auth.token;
 
     if (!token) {
-      this.logger.error(`Connection Refused: Token not found in auth object. SID: ${client.id}`);
+      this.logger.error(`Connection Refused: Token not found in handshake auth. SID: ${client.id}`);
       return client.disconnect();
     }
 
@@ -46,7 +55,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.logger.error(`Connection Refused: User #${payload.sub} not found or banned.`);
         return client.disconnect();
       }
-      
+
       client['user'] = user; // Прикрепляем пользователя к сокету
       this.onlineUsers.set(user.id, client.id);
       this.logger.log(`Client Authenticated & Connected: ${client.id}, User ID: ${user.id}`);
@@ -58,35 +67,31 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   handleDisconnect(client: Socket) {
+    processedSockets.delete(client.id);
+
     const user: User = client['user'];
     if (user && this.onlineUsers.get(user.id) === client.id) {
-        this.onlineUsers.delete(user.id);
-        this.logger.log(`Client disconnected: User ID ${user.id}`);
+      this.onlineUsers.delete(user.id);
+      this.logger.log(`Client disconnected: User ID ${user.id}`);
     }
   }
 
-  // Для этого метода больше не нужен гвард, так как мы проверяем 'user' вручную
+  @UseGuards(WsGuard) // Гвард теперь просто проверяет, есть ли client['user']
   @SubscribeMessage('sendMessage')
   async handleMessage(
     @MessageBody() data: { recipientId: number; content: string },
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
     const sender: User = client['user'];
-    // Если по какой-то причине пользователь не прикреплен, игнорируем сообщение
-    if (!sender) {
-      this.logger.warn(`Unauthenticated user with SID ${client.id} tried to send a message.`);
-      return;
-    }
-    
+
     const recipient = await this.usersService.findUserEntityById(data.recipientId);
     if (!recipient) return;
-    
+
     const savedMessage = await this.messagesService.createMessage(sender, recipient, data.content);
-    if (!savedMessage) return; // Защита от дублей
+    if (!savedMessage) return;
 
     const recipientSocketId = this.onlineUsers.get(data.recipientId);
 
-    // Отправляем сообщение себе и получателю
     this.server.to(client.id).emit('newMessage', savedMessage);
     if (recipientSocketId && recipientSocketId !== client.id) {
       this.server.to(recipientSocketId).emit('newMessage', savedMessage);

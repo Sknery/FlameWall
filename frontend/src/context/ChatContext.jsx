@@ -14,40 +14,31 @@ export const ChatProvider = ({ children }) => {
 
   useEffect(() => {
     if (isLoggedIn && authToken) {
-      if (!socketRef.current) {
-        console.log('ChatContext: Connecting with auth token...');
-        
-        // ИЗМЕНЕНИЕ ЗДЕСЬ: используем официальную опцию `auth` для передачи токена
-        socketRef.current = io(process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000', {
-          transports: ['websocket'],
-          auth: {
-            token: authToken,
-          },
-        });
+      // Создаем соединение, передавая токен в опции `auth`
+      const newSocket = io(process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000', {
+        transports: ['websocket'],
+        auth: { // <-- ИСПОЛЬЗУЕМ ЭТОТ ОФИЦИАЛЬНЫЙ СПОСОБ
+          token: authToken,
+        },
+      });
+      socketRef.current = newSocket;
 
-        socketRef.current.on('connect', () => {
-          setIsConnected(true);
-          console.log('%cChatContext: Socket connected!', 'color: green');
-        });
-        
-        socketRef.current.on('connect_error', (err) => {
-          console.error(`Socket connection error: ${err.message}`);
-        });
-
-        socketRef.current.on('disconnect', () => {
-          setIsConnected(false);
-          console.log('%cChatContext: Socket disconnected!', 'color: red');
-        });
-
-        socketRef.current.on('newMessage', (message) => {
-          setLastMessage(message);
-        });
-      }
+      newSocket.on('connect', () => {
+        setIsConnected(true);
+        console.log('Socket connected with auth!');
+      });
+      
+      newSocket.on('disconnect', () => setIsConnected(false));
+      newSocket.on('newMessage', (msg) => setLastMessage(msg));
+      
+      return () => {
+        newSocket.disconnect();
+      };
     } else {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
+        if(socketRef.current) {
+            socketRef.current.disconnect();
+            socketRef.current = null;
+        }
     }
   }, [isLoggedIn, authToken]);
 
