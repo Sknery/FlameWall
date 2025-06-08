@@ -9,12 +9,14 @@ import {
 
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger,  UseGuards, } from '@nestjs/common';
+import { UseGuards, Logger } from '@nestjs/common';
 import { MessagesService } from '../messages/messages.service';
 import { WsGuard } from '../auth/guards/ws.guard';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
+import { OnEvent, EventEmitter2 } from '@nestjs/event-emitter';
+import { Notification } from '../notifications/entities/notification.entity';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -22,11 +24,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   server: Server;
 
   private logger: Logger = new Logger('ChatGateway');
+  private onlineUsers = new Map<number, string>();
 
   constructor(
     private readonly messagesService: MessagesService,
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private eventEmitter: EventEmitter2, // <-- ВНЕДРЯЕМ EVENT EMITTER
   ) {}
   
   async handleConnection(client: Socket) {
@@ -39,8 +43,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (!user || user.is_banned) return client.disconnect();
       
       client['user'] = user;
-      // Заставляем сокет войти в его личную комнату
       client.join(`user-${user.id}`);
+      this.onlineUsers.set(user.id, client.id); // Добавляем пользователя в онлайн-карту
       this.logger.log(`Client Authenticated & Connected: SID ${client.id}, User ID ${user.id}, Joined room user-${user.id}`);
 
     } catch (e) {
@@ -50,7 +54,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     const user: User = client['user'];
-    if (user) {
+    if (user && this.onlineUsers.get(user.id) === client.id) {
+        this.onlineUsers.delete(user.id); // Удаляем пользователя из онлайн-карты
         this.logger.log(`Client disconnected: User ID ${user.id}`);
     }
   }
@@ -70,15 +75,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const savedMessage = await this.messagesService.createMessage(sender, recipient, data.content);
     if (!savedMessage) return;
 
+    // "КРИЧИМ" О СОБЫТИИ, ЧТО БЫЛО ОТПРАВЛЕНО НОВОЕ СООБЩЕНИЕ
+    this.eventEmitter.emit('message.sent', { sender, recipient });
+
     const recipientRoom = `user-${data.recipientId}`;
 
-    // Отправляем сообщение в личную комнату получателя
     this.server.to(recipientRoom).emit('newMessage', savedMessage);
     
-    // И отправляем копию сообщения себе (в свою комнату), чтобы UI обновился
-    // Проверяем, что не отправляем сообщение самому себе дважды
     if (sender.id !== data.recipientId) {
         this.server.to(`user-${sender.id}`).emit('newMessage', savedMessage);
+    }
+  }
+
+  // Этот метод мы уже добавили ранее, он слушает создание уведомлений
+  @OnEvent('notification.created')
+  handleNotificationCreated(payload: Notification) {
+    if (payload.user && payload.user.id) {
+      const room = `user-${payload.user.id}`;
+      this.logger.log(`Sending new notification (ID: ${payload.notification_id}) to room ${room}`);
+      this.server.to(room).emit('newNotification', payload);
     }
   }
 }
