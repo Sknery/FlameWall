@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
@@ -12,8 +12,7 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:300
 function ConversationPage() {
   const { userId: otherUserId } = useParams();
   const navigate = useNavigate();
-  const { user: currentUser } = useAuth();
-  // Получаем всё необходимое из контекста чата
+  const { user: currentUser, authToken } = useAuth(); // Достаем authToken для проверки
   const { sendMessage, conversations, loadConversationHistory, isConnected } = useChat();
   
   const [otherUser, setOtherUser] = useState(null);
@@ -22,9 +21,9 @@ function ConversationPage() {
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);
 
-  // Получаем сообщения для текущего диалога из общего хранилища в контексте
   const messages = conversations[otherUserId] || [];
 
+  // ИЗМЕНЕНИЕ ЗДЕСЬ: Упрощаем логику загрузки
   useEffect(() => {
     const loadInitialData = async () => {
       try {
@@ -32,22 +31,22 @@ function ConversationPage() {
         // Загружаем данные о собеседнике
         const userRes = await axios.get(`${API_BASE_URL}/users/${otherUserId}`);
         setOtherUser(userRes.data);
-        // Запускаем загрузку истории сообщений
-        if(isConnected) {
-            await loadConversationHistory(otherUserId);
-        }
+        // СРАЗУ ЖЕ запускаем загрузку истории сообщений, не дожидаясь isConnected
+        await loadConversationHistory(otherUserId);
       } catch (err) {
         setError('Failed to load user data.');
       } finally {
         setLoading(false);
       }
     };
-    if (otherUserId) {
+    
+    // Запускаем загрузку, если у нас есть ID собеседника и мы авторизованы (есть токен)
+    if (otherUserId && authToken) {
       loadInitialData();
     }
-  }, [otherUserId, loadConversationHistory, isConnected]);
+  }, [otherUserId, authToken, loadConversationHistory]); // Убираем isConnected из зависимостей
 
-  // Эффект для автопрокрутки
+  // Эффект для автопрокрутки остается без изменений
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -63,6 +62,7 @@ function ConversationPage() {
   if (error) return <Alert color="danger">{error}</Alert>;
   if (!otherUser) return <Typography>User not found.</Typography>;
 
+  // JSX остается без изменений
   return (
     <Sheet sx={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center' }}>
@@ -76,10 +76,7 @@ function ConversationPage() {
           {messages.map(msg => (
             <Box 
               key={msg.id} 
-              sx={{ 
-                display: 'flex', 
-                justifyContent: msg.sender?.id === currentUser?.id ? 'flex-end' : 'flex-start',
-              }}
+              sx={{ display: 'flex', justifyContent: msg.sender?.id === currentUser?.id ? 'flex-end' : 'flex-start' }}
             >
               <Sheet 
                 variant="solid" 
