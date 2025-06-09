@@ -6,7 +6,7 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
   ConnectedSocket,
-  } from '@nestjs/websockets';
+} from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { MessagesService } from '../messages/messages.service';
@@ -14,8 +14,8 @@ import { WsGuard } from '../auth/guards/ws.guard';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
-import { EventEmitter2, OnEvent } from '@nestjs/event-emitter'; // <-- Импортируем OnEvent
-import { Notification } from '../notifications/entities/notification.entity'; // <-- Импортируем Notification
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { Notification } from '../notifications/entities/notification.entity';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -24,12 +24,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private logger: Logger = new Logger('ChatGateway');
   private onlineUsers = new Map<number, string>();
+  // --- ДОБАВЛЕНО: Хранилище для отслеживания, кто какой чат смотрит ---
+  //   Ключ: ID пользователя, который смотрит чат.
+  //   Значение: ID пользователя, с которым открыт чат.
+  private currentlyViewing = new Map<number, number>();
 
   constructor(
     private readonly messagesService: MessagesService,
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
-    private readonly eventEmitter: EventEmitter2, // Убедимся, что EventEmitter внедрен
+    private readonly eventEmitter: EventEmitter2,
   ) {}
   
   async handleConnection(client: Socket) {
@@ -53,9 +57,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     const user: User = client['user'];
-    if (user && this.onlineUsers.get(user.id) === client.id) {
-      this.onlineUsers.delete(user.id);
-      this.logger.log(`Client disconnected: User ID ${user.id}`);
+    if (user) {
+      if (this.onlineUsers.get(user.id) === client.id) {
+          this.onlineUsers.delete(user.id);
+          this.logger.log(`Client disconnected: User ID ${user.id}`);
+      }
+      // --- ДОБАВЛЕНО: Убираем пользователя из списка смотрящих при дисконнекте ---
+      this.currentlyViewing.delete(user.id);
     }
   }
 
@@ -74,10 +82,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const savedMessage = await this.messagesService.createMessage(sender, recipient, data.content);
     if (!savedMessage) return;
 
-    this.eventEmitter.emit('message.sent', { sender, recipient });
+    // --- ИЗМЕНЕНО: Добавлена проверка, смотрит ли получатель чат ---
+    const recipientIsViewing = this.currentlyViewing.get(recipient.id) === sender.id;
 
+    if (recipientIsViewing) {
+      this.logger.log(`Recipient ${recipient.id} is viewing chat with ${sender.id}. Notification suppressed.`);
+    } else {
+      // Только если получатель не смотрит чат, отправляем событие для создания уведомления
+      this.eventEmitter.emit('message.sent', { sender, recipient });
+    }
+
+    // Отправка самого сообщения по сокету происходит в любом случае
     const recipientRoom = `user-${data.recipientId}`;
-
     this.server.to(recipientRoom).emit('newMessage', savedMessage);
     
     if (sender.id !== data.recipientId) {
@@ -85,10 +101,33 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  // --- ДОБАВЛЕН НЕДОСТАЮЩИЙ МЕТОД ---
+  // --- НОВЫЙ МЕТОД: Пользователь начал просмотр чата ---
+  @UseGuards(WsGuard)
+  @SubscribeMessage('startViewingChat')
+  handleStartViewingChat(
+    @MessageBody() data: { otherUserId: number },
+    @ConnectedSocket() client: Socket,
+  ): void {
+      const currentUser: User = client['user'];
+      if (currentUser && data.otherUserId) {
+        this.currentlyViewing.set(currentUser.id, data.otherUserId);
+        this.logger.log(`User ${currentUser.id} started viewing chat with ${data.otherUserId}`);
+      }
+  }
+
+  // --- НОВЫЙ МЕТОД: Пользователь закончил просмотр чата ---
+  @UseGuards(WsGuard)
+  @SubscribeMessage('stopViewingChat')
+  handleStopViewingChat(@ConnectedSocket() client: Socket): void {
+      const currentUser: User = client['user'];
+      if (currentUser && this.currentlyViewing.has(currentUser.id)) {
+        this.currentlyViewing.delete(currentUser.id);
+        this.logger.log(`User ${currentUser.id} stopped viewing chat.`);
+      }
+  }
+
   @OnEvent('notification.created')
   handleNotificationCreated(payload: Notification) {
-    // В payload.user теперь есть сущность пользователя, которому предназначено уведомление
     if (payload && payload.user && payload.user.id) {
       const room = `user-${payload.user.id}`;
       this.logger.log(`Event 'notification.created' caught. Emitting 'newNotification' to room ${room}`);

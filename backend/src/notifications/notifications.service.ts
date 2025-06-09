@@ -19,7 +19,7 @@ export class NotificationsService {
   private async create(user: User, title: string, message: string, type: string, link: string | null = null): Promise<void> {
     try {
       const notification = this.notificationsRepository.create({
-        user, // Можно передавать всю сущность, TypeORM разберется
+        user,
         title,
         message,
         type,
@@ -29,7 +29,7 @@ export class NotificationsService {
       
       const populatedNotification = await this.notificationsRepository.findOne({
           where: { notification_id: savedNotification.notification_id },
-          relations: ['user'] // Убедимся, что в событие пойдет полная сущность
+          relations: ['user']
       });
 
       this.eventEmitter.emit('notification.created', populatedNotification);
@@ -40,36 +40,34 @@ export class NotificationsService {
     }
   }
 
-  // Слушатель: Дружба принята
+  // --- Слушатели событий остаются без изменений ---
+
   @OnEvent('friendship.accepted', { async: true })
   async handleFriendshipAccepted(payload: { requester: User, receiver: User }) {
     const { requester, receiver } = payload;
     const title = 'Friend Request Accepted';
     const message = `${receiver.username} is now your friend.`;
-    const link = `/users/${receiver.id}`; // Ссылка на профиль нового друга
+    const link = `/users/${receiver.id}`;
     await this.create(requester, title, message, 'friendship.accepted', link);
   }
 
-  // Слушатель: Пришел новый запрос в друзья
   @OnEvent('friendship.requested', { async: true })
   async handleFriendshipRequested(payload: { requester: User, receiver: User }) {
     const { requester, receiver } = payload;
     const title = 'New Friend Request';
     const message = `${requester.username} wants to be your friend.`;
-    const link = `/friends`; // Ссылка на страницу управления друзьями
+    const link = `/friends`;
     await this.create(receiver, title, message, 'friendship.requested', link);
   }
 
-  // Слушатель: Пришло новое сообщение в чате
   @OnEvent('message.sent', { async: true })
   async handleMessageSent(payload: { sender: User, recipient: User }) {
     const { sender, recipient } = payload;
     const title = 'New Message';
     const message = `You have a new message from ${sender.username}.`;
-    const link = `/messages/${sender.id}`; // Ссылка на диалог с отправителем
+    const link = `/messages/${sender.id}`;
     await this.create(recipient, title, message, 'message.sent', link);
   }
-
 
   // --- Методы для работы с контроллером ---
 
@@ -92,5 +90,25 @@ export class NotificationsService {
     }
     notification.read = true;
     return this.notificationsRepository.save(notification);
+  }
+
+  // --- НОВЫЙ МЕТОД: Пометить все как прочитанные ---
+  async markAllAsRead(userId: number): Promise<{ affected?: number }> {
+    const result = await this.notificationsRepository.update(
+      { user_id: userId, read: false },
+      { read: true },
+    );
+    this.logger.log(`Marked all as read for user ${userId}. Affected: ${result.affected}`);
+    return { affected: result.affected };
+  }
+
+  // --- НОВЫЙ МЕТОД: Пометить как прочитанные по ссылке ---
+  async markAsReadByLink(userId: number, link: string): Promise<{ affected?: number }> {
+      const result = await this.notificationsRepository.update(
+          { user_id: userId, link: link, read: false },
+          { read: true },
+      );
+      this.logger.log(`Marked as read for user ${userId} by link ${link}. Affected: ${result.affected}`);
+      return { affected: result.affected };
   }
 }

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useChat } from '../context/ChatContext';
+// import { useChat } from '../context/ChatContext'; // useChat больше не нужен напрямую
+import { useNotifications } from '../context/NotificationsContext';
 import { Box, Typography, Sheet, CircularProgress, Alert, Textarea, IconButton, Avatar, Stack, FormControl } from '@mui/joy';
 import SendIcon from '@mui/icons-material/Send';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -12,9 +13,14 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:300
 function ConversationPage() {
   const { userId: otherUserId } = useParams();
   const navigate = useNavigate();
-  const { user: currentUser, authToken } = useAuth(); // Достаем authToken для проверки
-  const { sendMessage, conversations, loadConversationHistory, isConnected } = useChat();
-  
+  const { user: currentUser, authToken, socket } = useAuth();
+  // --- ДОБАВЛЕНО: Достаем функцию из контекста ---
+  const { markNotificationsAsReadByLink } = useNotifications();
+
+  // Локальное состояние для чата
+  const [conversations, setConversations] = useState({});
+  const [isConnected, setIsConnected] = useState(socket?.connected || false);
+
   const [otherUser, setOtherUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -22,16 +28,34 @@ function ConversationPage() {
   const messagesEndRef = useRef(null);
 
   const messages = conversations[otherUserId] || [];
+  
+  // --- ДОБАВЛЕНО: Сообщаем бэкенду о просмотре чата ---
+   useEffect(() => {
+    if (socket && otherUserId) {
+      socket.emit('startViewingChat', { otherUserId: Number(otherUserId) });
+      return () => {
+        socket.emit('stopViewingChat');
+      };
+    }
+  }, [socket, otherUserId]);
 
-  // ИЗМЕНЕНИЕ ЗДЕСЬ: Упрощаем логику загрузки
+  const loadConversationHistory = useCallback(async (id) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/messages/conversation/${id}`, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setConversations(prev => ({ ...prev, [id]: response.data }));
+    } catch (error) {
+      console.error("Failed to load conversation history", error);
+    }
+  }, [authToken]);
+
   useEffect(() => {
     const loadInitialData = async () => {
       try {
         setLoading(true);
-        // Загружаем данные о собеседнике
         const userRes = await axios.get(`${API_BASE_URL}/users/${otherUserId}`);
         setOtherUser(userRes.data);
-        // СРАЗУ ЖЕ запускаем загрузку истории сообщений, не дожидаясь isConnected
         await loadConversationHistory(otherUserId);
       } catch (err) {
         setError('Failed to load user data.');
@@ -40,21 +64,50 @@ function ConversationPage() {
       }
     };
     
-    // Запускаем загрузку, если у нас есть ID собеседника и мы авторизованы (есть токен)
     if (otherUserId && authToken) {
       loadInitialData();
+      // --- ДОБАВЛЕНО: При загрузке страницы помечаем уведомления из этого чата как прочитанные ---
+      // Ссылка должна соответствовать той, что генерируется на бэкенде
+      markNotificationsAsReadByLink(`/messages/${otherUserId}`);
     }
-  }, [otherUserId, authToken, loadConversationHistory]); // Убираем isConnected из зависимостей
+    // --- ИЗМЕНЕНО: Добавляем markNotificationsAsReadByLink в зависимости ---
+  }, [otherUserId, authToken, loadConversationHistory, markNotificationsAsReadByLink]);
 
-  // Эффект для автопрокрутки остается без изменений
+  // Этот useEffect слушает новые сообщения и статусы подключения (без изменений)
+  useEffect(() => {
+    if (!socket) return;
+    const handleNewMessage = (message) => {
+      const currentId = currentUser?.id;
+      if (!currentId) return;
+      const involvedUserId = message.sender.id === currentId ? message.receiver.id : message.sender.id;
+      if (String(involvedUserId) === String(otherUserId)) {
+          setConversations(prev => {
+            const currentMessages = prev[involvedUserId] || [];
+            if (currentMessages.find(m => m.id === message.id)) return prev;
+            return { ...prev, [involvedUserId]: [...currentMessages, message] };
+        });
+      }
+    };
+    const handleConnect = () => setIsConnected(true);
+    const handleDisconnect = () => setIsConnected(false);
+    socket.on('newMessage', handleNewMessage);
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    return () => {
+      socket.off('newMessage', handleNewMessage);
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+    };
+  }, [socket, currentUser, otherUserId]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSendMessage = (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
-    sendMessage(Number(otherUserId), newMessage);
+    if (!newMessage.trim() || !socket) return;
+    socket.emit('sendMessage', { recipientId: Number(otherUserId), content: newMessage });
     setNewMessage('');
   };
 
@@ -62,7 +115,6 @@ function ConversationPage() {
   if (error) return <Alert color="danger">{error}</Alert>;
   if (!otherUser) return <Typography>User not found.</Typography>;
 
-  // JSX остается без изменений
   return (
     <Sheet sx={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center' }}>

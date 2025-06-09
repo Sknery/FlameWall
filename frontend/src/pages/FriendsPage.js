@@ -32,7 +32,9 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:300
 
 function FriendsPage() {
   const { authToken } = useAuth();
-  const { friendshipUpdateTrigger } = useNotifications();
+  const { friendshipUpdateTrigger, markNotificationsAsReadByLink } = useNotifications();
+
+  const [activeTab, setActiveTab] = useState(0);
 
   const [friends, setFriends] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -68,7 +70,17 @@ function FriendsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData, friendshipUpdateTrigger]);
-  
+
+  // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+  useEffect(() => {
+    // Если мы находимся на вкладке "Incoming Requests"...
+    if (activeTab === 1) {
+      // ...отмечаем уведомления как прочитанные.
+      markNotificationsAsReadByLink('/friends');
+    }
+    // Этот эффект теперь сработает при смене вкладки ИЛИ при получении нового запроса в друзья
+  }, [activeTab, friendshipUpdateTrigger, markNotificationsAsReadByLink]);
+
   const handleRequestAction = async (action, requestId) => {
     try {
       const config = { headers: { Authorization: `Bearer ${authToken}` } };
@@ -80,17 +92,16 @@ function FriendsPage() {
       fetchData();
     } catch (err) { console.error(`Failed to ${action} request:`, err); }
   };
-  
+
   const handleRemoveFriend = async (friendshipId) => {
     try {
       await axios.delete(`${API_BASE_URL}/friendships/${friendshipId}`, { headers: { Authorization: `Bearer ${authToken}` } });
       fetchData();
     } catch (err) { console.error('Failed to remove friend:', err); }
   };
-  
+
   const handleUnblock = async (userIdToUnblock) => {
     try {
-        // --- ИСПРАВЛЕНО: Заменяем API__URL на API_BASE_URL ---
       await axios.delete(`${API_BASE_URL}/friendships/block/${userIdToUnblock}`, { headers: { Authorization: `Bearer ${authToken}` } });
       fetchData();
     } catch(err) { console.error('Failed to unblock user:', err); }
@@ -107,7 +118,11 @@ function FriendsPage() {
   return (
     <Box>
       <Typography level="h1" component="h1" sx={{ mb: 3 }}>Manage Friendships</Typography>
-      <Tabs aria-label="Friendship management tabs" defaultValue={0}>
+      <Tabs 
+        aria-label="Friendship management tabs" 
+        value={activeTab}
+        onChange={(event, newValue) => setActiveTab(newValue)}
+      >
         <TabList>
           <Tab>Friends ({friends.length})</Tab>
           <Tab>

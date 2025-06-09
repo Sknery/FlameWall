@@ -11,18 +11,19 @@ import {
   ListDivider,
   Typography,
   Box,
+  Tooltip, // <-- Импортируем Tooltip
 } from '@mui/joy';
 import NotificationsIcon from '@mui/icons-material/Notifications';
-import MarkChatReadIcon from '@mui/icons-material/MarkChatRead';
+import MarkChatReadIcon from '@mui/icons-material/MarkChatRead'; // <-- Иконка для кнопки
 
 function NotificationBell() {
-  const { notifications, unreadCount, markAsRead } = useNotifications();
+  // --- ИЗМЕНЕНО: Достаем markAllAsRead ---
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
   const handleNotificationClick = (notification) => {
     if (!notification.read) {
       markAsRead(notification.notification_id);
     }
-    // Навигация будет выполнена компонентом NavLink
   };
 
   return (
@@ -35,20 +36,37 @@ function NotificationBell() {
           <NotificationsIcon />
         </Badge>
       </MenuButton>
-      <Menu sx={{ minWidth: 320, p: 1 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1 }}>
+      <Menu sx={{ minWidth: 320, p: 1, gap: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 1 }}>
             <Typography level="title-md">Notifications</Typography>
-            {/* В будущем здесь можно добавить кнопку "пометить все как прочитанные" */}
+            {/* --- ДОБАВЛЕНО: Кнопка "Прочитать все" --- */}
+            <Tooltip title="Mark all as read" variant="outlined" size="sm">
+                <IconButton 
+                    size="sm" 
+                    variant="plain" 
+                    color="primary"
+                    disabled={unreadCount === 0}
+                    onClick={markAllAsRead}
+                >
+                    <MarkChatReadIcon />
+                </IconButton>
+            </Tooltip>
         </Box>
         <ListDivider />
         {notifications.length > 0 ? (
-          notifications.slice(0, 5).map(n => ( // Показываем только 5 последних
+          notifications.slice(0, 5).map(n => (
             <MenuItem 
               key={n.notification_id} 
               component={NavLink} 
               to={n.link || '#'}
               onClick={() => handleNotificationClick(n)}
-              sx={{ bgcolor: n.read ? 'transparent' : 'primary.softBg' }}
+              sx={{ 
+                bgcolor: n.read ? 'transparent' : 'primary.softBg',
+                borderRadius: 'sm',
+                '&:hover': {
+                    bgcolor: n.read ? 'background.level1' : 'primary.softHoverBg'
+                }
+            }}
             >
                 <Box>
                     <Typography level="title-sm">{n.title}</Typography>
@@ -65,7 +83,7 @@ function NotificationBell() {
           </MenuItem>
         )}
         <ListDivider />
-        <MenuItem component={NavLink} to="/notifications">
+        <MenuItem component={NavLink} to="/notifications" sx={{ borderRadius: 'sm' }}>
             <Typography level="body-sm" sx={{ textAlign: 'center', width: '100%' }}>View all notifications</Typography>
         </MenuItem>
       </Menu>
