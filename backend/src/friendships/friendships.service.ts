@@ -21,17 +21,19 @@ export class FriendshipsService {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
     private eventEmitter: EventEmitter2, // <-- Внедряем EventEmitter
+    private readonly usersService: UsersService,
+
   ) { }
 
   async sendRequest(requesterId: number, receiverId: number): Promise<Friendship> {
     if (requesterId === receiverId) {
       throw new ForbiddenException('You cannot send a friend request to yourself.');
     }
-    
+
     // Нам нужна полная сущность отправителя для события
     const [requester, receiver] = await Promise.all([
-        this.usersRepository.findOneBy({ id: requesterId }),
-        this.usersRepository.findOneBy({ id: receiverId }),
+      this.usersRepository.findOneBy({ id: requesterId }),
+      this.usersRepository.findOneBy({ id: receiverId }),
     ]);
 
     if (!receiver || !requester) {
@@ -54,7 +56,7 @@ export class FriendshipsService {
       receiver_id: receiverId,
       status: FriendStatuses.PENDING,
     });
-    
+
     const savedRequest = await this.friendshipsRepository.save(newRequest);
 
     // "Кричим" о событии, что был отправлен новый запрос
@@ -74,24 +76,24 @@ export class FriendshipsService {
   }
 
   async acceptRequest(requestId: number, currentUserId: number): Promise<Friendship> {
-    const request = await this.friendshipsRepository.findOne({ 
-        where: { id: requestId, receiver_id: currentUserId, status: FriendStatuses.PENDING },
-        relations: ['requester', 'receiver'],
+    const request = await this.friendshipsRepository.findOne({
+      where: { id: requestId, receiver_id: currentUserId, status: FriendStatuses.PENDING },
+      relations: ['requester', 'receiver'],
     });
     if (!request) {
       throw new NotFoundException(`Pending request with ID ${requestId} not found for you.`);
     }
-    
+
     request.status = FriendStatuses.ACCEPTED;
-    
+
     // "Кричим" о событии, что дружба принята
     this.eventEmitter.emit(
       'friendship.accepted',
       { requester: request.requester, receiver: request.receiver }
     );
-    
+
     // --- ДОБАВЬТЕ ЭТУ СТРОКУ ---
-    console.log('[DEBUG] Event friendship.accepted EMITTED'); 
+    console.log('[DEBUG] Event friendship.accepted EMITTED');
     // -------------------------
 
     return this.friendshipsRepository.save(request);
@@ -118,16 +120,35 @@ export class FriendshipsService {
       return { friendshipId: friendship.id, user: publicFriendData as PublicUser };
     });
   }
-  async getFriendshipStatus(userId1: number, userId2: number) {
-    if (userId1 === userId2) return { status: 'self' };
-    const friendship = await this.friendshipsRepository.findOne({ where: [{ requester_id: userId1, receiver_id: userId2 }, { requester_id: userId2, receiver_id: userId1 }] });
+  async getFriendshipStatus(currentUserId: number, otherUserIdentifier: string | number) {
+    // Находим пользователя по идентификатору (ID или slug)
+    const otherUser = await this.usersService.findOne(otherUserIdentifier);
+    if (!otherUser) {
+      throw new NotFoundException(`User with identifier '${otherUserIdentifier}' not found.`);
+    }
+    const otherUserId = otherUser.id;
+
+    if (currentUserId === otherUserId) return { status: 'self' };
+
+    const friendship = await this.friendshipsRepository.findOne({
+      where: [
+        { requester_id: currentUserId, receiver_id: otherUserId },
+        { requester_id: otherUserId, receiver_id: currentUserId }
+      ]
+    });
+
     if (!friendship) return { status: 'none' };
+
     if (friendship.status === FriendStatuses.PENDING) {
-      if (friendship.requester_id === userId1) { return { status: 'pending_outgoing', requestId: friendship.id }; } 
-      else { return { status: 'pending_incoming', requestId: friendship.id }; }
+      if (friendship.requester_id === currentUserId) {
+        return { status: 'pending_outgoing', requestId: friendship.id };
+      } else {
+        return { status: 'pending_incoming', requestId: friendship.id };
+      }
     }
     return { status: friendship.status, friendshipId: friendship.id };
   }
+
   async blockUser(requesterId: number, userToBlockId: number): Promise<Friendship> {
     if (requesterId === userToBlockId) { throw new ForbiddenException('You cannot block yourself.'); }
     let friendship = await this.friendshipsRepository.findOne({ where: [{ requester_id: requesterId, receiver_id: userToBlockId }, { requester_id: userToBlockId, receiver_id: requesterId }] });
@@ -150,5 +171,18 @@ export class FriendshipsService {
   }
   async listBlockedUsers(userId: number): Promise<Friendship[]> {
     return this.friendshipsRepository.find({ where: { requester_id: userId, status: FriendStatuses.BLOCKED }, relations: ['receiver'] });
+  }
+
+    async areTheyFriends(userId1: number, userId2: number): Promise<boolean> {
+    if (userId1 === userId2) return true; // Разрешаем отправлять сообщения самому себе
+
+    const friendship = await this.friendshipsRepository.findOne({
+      where: [
+        { requester_id: userId1, receiver_id: userId2, status: FriendStatuses.ACCEPTED },
+        { requester_id: userId2, receiver_id: userId1, status: FriendStatuses.ACCEPTED },
+      ],
+    });
+
+    return !!friendship; // Вернет true, если дружба найдена, иначе false
   }
 }

@@ -7,6 +7,9 @@ import { Ranks } from '../common/enums/ranks.enum';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto';
 
+import { JwtService } from '@nestjs/jwt';
+
+
 export type PublicUser = Omit<User, 'password_hash' | 'validatePassword' | 'deleted_at'>;
 
 @Injectable()
@@ -14,6 +17,8 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+        private jwtService: JwtService,
+
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<PublicUser> {
@@ -38,7 +43,7 @@ export class UsersService {
     return result as PublicUser;
   }
 
-  async updateProfile(userId: number, updateUserDto: UpdateUserDto): Promise<PublicUser> {
+   async updateProfile(userId: number, updateUserDto: UpdateUserDto): Promise<{ user: PublicUser, access_token: string }> {
     const user = await this.usersRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found.`);
@@ -46,10 +51,7 @@ export class UsersService {
 
     if (updateUserDto.profile_slug) {
       const existingSlugUser = await this.usersRepository.findOne({
-        where: { 
-          profile_slug: updateUserDto.profile_slug,
-          id: Not(userId)
-        }
+        where: { profile_slug: updateUserDto.profile_slug, id: Not(userId) }
       });
       if (existingSlugUser) {
         throw new ConflictException('This profile URL slug is already taken.');
@@ -57,12 +59,17 @@ export class UsersService {
     }
 
     Object.assign(user, updateUserDto);
-
     const updatedUser = await this.usersRepository.save(user);
 
-    const { password_hash, validatePassword, deleted_at, ...result } = updatedUser;
-    return result as PublicUser;
+    // Создаем новый токен с обновленными данными (например, с новым username)
+    const jwtTokenPayload = { username: updatedUser.username, sub: updatedUser.id, rank: updatedUser.rank };
+    const newAccessToken = this.jwtService.sign(jwtTokenPayload);
+
+    const { password_hash, validatePassword, deleted_at, ...publicData } = updatedUser;
+    
+    return { user: publicData as PublicUser, access_token: newAccessToken };
   }
+
 
   async banUser(userId: number): Promise<PublicUser> {
     const user = await this.usersRepository.findOneBy({ id: userId });
@@ -101,11 +108,20 @@ export class UsersService {
     });
   }
 
-  async findOne(id: number): Promise<PublicUser> {
-    const user = await this.usersRepository.findOne({ where: { id } });
+ async findOne(identifier: string | number): Promise<PublicUser> {
+    // Проверяем, является ли идентификатор числом или строкой, состоящей только из цифр
+    const isNumeric = typeof identifier === 'number' || /^\d+$/.test(String(identifier));
+
+    const user = await this.usersRepository.findOne({
+      where: isNumeric
+        ? { id: Number(identifier) }
+        : { profile_slug: String(identifier) },
+    });
+
     if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      throw new NotFoundException(`User with identifier '${identifier}' not found`);
     }
+    
     const { password_hash, validatePassword, deleted_at, ...result } = user;
     return result as PublicUser;
   }
@@ -119,6 +135,10 @@ export class UsersService {
         .addSelect("user.password_hash")
         .where("user.email = :email", { email })
         .getOne();
+  }
+
+  async updatePassword(userId: number, newHashedPassword: string): Promise<void> {
+    await this.usersRepository.update(userId, { password_hash: newHashedPassword });
   }
 
   async findOneWithPasswordById(id: number): Promise<User | null> {

@@ -16,6 +16,8 @@ import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Notification } from '../notifications/entities/notification.entity';
+import { FriendshipsService } from 'src/friendships/friendships.service';
+
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -34,6 +36,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly eventEmitter: EventEmitter2,
+        private readonly friendshipsService: FriendshipsService,
+
   ) {}
   
   async handleConnection(client: Socket) {
@@ -79,20 +83,27 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const recipient = await this.usersService.findUserEntityById(data.recipientId);
     if (!recipient) return;
     
+    // --- ДОБАВЛЕНО: Проверка на дружбу ---
+    const areFriends = await this.friendshipsService.areTheyFriends(sender.id, recipient.id);
+    if (!areFriends) {
+      // Можно отправить событие с ошибкой обратно клиенту, если нужно
+      // client.emit('sendMessageError', { message: 'You can only message friends.' });
+      this.logger.warn(`BLOCKED: User ${sender.id} attempted to message non-friend ${recipient.id}.`);
+      // Просто прерываем выполнение, сообщение не будет отправлено
+      return;
+    }
+
     const savedMessage = await this.messagesService.createMessage(sender, recipient, data.content);
     if (!savedMessage) return;
 
-    // --- ИЗМЕНЕНО: Добавлена проверка, смотрит ли получатель чат ---
     const recipientIsViewing = this.currentlyViewing.get(recipient.id) === sender.id;
 
     if (recipientIsViewing) {
       this.logger.log(`Recipient ${recipient.id} is viewing chat with ${sender.id}. Notification suppressed.`);
     } else {
-      // Только если получатель не смотрит чат, отправляем событие для создания уведомления
       this.eventEmitter.emit('message.sent', { sender, recipient });
     }
 
-    // Отправка самого сообщения по сокету происходит в любом случае
     const recipientRoom = `user-${data.recipientId}`;
     this.server.to(recipientRoom).emit('newMessage', savedMessage);
     

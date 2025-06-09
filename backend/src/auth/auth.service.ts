@@ -4,6 +4,9 @@ import { JwtService } from '@nestjs/jwt';
 import { LoginDto } from './dto/login.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto'; 
 import { User } from '../users/entities/user.entity';
+// --- ДОБАВЛЕНО: Импорт DTO и bcrypt ---
+import { ChangePasswordDto } from './dto/change-password.dto';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
@@ -43,5 +46,26 @@ export class AuthService {
 
   async register(createUserDto: CreateUserDto): Promise<PublicUser> {
     return this.usersService.create(createUserDto);
+  }
+
+  // --- НОВЫЙ МЕТОД: Смена пароля ---
+  async changePassword(userId: number, changePasswordDto: ChangePasswordDto): Promise<void> {
+    const user = await this.usersService.findOneWithPasswordById(userId);
+    if (!user) {
+        throw new ForbiddenException('User not found.');
+    }
+
+    const isPasswordMatching = await bcrypt.compare(
+        changePasswordDto.currentPassword,
+        user.password_hash,
+    );
+
+    if (!isPasswordMatching) {
+        throw new UnauthorizedException('Wrong current password.');
+    }
+
+    const newHashedPassword = await bcrypt.hash(changePasswordDto.newPassword, 10);
+    
+    await this.usersService.updatePassword(userId, newHashedPassword);
   }
 }

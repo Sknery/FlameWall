@@ -58,7 +58,7 @@ function PlayersPage() {
             <Card
               variant="outlined"
               component={RouterLink}
-              to={`/users/${user.id}`} // Ссылка на будущую публичную страницу профиля
+              to={`/users/${user.profile_slug || user.id}`}              
               sx={{ 
                 textDecoration: 'none',
                 transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',

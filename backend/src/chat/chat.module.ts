@@ -4,11 +4,13 @@ import { MessagesModule } from '../messages/messages.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { UsersModule } from 'src/users/users.module';
 import { WsGuard } from 'src/auth/guards/ws.guard';
-import { ConfigService } from '@nestjs/config';
-// WsGuard и ConfigService больше не нужны здесь напрямую
+// --- ДОБАВЛЕНО: Импортируем модуль дружбы ---
+import { FriendshipsModule } from 'src/friendships/friendships.module';
 
 @Module({
-  imports: [MessagesModule, AuthModule, UsersModule],
-  providers: [ChatGateway, WsGuard, ConfigService],
+  // --- ИЗМЕНЕНО: Добавляем FriendshipsModule в импорты ---
+  imports: [MessagesModule, AuthModule, UsersModule, FriendshipsModule],
+  // Провайдеры остаются без изменений, ConfigService удален, так как он не используется
+  providers: [ChatGateway, WsGuard],
 })
 export class ChatModule {}

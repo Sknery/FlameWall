@@ -25,6 +25,7 @@ import MessagesPage from './pages/MessagesPage';
 import ConversationPage from './pages/ConversationPage';
 // --- УБЕДИТЕСЬ, ЧТО ЭТОТ ИМПОРТ НА МЕСТЕ ---
 import EditPostPage from './pages/EditPostPage';
+import SettingsPage from './pages/SettingsPage';
 
 function App() {
   return (
@@ -49,9 +50,10 @@ function App() {
                   <Route path="messages/:userId" element={<ProtectedRoute><ConversationPage /></ProtectedRoute>} />
                   <Route path="posts/new" element={<ProtectedRoute><CreatePostPage /></ProtectedRoute>} />
                   <Route path="posts/:postId/edit" element={<ProtectedRoute><EditPostPage /></ProtectedRoute>} />
+                  <Route path="/profile/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                   <Route path="profile/me" element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} />
                 </Route>
-            
+
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
               </Routes>

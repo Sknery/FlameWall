@@ -48,10 +48,11 @@ export class FriendshipsController {
   }
 
   // НОВЫЙ ЭНДПОИНТ
-  @Get('status/:otherUserId')
+ @Get('status/:identifier')
   @ApiOperation({ summary: 'Check friendship status with another user' })
-  getFriendshipStatus(@Param('otherUserId', ParseIntPipe) otherUserId: number, @Request() req) {
-    return this.friendshipsService.getFriendshipStatus(req.user.userId, otherUserId);
+  // Убираем ParseIntPipe, чтобы принимать и строки (slug)
+  getFriendshipStatus(@Param('identifier') identifier: string, @Request() req) {
+    return this.friendshipsService.getFriendshipStatus(req.user.userId, identifier);
   }
 
   // НОВЫЙ ЭНДПОИНТ

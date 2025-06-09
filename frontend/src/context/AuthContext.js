@@ -9,7 +9,7 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(undefined);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('authToken') || null);
-  
+
   // Создаем сокет и храним его здесь
   const socketRef = useRef(null);
   const [socket, setSocket] = useState(null);
@@ -26,29 +26,29 @@ export const AuthProvider = ({ children }) => {
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       }
     } else {
-        setUser(null);
+      setUser(null);
     }
   }, []);
 
   // Этот эффект управляет жизненным циклом сокета
   useEffect(() => {
     if (authToken) {
-        if (!socketRef.current) {
-            console.log('AuthProvider: Connecting socket...');
-            const newSocket = io(process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000', {
-                transports: ['websocket'],
-                auth: { token: authToken },
-            });
-            socketRef.current = newSocket;
-            setSocket(newSocket);
-        }
+      if (!socketRef.current) {
+        console.log('AuthProvider: Connecting socket...');
+        const newSocket = io(process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000', {
+          transports: ['websocket'],
+          auth: { token: authToken },
+        });
+        socketRef.current = newSocket;
+        setSocket(newSocket);
+      }
     } else {
-        if (socketRef.current) {
-            console.log('AuthProvider: Disconnecting socket.');
-            socketRef.current.disconnect();
-            socketRef.current = null;
-            setSocket(null);
-        }
+      if (socketRef.current) {
+        console.log('AuthProvider: Disconnecting socket.');
+        socketRef.current.disconnect();
+        socketRef.current = null;
+        setSocket(null);
+      }
     }
   }, [authToken]);
 
@@ -67,6 +67,12 @@ export const AuthProvider = ({ children }) => {
     delete axios.defaults.headers.common['Authorization'];
   }, []);
 
+  const updateAuthToken = useCallback((token) => {
+    // Эта логика идентична логину, так как нам нужно сделать то же самое:
+    // обновить токен в localStorage и обновить состояние user
+    login(token);
+  }, [login]);
+
   const value = useMemo(() => ({
     isLoggedIn: !!user,
     user,
@@ -74,6 +80,7 @@ export const AuthProvider = ({ children }) => {
     socket, // <-- Передаем сокет через AuthContext
     login,
     logout,
+    updateAuthToken, // <-- Экспортируем новую функцию
   }), [user, authToken, socket, login, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

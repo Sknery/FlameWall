@@ -20,6 +20,8 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagg
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { User } from './entities/user.entity';
+import { UpdateProfileResponseDto } from './dto/update-profile-response.dto';
+
 
 @ApiTags('Users')
 @Controller('users')
@@ -39,10 +41,12 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update my profile' })
-  @ApiResponse({ status: 200, description: 'Profile updated successfully.', type: User })
+  // --- ИЗМЕНЕНО: Обновляем тип в декораторе Swagger ---
+  @ApiResponse({ status: 200, description: 'Profile updated successfully.', type: UpdateProfileResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 409, description: 'Conflict. Profile slug is already in use.'})
-  updateMyProfile(@Request() req, @Body() updateUserDto: UpdateUserDto): Promise<PublicUser> {
+  // --- ИЗМЕНЕНО: Обновляем тип возвращаемого значения ---
+  updateMyProfile(@Request() req, @Body() updateUserDto: UpdateUserDto): Promise<{ user: PublicUser; access_token: string; }> {
     const userId = req.user.userId;
     return this.usersService.updateProfile(userId, updateUserDto);
   }
@@ -67,11 +71,16 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a single user by ID' })
+ @Get(':identifier')
+  @ApiOperation({ summary: 'Get a single user by ID or slug' })
   @ApiResponse({ status: 200, description: 'Return a single user.', type: User })
   @ApiResponse({ status: 404, description: 'User not found.' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.usersService.findOne(id);
+  findOne(@Param('identifier') identifier: string) {
+    // Пробуем преобразовать в число. Если получается - ищем по ID, если нет - по slug (строке)
+    const idAsNumber = parseInt(identifier, 10);
+    const queryIdentifier = isNaN(idAsNumber) ? identifier : idAsNumber;
+    return this.usersService.findOne(queryIdentifier);
   }
+
+  
 }
