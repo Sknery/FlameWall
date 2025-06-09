@@ -6,17 +6,16 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
   ConnectedSocket,
-
-} from '@nestjs/websockets';
+  } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { UseGuards, Logger } from '@nestjs/common';
+import { Logger, UseGuards } from '@nestjs/common';
 import { MessagesService } from '../messages/messages.service';
 import { WsGuard } from '../auth/guards/ws.guard';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
-import { OnEvent, EventEmitter2 } from '@nestjs/event-emitter';
-import { Notification } from '../notifications/entities/notification.entity';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter'; // <-- Импортируем OnEvent
+import { Notification } from '../notifications/entities/notification.entity'; // <-- Импортируем Notification
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -30,7 +29,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly messagesService: MessagesService,
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
-    private eventEmitter: EventEmitter2, // <-- ВНЕДРЯЕМ EVENT EMITTER
+    private readonly eventEmitter: EventEmitter2, // Убедимся, что EventEmitter внедрен
   ) {}
   
   async handleConnection(client: Socket) {
@@ -44,7 +43,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       
       client['user'] = user;
       client.join(`user-${user.id}`);
-      this.onlineUsers.set(user.id, client.id); // Добавляем пользователя в онлайн-карту
+      this.onlineUsers.set(user.id, client.id);
       this.logger.log(`Client Authenticated & Connected: SID ${client.id}, User ID ${user.id}, Joined room user-${user.id}`);
 
     } catch (e) {
@@ -55,8 +54,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleDisconnect(client: Socket) {
     const user: User = client['user'];
     if (user && this.onlineUsers.get(user.id) === client.id) {
-        this.onlineUsers.delete(user.id); // Удаляем пользователя из онлайн-карты
-        this.logger.log(`Client disconnected: User ID ${user.id}`);
+      this.onlineUsers.delete(user.id);
+      this.logger.log(`Client disconnected: User ID ${user.id}`);
     }
   }
 
@@ -75,7 +74,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const savedMessage = await this.messagesService.createMessage(sender, recipient, data.content);
     if (!savedMessage) return;
 
-    // "КРИЧИМ" О СОБЫТИИ, ЧТО БЫЛО ОТПРАВЛЕНО НОВОЕ СООБЩЕНИЕ
     this.eventEmitter.emit('message.sent', { sender, recipient });
 
     const recipientRoom = `user-${data.recipientId}`;
@@ -87,13 +85,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  // Этот метод мы уже добавили ранее, он слушает создание уведомлений
+  // --- ДОБАВЛЕН НЕДОСТАЮЩИЙ МЕТОД ---
   @OnEvent('notification.created')
   handleNotificationCreated(payload: Notification) {
-    if (payload.user && payload.user.id) {
+    // В payload.user теперь есть сущность пользователя, которому предназначено уведомление
+    if (payload && payload.user && payload.user.id) {
       const room = `user-${payload.user.id}`;
-      this.logger.log(`Sending new notification (ID: ${payload.notification_id}) to room ${room}`);
+      this.logger.log(`Event 'notification.created' caught. Emitting 'newNotification' to room ${room}`);
       this.server.to(room).emit('newNotification', payload);
+    } else {
+        this.logger.warn('Caught notification.created event with invalid payload', payload);
     }
   }
 }

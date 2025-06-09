@@ -89,6 +89,10 @@ export class FriendshipsService {
       'friendship.accepted',
       { requester: request.requester, receiver: request.receiver }
     );
+    
+    // --- ДОБАВЬТЕ ЭТУ СТРОКУ ---
+    console.log('[DEBUG] Event friendship.accepted EMITTED'); 
+    // -------------------------
 
     return this.friendshipsRepository.save(request);
   }

@@ -1,49 +1,66 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import axios from 'axios';
+import { io } from 'socket.io-client';
 
 const AuthContext = createContext(null);
+export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(undefined);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('authToken') || null);
+  
+  // Создаем сокет и храним его здесь
+  const socketRef = useRef(null);
+  const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    console.log(`%c[AuthContext] useEffect: Запустился. Токен: ${authToken ? 'ЕСТЬ' : 'НЕТ'}`, 'color: blue');
-    if (authToken) {
-      try {
-        const decodedToken = jwtDecode(authToken);
-        if (decodedToken.exp * 1000 < Date.now()) {
-          console.log('%c[AuthContext] useEffect: Токен истек, выходим из системы.', 'color: orange');
-          logout();
-        } else {
-          const userData = {
-            id: decodedToken.sub,
-            username: decodedToken.username,
-            rank: decodedToken.rank,
-          };
-          console.log('%c[AuthContext] useEffect: Токен валиден. Устанавливаю пользователя:', 'color: blue', userData);
-          setUser(userData);
-          axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
-        }
-      } catch (error) {
-        console.error("[AuthContext] useEffect: Невалидный токен.", error);
-        logout();
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      const decoded = jwtDecode(token);
+      if (decoded.exp * 1000 < Date.now()) {
+        localStorage.removeItem('authToken');
+      } else {
+        setAuthToken(token);
+        setUser({ id: decoded.sub, username: decoded.username, rank: decoded.rank });
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       }
     } else {
-        console.log('%c[AuthContext] useEffect: Токен не найден, пользователь - гость.', 'color: blue');
         setUser(null);
+    }
+  }, []);
+
+  // Этот эффект управляет жизненным циклом сокета
+  useEffect(() => {
+    if (authToken) {
+        if (!socketRef.current) {
+            console.log('AuthProvider: Connecting socket...');
+            const newSocket = io(process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000', {
+                transports: ['websocket'],
+                auth: { token: authToken },
+            });
+            socketRef.current = newSocket;
+            setSocket(newSocket);
+        }
+    } else {
+        if (socketRef.current) {
+            console.log('AuthProvider: Disconnecting socket.');
+            socketRef.current.disconnect();
+            socketRef.current = null;
+            setSocket(null);
+        }
     }
   }, [authToken]);
 
   const login = useCallback((token) => {
-    console.log('%c[AuthContext] login: Функция вызвана. Устанавливаю токен.', 'color: green');
     localStorage.setItem('authToken', token);
+    const decoded = jwtDecode(token);
+    setUser({ id: decoded.sub, username: decoded.username, rank: decoded.rank });
     setAuthToken(token);
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   }, []);
 
   const logout = useCallback(() => {
-    console.log('%c[AuthContext] logout: Функция вызвана. Очищаю токен и пользователя.', 'color: red');
     localStorage.removeItem('authToken');
     setAuthToken(null);
     setUser(null);
@@ -54,13 +71,10 @@ export const AuthProvider = ({ children }) => {
     isLoggedIn: !!user,
     user,
     authToken,
+    socket, // <-- Передаем сокет через AuthContext
     login,
     logout,
-  }), [user, authToken, login, logout]);
+  }), [user, authToken, socket, login, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = () => {
-  return useContext(AuthContext);
 };

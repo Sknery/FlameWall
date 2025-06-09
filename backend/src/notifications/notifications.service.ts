@@ -19,8 +19,7 @@ export class NotificationsService {
   private async create(user: User, title: string, message: string, type: string, link: string | null = null): Promise<void> {
     try {
       const notification = this.notificationsRepository.create({
-        user: user,
-        user_id: user.id,
+        user, // Можно передавать всю сущность, TypeORM разберется
         title,
         message,
         type,
@@ -28,45 +27,51 @@ export class NotificationsService {
       });
       const savedNotification = await this.notificationsRepository.save(notification);
       
-      this.eventEmitter.emit('notification.created', savedNotification);
+      const populatedNotification = await this.notificationsRepository.findOne({
+          where: { notification_id: savedNotification.notification_id },
+          relations: ['user'] // Убедимся, что в событие пойдет полная сущность
+      });
+
+      this.eventEmitter.emit('notification.created', populatedNotification);
       
-      this.logger.log(`Notification created for user ${user.id}`);
+      this.logger.log(`Notification created for user ${user.id} of type [${type}]`);
     } catch (error) {
       this.logger.error(`Failed to create notification for user ${user.id}`, error.stack);
     }
   }
 
+  // Слушатель: Дружба принята
   @OnEvent('friendship.accepted', { async: true })
   async handleFriendshipAccepted(payload: { requester: User, receiver: User }) {
-    this.logger.log('Event caught: friendship.accepted', payload);
     const { requester, receiver } = payload;
     const title = 'Friend Request Accepted';
-    const message = `${receiver.username} accepted your friend request.`;
-    await this.create(requester, title, message, 'friendship.accepted', `/users/${receiver.id}`);
+    const message = `${receiver.username} is now your friend.`;
+    const link = `/users/${receiver.id}`; // Ссылка на профиль нового друга
+    await this.create(requester, title, message, 'friendship.accepted', link);
   }
 
+  // Слушатель: Пришел новый запрос в друзья
   @OnEvent('friendship.requested', { async: true })
   async handleFriendshipRequested(payload: { requester: User, receiver: User }) {
-    this.logger.log('Event caught: friendship.requested', payload);
     const { requester, receiver } = payload;
     const title = 'New Friend Request';
     const message = `${requester.username} wants to be your friend.`;
-    await this.create(receiver, title, message, 'friendship.requested', '/friends');
+    const link = `/friends`; // Ссылка на страницу управления друзьями
+    await this.create(receiver, title, message, 'friendship.requested', link);
   }
 
-  // НОВЫЙ ОБРАБОТЧИК СОБЫТИЯ
+  // Слушатель: Пришло новое сообщение в чате
   @OnEvent('message.sent', { async: true })
   async handleMessageSent(payload: { sender: User, recipient: User }) {
-    this.logger.log('Event caught: message.sent', payload);
     const { sender, recipient } = payload;
-    
     const title = 'New Message';
     const message = `You have a new message from ${sender.username}.`;
-    const link = `/messages/${sender.id}`;
-    
-    // Создаем уведомление для ПОЛУЧАТЕЛЯ сообщения
+    const link = `/messages/${sender.id}`; // Ссылка на диалог с отправителем
     await this.create(recipient, title, message, 'message.sent', link);
   }
+
+
+  // --- Методы для работы с контроллером ---
 
   async getForUser(userId: number): Promise<Notification[]> {
     return this.notificationsRepository.find({
