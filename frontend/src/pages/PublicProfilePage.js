@@ -12,6 +12,7 @@ import BlockIcon from '@mui/icons-material/Block';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import ThumbUpOffAltIcon from '@mui/icons-material/ThumbUpOffAlt';
 import MailIcon from '@mui/icons-material/Mail';
+import { constructImageUrl } from '../utils/url';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -139,7 +140,7 @@ function PublicProfilePage() {
     <Box>
       <Sheet variant="outlined" sx={{ p: 4, borderRadius: 'md' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 3 }}>
-          <Avatar src={profile.pfp_url} sx={{ '--Avatar-size': '100px' }} />
+          <Avatar src={constructImageUrl(profile.pfp_url)} sx={{ '--Avatar-size': '100px' }} />
           <Box>
             <Typography level="h2" component="h1">{profile.username}</Typography>
             <Chip

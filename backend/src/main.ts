@@ -3,10 +3,20 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule, SwaggerCustomOptions } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+// --- ДОБАВЛЕНО ---
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // --- ИЗМЕНЕНО: Указываем, что наше приложение - NestExpressApplication ---
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
+
+  // --- ДОБАВЛЕНО: Настраиваем раздачу статичных файлов ---
+  // Все файлы из папки 'uploads' будут доступны по URL /uploads
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads',
+  });
 
   app.enableCors(); 
   app.useGlobalPipes(new ValidationPipe({

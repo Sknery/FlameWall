@@ -151,4 +151,23 @@ export class UsersService {
     async findUserEntityById(id: number): Promise<User | null> {
     return this.usersRepository.findOneBy({ id });
   }
+
+   async updateAvatar(userId: number, avatarUrl: string): Promise<User> {
+    const user = await this.usersRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    user.pfp_url = avatarUrl;
+    return this.usersRepository.save(user);
+  }
+
+  // --- НОВЫЙ МЕТОД: Обновление URL баннера ---
+  async updateBanner(userId: number, bannerUrl: string): Promise<User> {
+    const user = await this.usersRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    user.banner_url = bannerUrl;
+    return this.usersRepository.save(user);
+  }
 }

@@ -13,6 +13,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useAuth } from '../context/AuthContext';
 import VoteButtons from '../components/VoteButtons';
+import { constructImageUrl } from '../utils/url';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -158,7 +159,7 @@ function SinglePostPage() {
 
       <Sheet variant="outlined" sx={{ p: 3, borderRadius: 'md', mb: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-          <Avatar src={post.author?.pfp_url}>{post.author ? post.author.username.charAt(0) : '?'}</Avatar>
+          <Avatar src={constructImageUrl(post.author?.pfp_url)}>{post.author ? post.author.username.charAt(0) : '?'}</Avatar>
           <Box>
             <Typography level="title-md">{post.author ? post.author.username : 'Anonymous'}</Typography>
             <Typography level="body-xs">Posted on {new Date(post.created_at).toLocaleDateString()}</Typography>
@@ -209,7 +210,7 @@ function SinglePostPage() {
             return (
               <React.Fragment key={comment.id}>
                 <ListItem sx={{ alignItems: 'flex-start' }}>
-                  <ListItemDecorator><Avatar src={comment.author?.pfp_url}>{comment.author ? comment.author.username.charAt(0) : '?'}</Avatar></ListItemDecorator>
+                  <ListItemDecorator><Avatar src={constructImageUrl(comment.author?.pfp_url)}>{comment.author ? comment.author.username.charAt(0) : '?'}</Avatar></ListItemDecorator>
                   <ListItemContent>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography level="title-sm">{comment.author ? comment.author.username : 'Anonymous'}</Typography>

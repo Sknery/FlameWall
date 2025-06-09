@@ -26,6 +26,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import VoteButtons from '../components/VoteButtons';
+import { constructImageUrl } from '../utils/url';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -107,7 +108,7 @@ function PostsPage() {
               <ListItem>
                 <Sheet sx={{ p: 2, flexGrow: 1, bgcolor: 'transparent' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
-                    <Avatar src={post.author?.pfp_url}>{post.author ? post.author.username.charAt(0) : '?'}</Avatar>
+                    <Avatar src={constructImageUrl(post.author?.pfp_url)}>{post.author ? post.author.username.charAt(0) : '?'}</Avatar>
                     <Typography level="title-md">{post.author ? post.author.username : 'Anonymous'}</Typography>
                     {canManagePost && (
                       // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Добавляем zIndex, чтобы меню было кликабельным ---

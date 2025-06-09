@@ -17,6 +17,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add'; // Импортируем иконку
 import { Link as RouterLink } from 'react-router-dom';
 import ThumbUpOffAltIcon from '@mui/icons-material/ThumbUpOffAlt';
+import { constructImageUrl } from '../utils/url';
+
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -68,7 +70,7 @@ function MyProfilePage() {
     <Box>
       <Sheet variant="outlined" sx={{ p: 4, borderRadius: 'md' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 3 }}>
-          <Avatar src={profile.pfp_url} sx={{ '--Avatar-size': '100px' }} />
+          <Avatar src={constructImageUrl(profile.pfp_url)} sx={{ '--Avatar-size': '100px' }} />
           <Box>
             <Typography level="h2" component="h1">{profile.username}</Typography>
             {profile.profile_slug && (

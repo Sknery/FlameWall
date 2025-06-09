@@ -14,6 +14,8 @@ import {
   ListItemButton,
   Avatar,
 } from '@mui/joy';
+import { constructImageUrl } from '../utils/url';
+
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -52,7 +54,7 @@ function MessagesPage() {
           friends.map(item => (
             <ListItem key={item.friendshipId}>
               <ListItemButton component={RouterLink} to={`/messages/${item.user.id}`}>
-                <ListItemDecorator><Avatar src={item.user.pfp_url} /></ListItemDecorator>
+                <ListItemDecorator><Avatar src={constructImageUrl(item.user.pfp_url)} /></ListItemDecorator>
                 <ListItemContent>{item.user.username}</ListItemContent>
               </ListItemButton>
             </ListItem>

@@ -1,5 +1,7 @@
 import { IsOptional, IsString, IsUrl, MaxLength, Matches } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+// --- ДОБАВЛЕНО: Импортируем декоратор Transform ---
+import { Transform } from 'class-transformer';
 
 export class UpdateUserDto {
   @ApiPropertyOptional({ 
@@ -12,19 +14,23 @@ export class UpdateUserDto {
   @MaxLength(50)
   username?: string;
 
+  // --- ИЗМЕНЕНИЯ ЗДЕСЬ ---
   @ApiPropertyOptional({ 
     example: 'rabbit-the-great', 
     description: 'A unique profile URL slug. Only letters, numbers, and dashes. Must be unique.',
     maxLength: 50,
     pattern: '^[a-zA-Z0-9-]+$'
   })
+  // Этот трансформатор превратит пустую строку "" в null,
+  // что позволит IsOptional и другим валидаторам корректно ее обработать.
+  @Transform(({ value }) => (value?.trim() === '' ? null : value))
   @IsOptional()
   @IsString()
   @MaxLength(50)
   @Matches(/^[a-zA-Z0-9-]+$/, {
     message: 'Profile slug can only contain letters, numbers, and dashes.',
   })
-  profile_slug?: string;
+  profile_slug?: string | null; // Разрешаем также null
   
   @ApiPropertyOptional({ 
     example: 'A seasoned player looking for a team!', 

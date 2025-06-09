@@ -1,31 +1,30 @@
 import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Param, 
-  ParseIntPipe, 
-  UsePipes, 
-  ValidationPipe, 
-  Patch, 
-  UseGuards, 
-  Request,
-  Delete,
-  HttpCode,
-  HttpStatus
+  Controller, Get, Post, Body, Param, UsePipes, ValidationPipe, Patch, UseGuards, Request, Delete, HttpCode, HttpStatus,
+  UseInterceptors, UploadedFile, ParseFilePipe, MaxFileSizeValidator, Logger, BadRequestException
 } from '@nestjs/common';
-import { UsersService, PublicUser } from './users.service';
+import { PublicUser, UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { User } from './entities/user.entity';
 import { UpdateProfileResponseDto } from './dto/update-profile-response.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 
+const generateUniqueFilename = (req, file, callback) => {
+  const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+  const extension = extname(file.originalname);
+  callback(null, `${uniqueSuffix}${extension}`);
+};
 
 @ApiTags('Users')
 @Controller('users')
 export class UsersController {
+
+    private readonly logger = new Logger(UsersController.name);
+
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
@@ -82,5 +81,77 @@ export class UsersController {
     return this.usersService.findOne(queryIdentifier);
   }
 
-  
+@Post('me/avatar')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: './uploads/avatars',
+      filename: generateUniqueFilename,
+    }),
+  }))
+  async uploadAvatar(
+    @Request() req,
+    @UploadedFile(
+      // --- ИЗМЕНЕНО: Убираем FileTypeValidator, оставляем только проверку размера ---
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5 MB
+        ],
+        // Делаем пайп опциональным, чтобы наша ручная проверка могла выполниться первой
+        fileIsRequired: true,
+      }),
+    ) file: Express.Multer.File,
+  ) {
+    this.logger.log(`Attempting to upload avatar for user: ${req.user.userId}`);
+    // --- ДОБАВЛЕНО: Логируем полученный файл, чтобы увидеть его свойства ---
+    this.logger.debug(`File metadata: ${JSON.stringify(file)}`);
+
+    // --- ДОБАВЛЕНО: Ручная, надежная проверка MIME-типа ---
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+        this.logger.error(`Invalid file type uploaded: ${file.mimetype}`);
+        throw new BadRequestException(`Invalid file type. Only JPEG, PNG, and GIF are allowed.`);
+    }
+
+    const userId = req.user.userId;
+    const avatarUrl = `/uploads/avatars/${file.filename}`;
+    return this.usersService.updateAvatar(userId, avatarUrl);
+  }
+
+  @Post('me/banner')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: './uploads/banners',
+      filename: generateUniqueFilename,
+    }),
+  }))
+  async uploadBanner(
+    @Request() req,
+    @UploadedFile(
+      // --- ИЗМЕНЕНО: Убираем FileTypeValidator ---
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }), // 10 MB
+        ],
+        fileIsRequired: true,
+      }),
+    ) file: Express.Multer.File,
+  ) {
+    this.logger.log(`Attempting to upload banner for user: ${req.user.userId}`);
+    this.logger.debug(`File metadata: ${JSON.stringify(file)}`);
+
+    // --- ДОБАВЛЕНО: Ручная, надежная проверка MIME-типа ---
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+        this.logger.error(`Invalid file type uploaded: ${file.mimetype}`);
+        throw new BadRequestException(`Invalid file type. Only JPEG, PNG, and GIF are allowed.`);
+    }
+
+    const userId = req.user.userId;
+    const bannerUrl = `/uploads/banners/${file.filename}`;
+    return this.usersService.updateBanner(userId, bannerUrl);
+  }
 }

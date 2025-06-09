@@ -13,6 +13,7 @@ import {
   Chip,
   AspectRatio,
 } from '@mui/joy';
+import { constructImageUrl } from '../utils/url';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -58,8 +59,8 @@ function PlayersPage() {
             <Card
               variant="outlined"
               component={RouterLink}
-              to={`/users/${user.profile_slug || user.id}`}              
-              sx={{ 
+              to={`/users/${user.profile_slug || user.id}`}
+              sx={{
                 textDecoration: 'none',
                 transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
                 '&:hover': {
@@ -70,14 +71,12 @@ function PlayersPage() {
             >
               {user.banner_url && (
                 <AspectRatio ratio="2">
-                  <img src={user.banner_url} alt={`${user.username}'s banner`} loading="lazy" />
+                  {/* --- ИЗМЕНЕНО: Используем нашу функцию --- */}
+                  <img src={constructImageUrl(user.banner_url)} alt={`${user.username}'s banner`} loading="lazy" />
                 </AspectRatio>
               )}
               <CardContent sx={{ mt: user.banner_url ? 0 : 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Avatar
-                  src={user.pfp_url}
-                  sx={{ '--Avatar-size': '60px', border: '2px solid', borderColor: 'background.body' }}
-                />
+                <Avatar src={constructImageUrl(user.pfp_url)} sx={{ '--Avatar-size': '60px', /* ... */ }} />
                 <Box>
                   <Typography level="title-lg">{user.username}</Typography>
                   <Chip size="sm" color="primary" sx={{ mt: 0.5 }}>{user.rank}</Chip>

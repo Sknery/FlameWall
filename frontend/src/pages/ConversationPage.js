@@ -6,6 +6,7 @@ import { Box, Typography, Sheet, CircularProgress, Alert, Textarea, IconButton, 
 import SendIcon from '@mui/icons-material/Send';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import axios from 'axios';
+import { constructImageUrl } from '../utils/url';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -148,7 +149,7 @@ function ConversationPage() {
     <Sheet sx={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center' }}>
         <IconButton onClick={() => navigate('/messages')} sx={{ mr: 2 }}><ArrowBackIcon /></IconButton>
-        <Avatar src={otherUser.pfp_url} />
+        <Avatar src={constructImageUrl(otherUser.pfp_url)} />
         <Typography level="title-lg" sx={{ ml: 2 }}>{otherUser.username}</Typography>
       </Box>
 
