@@ -14,6 +14,8 @@ import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useAuth } from '../context/AuthContext';
+import VoteButtons from '../components/VoteButtons';
+
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -21,7 +23,6 @@ function SinglePostPage() {
   const { postId } = useParams();
   const navigate = useNavigate();
   const { isLoggedIn, user: currentUser, authToken } = useAuth();
-  
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -37,16 +38,16 @@ function SinglePostPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get(`${API_BASE_URL}/posts/${postId}`);
+      const config = authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {};
+      const response = await axios.get(`${API_BASE_URL}/posts/${postId}`, config);
       setPost(response.data);
     } catch (err) {
       setError('Failed to load post. It may have been deleted or the link is incorrect.');
-      console.error('Error fetching single post:', err);
     } finally {
       setLoading(false);
     }
-  }, [postId]);
-  
+  }, [postId, authToken]);
+
   useEffect(() => {
     if (postId) {
       fetchPost();
@@ -56,7 +57,7 @@ function SinglePostPage() {
   const handleCommentSubmit = async (event) => {
     event.preventDefault();
     if (!newCommentContent.trim() || !isLoggedIn) return;
-    
+
     setIsSubmittingComment(true);
     try {
       const response = await axios.post(
@@ -122,6 +123,28 @@ function SinglePostPage() {
     }
   };
 
+  const handleVote = useCallback(async (targetType, targetId, value) => {
+    if (!isLoggedIn) {
+      alert('Please log in to vote.');
+      return;
+    }
+    try {
+      await axios.post(
+        `${API_BASE_URL}/votes/${targetType}s/${targetId}`, // /votes/posts/1 или /votes/comments/1
+        { value },
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
+      // После успешного ответа можно перезапросить данные, чтобы синхронизировать
+      // Но оптимистичное обновление уже сделало UI отзывчивым
+      fetchPost();
+    } catch (error) {
+      console.error(`Failed to vote for ${targetType}`, error);
+      // В случае ошибки можно откатить UI, перезапросив данные
+      fetchPost();
+    }
+  }, [isLoggedIn, authToken, fetchPost]);
+
+
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
   if (error) return <Alert color="danger" sx={{ mt: 2 }}>{error}</Alert>;
   if (!post) return <Typography>Post not found.</Typography>;
@@ -144,16 +167,25 @@ function SinglePostPage() {
         </Box>
         <Typography level="h1" component="h1" sx={{ mb: 2 }}>{post.title}</Typography>
         <Typography level="body-lg" sx={{ whiteSpace: 'pre-wrap' }}>{post.content}</Typography>
+
+        <VoteButtons
+          initialLikes={post.likes}
+          initialDislikes={post.dislikes}
+          currentUserVote={post.currentUserVote}
+          onVote={(value) => handleVote('post', post.id, value)}
+          disabled={!isLoggedIn}
+        />
+
       </Sheet>
 
       <Box>
         <Typography level="h4" component="h2" sx={{ mb: 2 }}>Comments ({post.comments?.length || 0})</Typography>
         {isLoggedIn ? (
           <Box component="form" onSubmit={handleCommentSubmit} sx={{ mb: 3 }}>
-            <Textarea placeholder="Write a comment..." minRows={3} value={newCommentContent} onChange={(e) => setNewCommentContent(e.target.value)} sx={{ mb: 1 }}/>
+            <Textarea placeholder="Write a comment..." minRows={3} value={newCommentContent} onChange={(e) => setNewCommentContent(e.target.value)} sx={{ mb: 1 }} />
             <Button type="submit" loading={isSubmittingComment} endDecorator={<SendIcon />}>Submit Comment</Button>
           </Box>
-        ) : (<Typography sx={{mb: 3}}>Please <Link component={NavLink} to="/login">log in</Link> to leave a comment.</Typography>)}
+        ) : (<Typography sx={{ mb: 3 }}>Please <Link component={NavLink} to="/login">log in</Link> to leave a comment.</Typography>)}
 
         <List variant="outlined" sx={{ borderRadius: 'sm', bgcolor: 'background.body' }}>
           {post.comments?.length > 0 ? (
@@ -191,6 +223,16 @@ function SinglePostPage() {
                       ) : (
                         <Typography level="body-md" sx={{ mt: 0.5 }}>{comment.content}</Typography>
                       )}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <VoteButtons
+                          initialLikes={comment.likes}
+                          initialDislikes={comment.dislikes}
+                          currentUserVote={comment.currentUserVote}
+                          onVote={(value) => handleVote('comment', comment.id, value)}
+                          disabled={!isLoggedIn}
+                        />
+                        <Typography level="body-xs" sx={{ color: 'text.tertiary' }}>{new Date(comment.created_at).toLocaleString()}</Typography>
+                      </Box>
                       <Typography level="body-xs" sx={{ mt: 1, color: 'text.tertiary' }}>{new Date(comment.created_at).toLocaleString()}</Typography>
                     </ListItemContent>
                   </ListItem>

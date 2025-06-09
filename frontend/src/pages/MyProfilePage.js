@@ -16,6 +16,7 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add'; // Импортируем иконку
 import { Link as RouterLink } from 'react-router-dom';
+import ThumbUpOffAltIcon from '@mui/icons-material/ThumbUpOffAlt';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -75,30 +76,40 @@ function MyProfilePage() {
                 @{profile.profile_slug}
               </Typography>
             )}
-            <Chip size="sm" color="primary" sx={{ mt: 1 }}>{profile.rank}</Chip>
+            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+              <Chip size="sm" color="primary">{profile.rank}</Chip>
+              <Chip
+                size="sm"
+                color="neutral"
+                variant="outlined"
+                startDecorator={<ThumbUpOffAltIcon />}
+              >
+                Reputation: {profile.reputation_count}
+              </Chip>
+            </Stack>
           </Box>
           <Stack spacing={1} direction="row" sx={{ ml: 'auto' }}>
-            <Button 
-              component={RouterLink} 
+            <Button
+              component={RouterLink}
               to="/posts/new"
-              variant="solid" 
-              color="primary" 
+              variant="solid"
+              color="primary"
               startDecorator={<AddIcon />}
             >
               New Post
             </Button>
-            <Button 
-              component={RouterLink} 
+            <Button
+              component={RouterLink}
               to="/profile/settings"
-              variant="outlined" 
-              color="neutral" 
-              startDecorator={<EditIcon />} 
+              variant="outlined"
+              color="neutral"
+              startDecorator={<EditIcon />}
             >
               Edit Profile
             </Button>
           </Stack>
         </Box>
-        <Divider sx={{ my: 2 }}/>
+        <Divider sx={{ my: 2 }} />
         <Typography level="body-lg">
           {profile.description || 'No description provided.'}
         </Typography>

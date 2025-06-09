@@ -9,7 +9,8 @@ import {
   OneToMany,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { Comment } from '../../comments/entities/comment.entity'; 
+import { Comment } from '../../comments/entities/comment.entity';
+import { Vote } from '../../votes/entities/vote.entity';
 
 @Entity('posts')
 export class Post {
@@ -37,4 +38,7 @@ export class Post {
 
   @OneToMany(() => Comment, (comment) => comment.post)
   comments: Comment[];
+
+  @OneToMany(() => Vote, (vote) => vote.post)
+  votes: Vote[];
 }

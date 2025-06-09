@@ -11,6 +11,7 @@ import {
   ParseIntPipe,
   UsePipes,
   ValidationPipe,
+  Injectable,
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -18,6 +19,8 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Post as PostEntity } from './entities/post.entity';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger'; // Импортируем декораторы Swagger
+import { AuthGuard } from '@nestjs/passport';
+import { OptionalJwtAuthGuard } from 'src/auth/guards/optional-jwt-auth.guard';
 
 @ApiTags('Posts') 
 @Controller('posts')
@@ -44,12 +47,15 @@ export class PostsController {
     return this.postsService.findAll();
   }
 
-  @Get(':id')
+ @Get(':id')
+  @UseGuards(OptionalJwtAuthGuard) // Используем "мягкий" Guard
   @ApiOperation({ summary: 'Get a specific post by ID' })
   @ApiResponse({ status: 200, description: 'Return the post.', type: PostEntity })
   @ApiResponse({ status: 404, description: 'Post not found.' })
-  findOne(@Param('id', ParseIntPipe) id: number): Promise<PostEntity> {
-    return this.postsService.findOne(id);
+  findOne(@Param('id', ParseIntPipe) id: number, @Request() req): Promise<PostEntity> {
+    // req.user может быть объектом пользователя или undefined
+    const userId = req.user ? req.user.userId : null;
+    return this.postsService.findOne(id, userId);
   }
 
   @Patch(':id')

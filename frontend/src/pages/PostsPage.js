@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import axios from 'axios';
-import { useAuth } from '../context/AuthContext'; // Импортируем useAuth
+import { useAuth } from '../context/AuthContext';
 import {
   Typography,
   List,
@@ -14,9 +14,10 @@ import {
   Divider,
   Avatar,
   Link as JoyLink,
-  Button, // Импортируем Button
+  Button,
 } from '@mui/joy';
-import AddIcon from '@mui/icons-material/Add'; // Иконка для кнопки
+import AddIcon from '@mui/icons-material/Add';
+import VoteButtons from '../components/VoteButtons';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -24,25 +25,43 @@ function PostsPage() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { isLoggedIn } = useAuth(); // Получаем статус авторизации
+  const { isLoggedIn, authToken } = useAuth();
+
+  const fetchPosts = useCallback(async () => {
+    try {
+      // setLoading(true) здесь не нужен, чтобы избежать мерцания при голосовании
+      setError(null);
+      const response = await axios.get(`${API_BASE_URL}/posts`);
+      setPosts(response.data);
+    } catch (err) {
+      setError('Failed to load posts. Please try again later.');
+      console.error('Error fetching posts:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchPosts = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await axios.get(`${API_BASE_URL}/posts`);
-        setPosts(response.data);
-      } catch (err) {
-        setError('Failed to load posts. Please try again later.');
-        console.error('Error fetching posts:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchPosts();
-  }, []);
+  }, [fetchPosts]);
+
+  const handleVote = useCallback(async (postId, value) => {
+    if (!isLoggedIn) {
+      alert('Please log in to vote.');
+      return;
+    }
+    try {
+      await axios.post(
+        `${API_BASE_URL}/votes/posts/${postId}`,
+        { value },
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
+      fetchPosts();
+    } catch (error) {
+      console.error(`Failed to vote for post:`, error);
+      alert(error.response?.data?.message || 'Failed to vote.');
+    }
+  }, [isLoggedIn, authToken, fetchPosts]);
 
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
@@ -104,7 +123,14 @@ function PostsPage() {
                     {post.content}
                   </Typography>
 
-                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', color: 'text.tertiary' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'text.tertiary' }}>
+                    <VoteButtons
+                      initialLikes={post.likes}
+                      initialDislikes={post.dislikes}
+                      currentUserVote={0} 
+                      onVote={(value) => handleVote(post.id, value)}
+                      disabled={!isLoggedIn}
+                    />
                     <Typography level="body-xs">
                       {new Date(post.created_at).toLocaleDateString()}
                     </Typography>

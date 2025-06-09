@@ -30,34 +30,71 @@ export class PostsService {
     return this.postsRepository.save(post);
   }
 
-  async findAll(): Promise<Post[]> {
-    return this.postsRepository.find({
-      relations: ['author'],
+ async findAll(): Promise<any[]> {
+    const posts = await this.postsRepository.find({
+      relations: ['author', 'votes'], // Загружаем автора и голоса
       order: {
         created_at: 'DESC',
       },
     });
+
+    // Для каждого поста добавляем информацию о голосах
+    return posts.map(post => {
+      const likes = post.votes.filter(v => v.value === 1).length;
+      const dislikes = post.votes.filter(v => v.value === -1).length;
+      
+      // Создаем новый объект, исключая из него полное свойство votes
+      const { votes, ...restOfPost } = post;
+
+      return { ...restOfPost, likes, dislikes };
+    });
   }
 
- async findOne(id: number): Promise<Post> {
+  async findOne(id: number, userId?: number): Promise<any> {
     const post = await this.postsRepository.findOne({
       where: { id },
       relations: [
         'author', 
         'comments', 
-        'comments.author'
+        'comments.author',
+        'votes',
+        'comments.votes',
+        'votes.voter', // Загружаем voter, чтобы получить voter.id
+        'comments.votes.voter',
       ],
       order: {
-        comments: {
-          created_at: "ASC"
-        }
-      }
+        comments: { created_at: "ASC" },
+      },
     });
 
     if (!post) {
       throw new NotFoundException(`Post with ID ${id} not found.`);
     }
-    return post;
+
+    // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+    const mapVotes = (entity: any, currentUserId?: number) => {
+      const likes = entity.votes.filter(v => v.value === 1).length;
+      const dislikes = entity.votes.filter(v => v.value === -1).length;
+      
+      let currentUserVote = 0;
+      if (currentUserId) {
+        const vote = entity.votes.find(v => v.voter.id === currentUserId);
+        if(vote) currentUserVote = vote.value;
+      }
+      
+      // Создаем новый объект, исключая из него полное свойство votes
+      const { votes, ...restOfEntity } = entity;
+
+      return { ...restOfEntity, likes, dislikes, currentUserVote };
+    };
+
+    const postWithVotes = mapVotes(post, userId);
+
+    if (post.comments) {
+        postWithVotes.comments = post.comments.map(comment => mapVotes(comment, userId));
+    }
+    
+    return postWithVotes;
   }
 
   async update(id: number, updatePostDto: UpdatePostDto, userId: number): Promise<Post> {

@@ -6,9 +6,12 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  OneToMany, // <-- Убедитесь, что OneToMany импортирован
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Post } from '../../posts/entities/post.entity';
+// --- ДОБАВЛЕНО: Импортируем новую сущность Vote ---
+import { Vote } from '../../votes/entities/vote.entity';
 
 @Entity('comments')
 export class Comment {
@@ -42,4 +45,8 @@ export class Comment {
   })
   @JoinColumn({ name: 'post_id' })
   post: Post;
+
+  // --- ДОБАВЛЕНО: Связь с голосами, оставленными за этот комментарий ---
+  @OneToMany(() => Vote, (vote) => vote.comment)
+  votes: Vote[];
 }

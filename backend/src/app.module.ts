@@ -28,6 +28,7 @@ import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { ChatModule } from './chat/chat.module';
 // Удалили: import { ChatGateway } from './chat/chat.gateway';
+import { VotesModule } from './votes/votes.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { ChatModule } from './chat/chat.module';
     NotificationsModule,
     CommentsModule,
     PurchasesModule,
+    VotesModule,
   ],
   controllers: [AppController],
   providers: [AppService], // <-- Удалили ChatGateway отсюда

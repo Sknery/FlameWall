@@ -9,6 +9,7 @@ import HowToRegIcon from '@mui/icons-material/HowToReg';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import BlockIcon from '@mui/icons-material/Block';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
+import ThumbUpOffAltIcon from '@mui/icons-material/ThumbUpOffAlt';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -129,23 +130,32 @@ function PublicProfilePage() {
   if (error) return <Alert color="danger" sx={{ mt: 2 }}>{error}</Alert>;
   if (!profile) return <Typography>User not found.</Typography>;
 
-  return (
-    <Box>
-      <Sheet variant="outlined" sx={{ p: 4, borderRadius: 'md' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 3 }}>
-          <Avatar src={profile.pfp_url} sx={{ '--Avatar-size': '100px' }} />
-          <Box>
-            <Typography level="h2" component="h1">{profile.username}</Typography>
-            {profile.profile_slug && (<Typography level="body-md" textColor="text.tertiary">@{profile.profile_slug}</Typography>)}
-            <Chip size="sm" color="primary" sx={{ mt: 1 }}>{profile.rank}</Chip>
-          </Box>
-          {renderActionButtons()}
+    return (
+        <Box>
+          <Sheet variant="outlined" sx={{ p: 4, borderRadius: 'md' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 3 }}>
+              <Avatar src={profile.pfp_url} sx={{ '--Avatar-size': '100px' }} />
+              <Box>
+                <Typography level="h2" component="h1">{profile.username}</Typography>
+                
+                {/* --- ДОБАВЛЕНО: Отображение репутации --- */}
+                <Chip
+                    size="sm"
+                    color="neutral"
+                    variant="outlined"
+                    startDecorator={<ThumbUpOffAltIcon />}
+                    sx={{ mt: 1 }}
+                >
+                    Reputation: {profile.reputation_count}
+                </Chip>
+              </Box>
+              {renderActionButtons()}
+            </Box>
+            <Divider sx={{ my: 2 }}/>
+            <Typography level="body-lg">{profile.description || 'No description provided.'}</Typography>
+          </Sheet>
         </Box>
-        <Divider sx={{ my: 2 }}/>
-        <Typography level="body-lg">{profile.description || 'No description provided.'}</Typography>
-      </Sheet>
-    </Box>
-  );
+      );
 }
 
 export default PublicProfilePage;

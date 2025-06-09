@@ -18,6 +18,7 @@ import { Notification } from '../../notifications/entities/notification.entity';
 import { Comment } from '../../comments/entities/comment.entity';
 import { Purchase } from '../../purchases/entities/purchase.entity';
 import { Exclude } from 'class-transformer';
+import { Vote } from '../../votes/entities/vote.entity';
 
 @Entity('users')
 export class User {
@@ -66,6 +67,7 @@ export class User {
   @Column({ type: 'integer', default: 0 })
   balance: number;
 
+  // --- ВОССТАНОВЛЕННОЕ ПОЛЕ ---
   @Column({ type: 'varchar', length: 255, name: 'password_hash' })
   @Exclude({ toPlainOnly: true })
   password_hash: string;
@@ -116,6 +118,9 @@ export class User {
 
   @OneToMany(() => Purchase, (purchase) => purchase.user)
   purchases: Purchase[];
+
+  @OneToMany(() => Vote, (vote) => vote.voter)
+  votes: Vote[];
 
   async validatePassword(passwordToValidate: string): Promise<boolean> {
     if (!this.password_hash) return false;
