@@ -5,7 +5,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ChatProvider } from './context/ChatContext';
 import { NotificationsProvider } from './context/NotificationsContext';
-import { Toaster } from 'react-hot-toast'; // <-- Импортируем Toaster
+import { Toaster } from 'react-hot-toast';
 
 import monochromeDarkTheme from './theme';
 import MainLayout from './layouts/MainLayout';
@@ -31,10 +31,11 @@ function App() {
       <AuthProvider>
         <ChatProvider>
           <NotificationsProvider>
-            {/* Контейнер для всплывающих уведомлений */}
-            <Toaster position="bottom-right" toastOptions={{ duration: 5000 }} />
-
+            {/* ИЗМЕНЕНИЕ: Теперь Router является оберткой для Toaster и Routes */}
             <Router>
+              {/* Toaster перемещен сюда, внутрь Router */}
+              <Toaster position="bottom-right" toastOptions={{ duration: 5000 }} />
+
               <Routes>
                 <Route path="/" element={<MainLayout />}>
                   <Route index element={<LandingPage />} />
@@ -49,7 +50,7 @@ function App() {
                   <Route path="posts/new" element={<ProtectedRoute><CreatePostPage /></ProtectedRoute>} />
                   <Route path="profile/me" element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} />
                 </Route>
-                
+            
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
               </Routes>

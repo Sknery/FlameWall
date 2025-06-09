@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationsContext';
 import {
   Typography,
   CircularProgress,
@@ -31,6 +32,8 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:300
 
 function FriendsPage() {
   const { authToken } = useAuth();
+  const { friendshipUpdateTrigger } = useNotifications();
+
   const [friends, setFriends] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [outgoingRequests, setOutgoingRequests] = useState([]);
@@ -50,7 +53,6 @@ function FriendsPage() {
         axios.get(`${API_BASE_URL}/friendships/requests/outgoing`, config),
         axios.get(`${API_BASE_URL}/friendships/blocked`, config),
       ]);
-      // ИСПРАВЛЕНИЕ ЗДЕСЬ: используем правильные имена переменных
       setFriends(friendsRes.data);
       setPendingRequests(pendingRes.data);
       setOutgoingRequests(outgoingRes.data);
@@ -65,7 +67,7 @@ function FriendsPage() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, friendshipUpdateTrigger]);
   
   const handleRequestAction = async (action, requestId) => {
     try {
@@ -88,6 +90,7 @@ function FriendsPage() {
   
   const handleUnblock = async (userIdToUnblock) => {
     try {
+        // --- ИСПРАВЛЕНО: Заменяем API__URL на API_BASE_URL ---
       await axios.delete(`${API_BASE_URL}/friendships/block/${userIdToUnblock}`, { headers: { Authorization: `Bearer ${authToken}` } });
       fetchData();
     } catch(err) { console.error('Failed to unblock user:', err); }
