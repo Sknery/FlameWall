@@ -23,6 +23,8 @@ import CreatePostPage from './pages/CreatePostPage';
 import FriendsPage from './pages/FriendsPage';
 import MessagesPage from './pages/MessagesPage';
 import ConversationPage from './pages/ConversationPage';
+// --- УБЕДИТЕСЬ, ЧТО ЭТОТ ИМПОРТ НА МЕСТЕ ---
+import EditPostPage from './pages/EditPostPage';
 
 function App() {
   return (
@@ -31,9 +33,7 @@ function App() {
       <AuthProvider>
         <ChatProvider>
           <NotificationsProvider>
-            {/* ИЗМЕНЕНИЕ: Теперь Router является оберткой для Toaster и Routes */}
             <Router>
-              {/* Toaster перемещен сюда, внутрь Router */}
               <Toaster position="bottom-right" toastOptions={{ duration: 5000 }} />
 
               <Routes>
@@ -48,6 +48,7 @@ function App() {
                   <Route path="messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
                   <Route path="messages/:userId" element={<ProtectedRoute><ConversationPage /></ProtectedRoute>} />
                   <Route path="posts/new" element={<ProtectedRoute><CreatePostPage /></ProtectedRoute>} />
+                  <Route path="posts/:postId/edit" element={<ProtectedRoute><EditPostPage /></ProtectedRoute>} />
                   <Route path="profile/me" element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} />
                 </Route>
             
