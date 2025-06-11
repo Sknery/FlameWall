@@ -6,12 +6,17 @@ import {
   CircularProgress, Sheet, Divider, Textarea, Stack, Avatar, AspectRatio,
 } from '@mui/joy';
 import EditIcon from '@mui/icons-material/Edit';
+import LinkIcon from '@mui/icons-material/Link'; // <-- ИЗМЕНЕНИЕ: Добавляем импорт иконки
+import { useNavigate } from 'react-router-dom';
+import { constructImageUrl } from '../utils/url';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 const FULL_API_URL = process.env.REACT_APP_FULL_API_URL || 'http://localhost:3000';
 
 function SettingsPage() {
-  const { authToken, updateAuthToken } = useAuth();
+  // --- ИЗМЕНЕНИЕ: Добавляем 'user' из useAuth ---
+  const { authToken, updateAuthToken, user } = useAuth();
+  const navigate = useNavigate();
 
   const [profileData, setProfileData] = useState({ username: '', profile_slug: '', description: '' });
   const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -33,16 +38,16 @@ function SettingsPage() {
       if (!authToken) return;
       try {
         setLoading(true);
-        const { data } = await axios.get(`${API_BASE_URL}/auth/profile`, {
-          headers: { Authorization: `Bearer ${authToken}` },
-        });
-        setProfileData({
-          username: data.username || '',
-          profile_slug: data.profile_slug || '',
-          description: data.description || '',
-        });
-        setAvatarPreview(data.pfp_url);
-        setBannerPreview(data.banner_url);
+        // Используем user из useAuth(), чтобы не делать лишний запрос
+        if (user) {
+          setProfileData({
+            username: user.username || '',
+            profile_slug: user.profile_slug || '',
+            description: user.description || '',
+          });
+          setAvatarPreview(user.pfp_url);
+          setBannerPreview(user.banner_url);
+        }
       } catch (err) {
         setError('Failed to load profile data.');
       } finally {
@@ -50,7 +55,7 @@ function SettingsPage() {
       }
     };
     fetchProfile();
-  }, [authToken]);
+  }, [authToken, user]); // Добавляем user в зависимости
 
   const handleProfileChange = (e) => {
     setProfileData({ ...profileData, [e.target.name]: e.target.value });
@@ -80,36 +85,30 @@ function SettingsPage() {
     setSuccess('');
 
     try {
-      // Создаем массив промисов, которые будем выполнять
       const promises = [];
       
-      // Добавляем обновление текстовых данных как первый промис
-      promises.push(axios.patch(`${API_BASE_URL}/users/me`, profileData, {
+      promises.push(axios.patch('/users/me', profileData, {
         headers: { Authorization: `Bearer ${authToken}` },
       }));
 
-      // Если выбран аватар, добавляем его загрузку
       if (avatarFile) {
         const formData = new FormData();
         formData.append('file', avatarFile);
-        promises.push(axios.post(`${API_BASE_URL}/users/me/avatar`, formData, {
+        promises.push(axios.post('/users/me/avatar', formData, {
           headers: { Authorization: `Bearer ${authToken}` },
         }));
       }
       
-      // Если выбран баннер, добавляем его загрузку
       if (bannerFile) {
         const formData = new FormData();
         formData.append('file', bannerFile);
-        promises.push(axios.post(`${API_BASE_URL}/users/me/banner`, formData, {
+        promises.push(axios.post('/users/me/banner', formData, {
           headers: { Authorization: `Bearer ${authToken}` },
         }));
       }
 
-      // Ждем выполнения всех запросов
       const results = await Promise.all(promises);
       
-      // --- ИСПРАВЛЕНО: Безопасно получаем токен из первого ответа ---
       const profileUpdateResponse = results[0];
       if (profileUpdateResponse && profileUpdateResponse.data.access_token) {
         updateAuthToken(profileUpdateResponse.data.access_token);
@@ -120,7 +119,6 @@ function SettingsPage() {
       setBannerFile(null);
 
     } catch (err) {
-      // --- ИСПРАВЛЕНО: Безопасная обработка текста ошибки ---
       const message = err.response?.data?.message;
       const errorMessage = Array.isArray(message) ? message.join(', ') : message;
       setError(errorMessage || 'Failed to update profile.');
@@ -139,7 +137,7 @@ function SettingsPage() {
     setPasswordError('');
     setPasswordSuccess('');
     try {
-      await axios.post(`${API_BASE_URL}/auth/change-password`, 
+      await axios.post('/auth/change-password', 
         { currentPassword: passwordData.currentPassword, newPassword: passwordData.newPassword },
         { headers: { Authorization: `Bearer ${authToken}` } }
       );
@@ -168,7 +166,7 @@ function SettingsPage() {
             <FormControl>
               <FormLabel>Profile Picture</FormLabel>
               <Stack direction="row" spacing={2} alignItems="center">
-                <Avatar src={avatarPreview?.startsWith('blob:') ? avatarPreview : (avatarPreview ? `${FULL_API_URL}${avatarPreview}`: undefined)} sx={{ '--Avatar-size': '80px' }} />
+                <Avatar src={avatarPreview?.startsWith('blob:') ? avatarPreview : (avatarPreview ? constructImageUrl(avatarPreview): undefined)} sx={{ '--Avatar-size': '80px' }} />
                 <Button startDecorator={<EditIcon />} variant="outlined" onClick={() => avatarInputRef.current.click()}>
                   Upload
                 </Button>
@@ -179,7 +177,7 @@ function SettingsPage() {
               <FormLabel>Profile Banner</FormLabel>
               <AspectRatio ratio="16/5" sx={{ width: '100%', borderRadius: 'md', mb: 1, bgcolor: 'background.level1' }}>
                 {bannerPreview ? 
-                    <img src={bannerPreview?.startsWith('blob:') ? bannerPreview : `${FULL_API_URL}${bannerPreview}`} alt="Banner"/>
+                    <img src={bannerPreview?.startsWith('blob:') ? bannerPreview : constructImageUrl(bannerPreview)} alt="Banner"/>
                     : <Box component="div" />
                 }
               </AspectRatio>
@@ -205,6 +203,22 @@ function SettingsPage() {
           </Stack>
         </form>
       </Sheet>
+
+      <Sheet variant="outlined" sx={{ p: 4, borderRadius: 'md' }}>
+          <Typography level="h3" component="h2" sx={{ mb: 2 }}>Minecraft Integration</Typography>
+          {user?.minecraft_uuid ? (
+            <Box>
+                <Typography>Your account is linked to Minecraft account: <strong>{user.minecraft_username}</strong></Typography>
+                <Button sx={{mt: 2}} variant="outlined" color="neutral" onClick={() => navigate('/profile/link-minecraft')}>Manage</Button>
+            </Box>
+          ) : (
+            <Box>
+                <Typography>Link your Minecraft account to sync your status and more.</Typography>
+                <Button sx={{mt: 2}} startDecorator={<LinkIcon />} onClick={() => navigate('/profile/link-minecraft')}>Link Account</Button>
+            </Box>
+          )}
+      </Sheet>
+
       <Sheet variant="outlined" sx={{ p: 4, borderRadius: 'md' }}>
         <Typography level="h3" component="h2" sx={{ mb: 2 }}>Change Password</Typography>
         <form onSubmit={handlePasswordSubmit}>

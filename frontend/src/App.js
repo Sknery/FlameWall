@@ -29,6 +29,7 @@ import SearchPage from './pages/SearchPage';
 import AdminPage from './pages/AdminPage';
 import AdminPostsPage from './pages/AdminPostsPage'; // <-- ДОБАВЬТЕ ЭТО
 import CreateNewsPage from './pages/CreateNewsPage'; // <-- ДОБАВЬТЕ ЭТО
+import LinkMinecraftPage from './pages/LinkMinecraftPage'; // <-- ДОБАВЬТЕ ЭТО
 
 import axios from 'axios'; // <-- Убедитесь, что axios импортирован
 
@@ -62,6 +63,7 @@ function App() {
                   <Route path="/admin/users" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
                   <Route path="/admin/news/create" element={<ProtectedRoute><CreateNewsPage /></ProtectedRoute>} />
                   <Route path="/admin/posts" element={<ProtectedRoute><AdminPostsPage /></ProtectedRoute>} />                  <Route path="profile/me" element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} />
+                  <Route path="/profile/link-minecraft" element={<ProtectedRoute><LinkMinecraftPage /></ProtectedRoute>} />
                 </Route>
 
                 <Route path="/login" element={<LoginPage />} />

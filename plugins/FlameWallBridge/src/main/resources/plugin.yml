@@ -1,0 +1,10 @@
+name: FlameWallBridge
+version: ${project.version}
+main: com.flamewall.bridge.BridgePlugin
+api-version: '1.20'
+author: YourName
+
+commands:
+  link:
+    description: Links your website account to your Minecraft account.
+    usage: "/link <code>"

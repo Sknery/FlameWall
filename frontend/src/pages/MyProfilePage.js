@@ -1,58 +1,28 @@
+// frontend/src/pages/MyProfilePage.js
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import {
-  Box,
-  Typography,
-  Sheet,
-  Avatar,
-  CircularProgress,
-  Alert,
-  Divider,
-  Button,
-  Chip,
-  Stack, // Используем Stack для удобного расположения кнопок
+  Box, Typography, Sheet, Avatar, CircularProgress, Alert, Divider, Button, Chip, Stack,
 } from '@mui/joy';
 import EditIcon from '@mui/icons-material/Edit';
-import AddIcon from '@mui/icons-material/Add'; // Импортируем иконку
+import AddIcon from '@mui/icons-material/Add';
 import { Link as RouterLink } from 'react-router-dom';
 import ThumbUpOffAltIcon from '@mui/icons-material/ThumbUpOffAlt';
+import SportsEsportsIcon from '@mui/icons-material/SportsEsports'; // <-- Иконка для Minecraft
 import { constructImageUrl } from '../utils/url';
 
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
-
 function MyProfilePage() {
-  const { authToken } = useAuth();
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // --- ИЗМЕНЕНИЕ: Достаем полный объект user из useAuth ---
+  const { user: profile, loading: authLoading, error: authError } = useAuth();
 
-  useEffect(() => {
-    if (!authToken) {
-      setLoading(false);
-      setError("Authorization token not found.");
-      return;
-    }
-
-    const fetchProfile = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await axios.get(`${API_BASE_URL}/auth/profile`, {
-          headers: { Authorization: `Bearer ${authToken}` }
-        });
-        setProfile(response.data);
-      } catch (err) {
-        setError("Failed to load profile data.");
-        console.error("Error fetching profile:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProfile();
-  }, [authToken]);
+  // Локальное состояние для ошибок, если понадобится
+  const [error, setError] = useState(authError);
+  
+  // Больше не нужен отдельный fetch, все данные уже в `user` из AuthContext
+  const loading = authLoading;
 
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
@@ -80,33 +50,22 @@ function MyProfilePage() {
             )}
             <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
               <Chip size="sm" color="primary">{profile.rank}</Chip>
-              <Chip
-                size="sm"
-                color="neutral"
-                variant="outlined"
-                startDecorator={<ThumbUpOffAltIcon />}
-              >
+              <Chip size="sm" color="neutral" variant="outlined" startDecorator={<ThumbUpOffAltIcon />}>
                 Reputation: {profile.reputation_count}
               </Chip>
+              {/* --- НОВЫЙ БЛОК: Отображение ника из Minecraft --- */}
+              {profile.minecraft_username && (
+                <Chip size="sm" color="success" variant="soft" startDecorator={<SportsEsportsIcon />}>
+                    {profile.minecraft_username}
+                </Chip>
+              )}
             </Stack>
           </Box>
           <Stack spacing={1} direction="row" sx={{ ml: 'auto' }}>
-            <Button
-              component={RouterLink}
-              to="/posts/new"
-              variant="solid"
-              color="primary"
-              startDecorator={<AddIcon />}
-            >
+            <Button component={RouterLink} to="/posts/new" variant="solid" color="primary" startDecorator={<AddIcon />}>
               New Post
             </Button>
-            <Button
-              component={RouterLink}
-              to="/profile/settings"
-              variant="outlined"
-              color="neutral"
-              startDecorator={<EditIcon />}
-            >
+            <Button component={RouterLink} to="/profile/settings" variant="outlined" color="neutral" startDecorator={<EditIcon />}>
               Edit Profile
             </Button>
           </Stack>

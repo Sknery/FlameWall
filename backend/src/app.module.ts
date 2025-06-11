@@ -29,6 +29,7 @@ import { AdminModule } from './admin/admin.module';
 import { ChatModule } from './chat/chat.module';
 // Удалили: import { ChatGateway } from './chat/chat.gateway';
 import { VotesModule } from './votes/votes.module';
+import { LinkCode } from './linking/entities/link-code.entity';
 
 @Module({
   imports: [
@@ -52,7 +53,7 @@ import { VotesModule } from './votes/votes.module';
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_DATABASE'),
         entities: [
-          User, ShopItem, Post, Friendship, Message, News, Notification, Comment, Purchase,
+          User, ShopItem, Post, Friendship, Message, News, Notification, Comment, Purchase, LinkCode, // <-- ДОБАВЛЯЕМ СЮДА
         ],
         synchronize: true,
         autoLoadEntities: true,
@@ -73,6 +74,7 @@ import { VotesModule } from './votes/votes.module';
     CommentsModule,
     PurchasesModule,
     VotesModule,
+    MessagesModule,
   ],
   controllers: [AppController],
   providers: [AppService], // <-- Удалили ChatGateway отсюда

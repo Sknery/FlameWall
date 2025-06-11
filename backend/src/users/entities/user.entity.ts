@@ -1,12 +1,7 @@
+// backend/src/users/entities/user.entity.ts
+
 import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  OneToMany,
-  Index,
-  DeleteDateColumn,
+  Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, Index, DeleteDateColumn,
 } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Ranks } from '../../common/enums/ranks.enum';
@@ -28,23 +23,23 @@ export class User {
   @Column({ type: 'varchar', length: 50 })
   username: string;
 
+  // --- НОВОЕ ПОЛЕ: Никнейм в Minecraft ---
+  @Column({ type: 'varchar', length: 16, nullable: true, name: 'minecraft_username' })
+  minecraft_username: string | null;
+
   @Index({ unique: true, where: '"profile_slug" IS NOT NULL' })
-  @Column({
-    type: 'varchar',
-    length: 50,
-    unique: true,
-    nullable: true,
-    name: 'profile_slug',
-  })
+  @Column({ type: 'varchar', length: 50, unique: true, nullable: true, name: 'profile_slug' })
   profile_slug: string | null;
 
-  @Index({ unique: true })
-  @Column({ type: 'varchar', length: 36, unique: true, nullable: true })
+  // --- НОВОЕ ПОЛЕ: UUID в Minecraft ---
+  @Index({ unique: true, where: '"minecraft_uuid" IS NOT NULL' })
+  @Column({ type: 'varchar', length: 36, unique: true, nullable: true, name: 'minecraft_uuid' })
   minecraft_uuid: string | null;
 
   @CreateDateColumn({ type: 'timestamp', name: 'first_login', default: () => 'CURRENT_TIMESTAMP' })
   first_login: Date;
 
+  // ... остальная часть файла без изменений ...
   @Column({ type: 'varchar', length: 70, nullable: true })
   description: string | null;
 
@@ -54,11 +49,7 @@ export class User {
   @Column({ type: 'varchar', length: 100, nullable: true, name: 'banner_url' })
   banner_url: string | null;
 
-  @Column({
-    type: 'enum',
-    enum: Ranks,
-    default: Ranks.DEFAULT,
-  })
+  @Column({ type: 'enum', enum: Ranks, default: Ranks.DEFAULT })
   rank: Ranks;
 
   @Column({ type: 'boolean', default: false, name: 'is_banned' })
@@ -67,7 +58,6 @@ export class User {
   @Column({ type: 'integer', default: 0 })
   balance: number;
 
-  // --- ВОССТАНОВЛЕННОЕ ПОЛЕ ---
   @Column({ type: 'varchar', length: 255, name: 'password_hash' })
   @Exclude({ toPlainOnly: true })
   password_hash: string;

@@ -21,7 +21,16 @@ import { CreateMessageDto } from 'src/messages/dto/create-message.dto';
 // --- НОВЫЕ ИМПОРТЫ ---
 import { EditMessageDto } from 'src/messages/dto/edit-message.dto';
 import { DeleteMessageDto } from 'src/messages/dto/delete-message.dto';
+import { LinkingService } from 'src/linking/linking.service'; // <-- НОВЫЙ ИМПОРТ
+import { ConfigService } from '@nestjs/config'; // <-- Добавляем импорт ConfigService
 
+
+// DTO для данных от плагина
+class LinkAccountDto {
+  code: string;
+  minecraftUuid: string;
+  minecraftUsername: string;
+}
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -31,6 +40,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private logger: Logger = new Logger('ChatGateway');
   private onlineUsers = new Map<number, string>();
   private currentlyViewing = new Map<number, number>();
+  private readonly pluginSecretKey: string; // <-- Поле для хранения ключа
 
   constructor(
     private readonly messagesService: MessagesService,
@@ -38,16 +48,40 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly jwtService: JwtService,
     private readonly eventEmitter: EventEmitter2,
     private readonly friendshipsService: FriendshipsService,
-  ) {}
-  
+    private readonly linkingService: LinkingService,
+    private readonly configService: ConfigService,
+  ) {
+    // --- ИСПРАВЛЕННАЯ ЛОГИКА ---
+    const key = this.configService.get<string>('PLUGIN_SECRET_KEY');
+    if (!key) {
+      // Если ключ не найден, выбрасываем ошибку и не даем серверу запуститься
+      throw new Error('PLUGIN_SECRET_KEY is not defined in .env file!');
+    }
+    // Если мы дошли до сюда, TypeScript уверен, что 'key' - это строка
+    this.pluginSecretKey = key;
+  }
+
   async handleConnection(client: Socket) {
+    this.logger.debug(`New connection headers: ${JSON.stringify(client.handshake.headers)}`);
+
+    const apiKey = client.handshake.headers['x-api-key'];
+
+    // --- НОВАЯ ЛОГИКА: Сначала проверяем, не плагин ли это ---
+    if (apiKey && apiKey === this.pluginSecretKey) {
+      this.logger.log('Minecraft Plugin connected successfully!');
+      client['isPlugin'] = true; // Помечаем сокет как принадлежащий плагину
+      return; // Завершаем обработку, аутентификация пройдена
+    }
+
+    
+    // --- Старая логика для обычных пользователей ---
     const token = client.handshake.auth.token;
     if (!token) return client.disconnect();
     try {
       const payload = this.jwtService.verify(token);
       const user = await this.usersService.findUserEntityById(payload.sub);
       if (!user || user.is_banned) return client.disconnect();
-      
+
       client['user'] = user;
       client.join(`user-${user.id}`);
       this.onlineUsers.set(user.id, client.id);
@@ -56,6 +90,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return client.disconnect();
     }
   }
+
 
   handleDisconnect(client: Socket) {
     const user: User = client['user'];
@@ -77,10 +112,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ): Promise<void> {
     const sender: User = client['user'];
     if (!sender) return;
-    
+
     const recipient = await this.usersService.findUserEntityById(data.recipientId);
     if (!recipient) return;
-    
+
     const areFriends = await this.friendshipsService.areTheyFriends(sender.id, recipient.id);
     if (!areFriends) {
       this.logger.warn(`BLOCKED: User ${sender.id} attempted to message non-friend ${recipient.id}.`);
@@ -102,7 +137,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Отправляем новое сообщение обоим участникам диалога
     this.server.to(`user-${recipient.id}`).emit('newMessage', savedMessage);
     if (sender.id !== recipient.id) {
-        this.server.to(`user-${sender.id}`).emit('newMessage', savedMessage);
+      this.server.to(`user-${sender.id}`).emit('newMessage', savedMessage);
     }
   }
 
@@ -116,7 +151,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const sender: User = client['user'];
     try {
       const updatedMessage = await this.messagesService.updateMessage(sender.id, data.messageId, data.content);
-      
+
       this.server.to(`user-${updatedMessage.sender_id}`).emit('messageEdited', updatedMessage);
       this.server.to(`user-${updatedMessage.receiver_id}`).emit('messageEdited', updatedMessage);
     } catch (error) {
@@ -150,8 +185,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleStartViewingChat(@MessageBody() data: { otherUserId: number }, @ConnectedSocket() client: Socket): void {
     const currentUser: User = client['user'];
     if (currentUser && data.otherUserId) {
-        this.currentlyViewing.set(currentUser.id, data.otherUserId);
-        this.logger.log(`User ${currentUser.id} started viewing chat with ${data.otherUserId}`);
+      this.currentlyViewing.set(currentUser.id, data.otherUserId);
+      this.logger.log(`User ${currentUser.id} started viewing chat with ${data.otherUserId}`);
     }
   }
 
@@ -160,8 +195,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleStopViewingChat(@ConnectedSocket() client: Socket): void {
     const currentUser: User = client['user'];
     if (currentUser && this.currentlyViewing.has(currentUser.id)) {
-        this.currentlyViewing.delete(currentUser.id);
-        this.logger.log(`User ${currentUser.id} stopped viewing chat.`);
+      this.currentlyViewing.delete(currentUser.id);
+      this.logger.log(`User ${currentUser.id} stopped viewing chat.`);
     }
   }
 
@@ -175,4 +210,35 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.warn('Caught notification.created event with invalid payload', payload);
     }
   }
+
+  @SubscribeMessage('linkAccount')
+  async handleLinkAccount(@MessageBody() data: LinkAccountDto, @ConnectedSocket() client: Socket): Promise<void> {
+    this.logger.log(`Received link attempt for code ${data.code}`);
+    try {
+      const linkedUser = await this.linkingService.verifyCodeAndLinkAccount(
+        data.code,
+        data.minecraftUuid,
+        data.minecraftUsername,
+      );
+
+      // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Отправляем больше данных обратно плагину ---
+      client.emit('linkStatus', {
+        success: true,
+        minecraftUuid: linkedUser.minecraft_uuid,
+        websiteUsername: linkedUser.username
+      });
+
+      this.server.to(`user-${linkedUser.id}`).emit('linkStatus', { success: true, minecraftUsername: linkedUser.minecraft_username });
+
+    } catch (error) {
+      // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Отправляем UUID и в случае ошибки ---
+      this.logger.error(`Failed to link account: ${error.message}`);
+      client.emit('linkStatus', {
+        success: false,
+        minecraftUuid: data.minecraftUuid,
+        error: error.message
+      });
+    }
+  }
+
 }

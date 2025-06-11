@@ -12,6 +12,7 @@ import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import ThumbUpOffAltIcon from '@mui/icons-material/ThumbUpOffAlt';
 import MailIcon from '@mui/icons-material/Mail';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import SportsEsportsIcon from '@mui/icons-material/SportsEsports'; // <-- Иконка для Minecraft
 import { constructImageUrl } from '../utils/url';
 
 function PublicProfilePage() {
@@ -26,7 +27,6 @@ function PublicProfilePage() {
 
   const isAdmin = currentUser && ['ADMIN', 'MODERATOR', 'OWNER'].includes(currentUser.rank);
 
-  // --- ВОССТАНОВЛЕННАЯ ЛОГИКА ЗАГРУЗКИ ДАННЫХ ---
   const fetchProfileAndStatus = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -46,7 +46,6 @@ function PublicProfilePage() {
       } else {
         setFriendship({ status: 'guest' });
       }
-
     } catch (err) {
       setError('Failed to load user profile.');
       console.error('Error fetching user profile:', err);
@@ -145,7 +144,7 @@ function PublicProfilePage() {
     }
   };
 
-  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
+   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
   if (error) return <Alert color="danger">{error}</Alert>;
   if (!profile) return <Typography>User not found.</Typography>;
 
@@ -156,9 +155,18 @@ function PublicProfilePage() {
           <Avatar src={constructImageUrl(profile.pfp_url)} sx={{ '--Avatar-size': '100px' }} />
           <Box>
             <Typography level="h2" component="h1">{profile.username}</Typography>
-            <Chip size="sm" color="neutral" variant="outlined" startDecorator={<ThumbUpOffAltIcon />} sx={{ mt: 1 }}>
-              Reputation: {profile.reputation_count}
-            </Chip>
+            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+              <Chip size="sm" color="primary">{profile.rank}</Chip>
+              <Chip size="sm" color="neutral" variant="outlined" startDecorator={<ThumbUpOffAltIcon />}>
+                Reputation: {profile.reputation_count}
+              </Chip>
+              {/* --- НОВЫЙ БЛОК: Отображение ника из Minecraft --- */}
+              {profile.minecraft_username && (
+                <Chip size="sm" color="success" variant="soft" startDecorator={<SportsEsportsIcon />}>
+                    {profile.minecraft_username}
+                </Chip>
+              )}
+            </Stack>
           </Box>
           
           <Stack direction="row" spacing={1} sx={{ ml: 'auto' }}>
