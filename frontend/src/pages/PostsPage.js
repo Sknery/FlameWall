@@ -4,7 +4,6 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import {
   Typography, List, ListItem, ListItemContent, CircularProgress, Alert, Box, Sheet, Divider, Avatar, Link as JoyLink, Button, IconButton, Dropdown, Menu, MenuButton, MenuItem,
-  // --- ДОБАВЛЕНО: Компоненты для сортировки ---
   FormControl, FormLabel, Select, Option, Stack
 } from '@mui/joy';
 import AddIcon from '@mui/icons-material/Add';
@@ -23,11 +22,9 @@ function PostsPage() {
   const { isLoggedIn, authToken, user: currentUser } = useAuth();
   const navigate = useNavigate();
 
-  // --- ДОБАВЛЕНО: Состояния для сортировки ---
   const [sortBy, setSortBy] = useState('created_at');
   const [order, setOrder] = useState('DESC');
 
-  // --- ИЗМЕНЕНО: fetchPosts теперь использует параметры сортировки ---
   const fetchPosts = useCallback(async () => {
     try {
       setLoading(true);
@@ -41,7 +38,7 @@ function PostsPage() {
     } finally {
       setLoading(false);
     }
-  }, [sortBy, order]); // Зависимости обновлены
+  }, [sortBy, order]);
 
   useEffect(() => {
     fetchPosts();
@@ -58,7 +55,6 @@ function PostsPage() {
         { value },
         { headers: { Authorization: `Bearer ${authToken}` } }
       );
-      // Просто перезапрашиваем данные, чтобы обновить счетчики
       fetchPosts();
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to vote.');
@@ -71,7 +67,6 @@ function PostsPage() {
       await axios.delete(`${API_BASE_URL}/posts/${postIdToDelete}`, {
         headers: { Authorization: `Bearer ${authToken}` },
       });
-      // Оптимистично удаляем пост из списка
       setPosts(prevPosts => prevPosts.filter(p => p.id !== postIdToDelete));
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to delete post.');
@@ -97,7 +92,6 @@ function PostsPage() {
         )}
       </Box>
 
-      {/* --- ДОБАВЛЕНО: Блок с выпадающими списками для сортировки --- */}
       <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
         <FormControl size="sm">
           <FormLabel>Sort by</FormLabel>
@@ -146,9 +140,9 @@ function PostsPage() {
                     {post.content}
                   </Typography>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'text.tertiary' }}>
+                    {/* --- ОСНОВНОЕ ИСПРАВЛЕНИЕ ЗДЕСЬ --- */}
                     <VoteButtons
-                      initialLikes={post.likes}
-                      initialDislikes={post.dislikes}
+                      initialScore={post.score}
                       currentUserVote={0}
                       onVote={(value) => handleVote(post.id, value)}
                       disabled={!isLoggedIn}

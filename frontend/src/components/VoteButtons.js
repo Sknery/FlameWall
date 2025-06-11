@@ -1,45 +1,53 @@
+// frontend/src/components/VoteButtons.js
+
 import React, { useState, useEffect } from 'react';
 import { Box, IconButton, Typography, Tooltip } from '@mui/joy';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ThumbDownIcon from '@mui/icons-material/ThumbDown';
 
-function VoteButtons({ initialLikes, initialDislikes, currentUserVote, onVote, disabled = false }) {
-  const [likes, setLikes] = useState(initialLikes);
-  const [dislikes, setDislikes] = useState(initialDislikes);
-  const [voteStatus, setVoteStatus] = useState(currentUserVote); // 0 = none, 1 = liked, -1 = disliked
+// --- ИЗМЕНЯЕМ ПРОПСЫ: ДОБАВЛЯЕМ initialScore ---
+function VoteButtons({ initialScore, initialLikes, initialDislikes, currentUserVote, onVote, disabled = false }) {
+  // --- ЛОГИКА ОПРЕДЕЛЕНИЯ НАЧАЛЬНОГО РЕЙТИНГА ---
+  const getInitialScore = () => {
+    if (initialScore !== undefined) {
+      return initialScore;
+    }
+    if (initialLikes !== undefined && initialDislikes !== undefined) {
+      return initialLikes - initialDislikes;
+    }
+    return 0; // Значение по умолчанию
+  };
 
+  const [displayScore, setDisplayScore] = useState(getInitialScore());
+  const [voteStatus, setVoteStatus] = useState(currentUserVote || 0);
+
+  // Синхронизируем состояние, если пропсы изменятся
   useEffect(() => {
-    setLikes(initialLikes);
-    setDislikes(initialDislikes);
-    setVoteStatus(currentUserVote);
-  }, [initialLikes, initialDislikes, currentUserVote]);
+    setDisplayScore(getInitialScore());
+    setVoteStatus(currentUserVote || 0);
+  }, [initialScore, initialLikes, initialDislikes, currentUserVote]);
 
   const handleVoteClick = (newValue) => {
     if (disabled) return;
-    
+
     const oldStatus = voteStatus;
-    let newLikes = likes;
-    let newDislikes = dislikes;
-    let newStatus = newValue;
+    let newDisplayScore = displayScore;
 
+    // Отменяем текущий голос (например, был лайк, нажали лайк еще раз)
     if (oldStatus === newValue) {
-      // Отмена голоса
-      newStatus = 0;
-      newValue === 1 ? newLikes-- : newDislikes--;
+      newValue === 1 ? newDisplayScore-- : newDisplayScore++;
+      setVoteStatus(0);
     } else {
-      // Новый голос или смена голоса
-      if (oldStatus === 1) newLikes--;
-      if (oldStatus === -1) newDislikes--;
-      newValue === 1 ? newLikes++ : newDislikes++;
+      // Смена голоса (с лайка на дизлайк)
+      if (oldStatus === 1) newDisplayScore--;
+      if (oldStatus === -1) newDisplayScore++;
+      // Добавление нового голоса
+      newValue === 1 ? newDisplayScore++ : newDisplayScore--;
+      setVoteStatus(newValue);
     }
-
-    // Оптимистичное обновление UI
-    setLikes(newLikes);
-    setDislikes(newDislikes);
-    setVoteStatus(newStatus);
     
-    // Вызов функции-обработчика для отправки запроса на API
-    onVote(newValue);
+    setDisplayScore(newDisplayScore);
+    onVote(newValue); // Отправляем запрос на API
   };
 
   return (
@@ -55,9 +63,10 @@ function VoteButtons({ initialLikes, initialDislikes, currentUserVote, onVote, d
         </IconButton>
       </Tooltip>
       <Typography fontWeight="md" sx={{ minWidth: '20px', textAlign: 'center' }}>
-        {likes - dislikes}
+        {/* --- ОТОБРАЖАЕМ НОВОЕ СОСТОЯНИЕ --- */}
+        {displayScore}
       </Typography>
-       <Tooltip title="Dislike" variant="outlined" size="sm">
+      <Tooltip title="Dislike" variant="outlined" size="sm">
         <IconButton
           variant={voteStatus === -1 ? 'solid' : 'soft'}
           color={voteStatus === -1 ? 'danger' : 'neutral'}

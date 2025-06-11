@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { NavLink, Outlet as Children, useNavigate } from 'react-router-dom'; // Переименовал Outlet в Children для ясности
+import { NavLink, Outlet as Children, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import NotificationBell from './NotificationBell'; // <-- Импортируем наш новый компонент
+import NotificationBell from './NotificationBell';
 import {
   Box,
   Sheet,
@@ -20,8 +20,6 @@ import {
   MenuButton,
   Divider,
 } from '@mui/joy';
-
-// ... Все остальные импорты и константы ...
 import HomeIcon from '@mui/icons-material/Home';
 import ArticleIcon from '@mui/icons-material/Article';
 import ForumIcon from '@mui/icons-material/Forum';
@@ -67,6 +65,7 @@ const navItems = [
   },
   { name: 'Support', icon: <SupportAgentIcon />, path: '/support' },
 ];
+
 const userNavItems = {
   name: 'My Profile',
   icon: <AccountCircleIcon />,
@@ -77,6 +76,7 @@ const userNavItems = {
     { name: 'Settings', icon: <SettingsIcon />, path: '/profile/settings' },
   ],
 };
+
 const adminNavItem = {
   name: 'Admin Panel',
   icon: <AdminPanelSettingsIcon />,
@@ -88,13 +88,27 @@ const CollapsiblePushSidebar = ({ children }) => {
   const [openCategories, setOpenCategories] = useState({ Community: true });
   const navigate = useNavigate();
   const { isLoggedIn, user, logout } = useAuth();
+
+  // --- НОВОЕ СОСТОЯНИЕ ДЛЯ ПОИСКА ---
+  const [searchQuery, setSearchQuery] = useState('');
+
   const isAdmin = isLoggedIn && user && ['ADMIN', 'MODERATOR', 'OWNER'].includes(user.rank);
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
   const toggleCategory = (categoryName) => setOpenCategories((prev) => ({ ...prev, [categoryName]: !prev[categoryName] }));
+
   const handleLogout = () => {
     logout();
     navigate('/');
   };
+
+  // --- НОВАЯ ФУНКЦИЯ ДЛЯ ОБРАБОТКИ ПОИСКА ---
+  const handleSearch = (event) => {
+    if (event.key === 'Enter' && searchQuery.trim()) {
+      navigate(`/search?query=${searchQuery.trim()}`);
+      setSearchQuery(''); // Очищаем поле после поиска
+    }
+  };
+
   const renderNavItems = (items) => {
     return items.map((item) => (
       <ListItem key={item.name} nested={!!item.subItems}>
@@ -133,10 +147,27 @@ const CollapsiblePushSidebar = ({ children }) => {
       </ListItem>
     ));
   };
-  
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <Sheet variant="outlined" sx={{ width: sidebarOpen ? SIDEBAR_WIDTH : 0, minWidth: sidebarOpen ? SIDEBAR_WIDTH : 0, height: '100vh', position: 'sticky', top: 0, zIndex: 1100, overflow: 'auto', transition: 'width 0.3s ease, min-width 0.3s ease', boxShadow: 'md', p: sidebarOpen ? 2 : 0, opacity: sidebarOpen ? 1 : 0, borderRight: '1px solid', borderColor: 'divider', }}>
+      <Sheet
+        variant="outlined"
+        sx={{
+          width: sidebarOpen ? SIDEBAR_WIDTH : 0,
+          minWidth: sidebarOpen ? SIDEBAR_WIDTH : 0,
+          height: '100vh',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1100,
+          overflow: 'auto',
+          transition: 'width 0.3s ease, min-width 0.3s ease',
+          boxShadow: 'md',
+          p: sidebarOpen ? 2 : 0,
+          opacity: sidebarOpen ? 1 : 0,
+          borderRight: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
         {sidebarOpen && (
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
@@ -154,11 +185,25 @@ const CollapsiblePushSidebar = ({ children }) => {
           </>
         )}
       </Sheet>
+
       <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, md: 3 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 4, height: LARGE_ICON_BUTTON_HEIGHT, px: { xs: 0, sm: 1 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0, minWidth: { md: '200px' } }}>
-            {!sidebarOpen && (<IconButton onClick={toggleSidebar} variant="plain" color="neutral" size="lg"><ChevronRightIcon /></IconButton>)}
-            <Input size="md" placeholder="Search..." startDecorator={<SearchIcon />} sx={{ display: { xs: 'none', md: 'inline-flex' } }} />
+            {!sidebarOpen && (
+              <IconButton onClick={toggleSidebar} variant="plain" color="neutral" size="lg">
+                <ChevronRightIcon />
+              </IconButton>
+            )}
+            {/* --- ОБНОВЛЕННЫЙ INPUT ДЛЯ ПОИСКА --- */}
+            <Input
+              size="md"
+              placeholder="Search..."
+              startDecorator={<SearchIcon />}
+              sx={{ display: { xs: 'none', md: 'inline-flex' } }}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearch}
+            />
           </Box>
           <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
             <AdbIcon color="primary" sx={{ fontSize: 'xl4' }} />
@@ -167,9 +212,12 @@ const CollapsiblePushSidebar = ({ children }) => {
           <Box sx={{ display: 'flex', gap: { xs: 0.5, sm: 1.5 }, alignItems: 'center', flexShrink: 0, minWidth: { md: '200px' }, justifyContent: 'flex-end' }}>
             {isLoggedIn ? (
               <>
-                <NotificationBell /> {/* <-- ДОБАВЛЕН КОЛОКОЛЬЧИК */}
+                <NotificationBell />
                 <Dropdown>
-                  <MenuButton slots={{ root: Button }} slotProps={{ root: { variant: 'plain', color: 'neutral', size: 'md', startDecorator: <AccountCircleIcon /> } }}>
+                  <MenuButton
+                    slots={{ root: Button }}
+                    slotProps={{ root: { variant: 'plain', color: 'neutral', size: 'md', startDecorator: <AccountCircleIcon /> } }}
+                  >
                     {user?.username}
                   </MenuButton>
                   <Menu>
@@ -198,4 +246,5 @@ const CollapsiblePushSidebar = ({ children }) => {
     </Box>
   );
 };
+
 export default CollapsiblePushSidebar;
