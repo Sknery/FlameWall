@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { Box, Typography, FormControl, FormLabel, Input, Textarea, Button, Alert, CircularProgress } from '@mui/joy';
-
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
 function EditPostPage() {
   const { postId } = useParams();
@@ -20,17 +18,21 @@ function EditPostPage() {
   useEffect(() => {
     const fetchPost = async () => {
       try {
-        const response = await axios.get(`${API_BASE_URL}/posts/${postId}`, {
+        const response = await axios.get(`/posts/${postId}`, {
             headers: { Authorization: `Bearer ${authToken}` },
         });
         const post = response.data;
 
-        // Проверяем, является ли текущий пользователь автором поста
-        if (currentUser?.id !== post.author?.id) {
+        // --- ИСПРАВЛЕНИЕ ЛОГИКИ ПРОВЕРКИ ПРАВ ---
+        const isAdmin = currentUser && ['ADMIN', 'MODERATOR', 'OWNER'].includes(currentUser.rank);
+        const isAuthor = currentUser?.id === post.author?.id;
+
+        if (!isAuthor && !isAdmin) {
           setIsForbidden(true);
           setError('You are not authorized to edit this post.');
           return;
         }
+        // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         setTitle(post.title);
         setContent(post.content);
@@ -41,7 +43,7 @@ function EditPostPage() {
       }
     };
 
-    if (postId && authToken) {
+    if (postId && authToken && currentUser) {
       fetchPost();
     }
   }, [postId, authToken, currentUser]);
@@ -52,11 +54,11 @@ function EditPostPage() {
     setError('');
     try {
       await axios.patch(
-        `${API_BASE_URL}/posts/${postId}`,
+        `/posts/${postId}`,
         { title, content },
         { headers: { Authorization: `Bearer ${authToken}` } }
       );
-      navigate(`/posts/${postId}`); // Возвращаемся на страницу поста после редактирования
+      navigate(`/posts/${postId}`);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update post.');
     } finally {
@@ -65,7 +67,8 @@ function EditPostPage() {
   };
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>;
-  if (isForbidden) return <Alert color="danger" sx={{ mt: 2 }}>{error}</Alert>;
+  
+  if (isForbidden || error) return <Alert color="danger" sx={{ mt: 2 }}>{error}</Alert>;
 
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

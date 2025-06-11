@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
-// --- ИЗМЕНЕНО: Добавляем Stack и иконку для новой кнопки ---
 import { Box, Typography, Sheet, Avatar, CircularProgress, Alert, Divider, Button, Chip, Dropdown, Menu, MenuButton, MenuItem, Stack } from '@mui/joy';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
@@ -12,9 +11,8 @@ import BlockIcon from '@mui/icons-material/Block';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import ThumbUpOffAltIcon from '@mui/icons-material/ThumbUpOffAlt';
 import MailIcon from '@mui/icons-material/Mail';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { constructImageUrl } from '../utils/url';
-
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
 function PublicProfilePage() {
   const { userId } = useParams();
@@ -26,20 +24,22 @@ function PublicProfilePage() {
   const [error, setError] = useState(null);
   const [friendship, setFriendship] = useState({ status: 'loading' });
 
+  const isAdmin = currentUser && ['ADMIN', 'MODERATOR', 'OWNER'].includes(currentUser.rank);
+
+  // --- ВОССТАНОВЛЕННАЯ ЛОГИКА ЗАГРУЗКИ ДАННЫХ ---
   const fetchProfileAndStatus = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const config = { headers: { Authorization: `Bearer ${authToken}` } };
-      // Преобразуем идентификатор в число, если это возможно
       const idAsNumber = parseInt(userId, 10);
       const identifier = isNaN(idAsNumber) ? userId : idAsNumber;
 
-      const profileResponse = await axios.get(`${API_BASE_URL}/users/${identifier}`, config);
+      const profileResponse = await axios.get(`/users/${identifier}`);
       setProfile(profileResponse.data);
 
       if (isLoggedIn && currentUser?.id !== profileResponse.data.id) {
-        const statusResponse = await axios.get(`${API_BASE_URL}/friendships/status/${profileResponse.data.id}`, config);
+        const statusResponse = await axios.get(`/friendships/status/${profileResponse.data.id}`, config);
         setFriendship(statusResponse.data);
       } else if (currentUser?.id === profileResponse.data.id) {
         setFriendship({ status: 'self' });
@@ -59,30 +59,29 @@ function PublicProfilePage() {
     fetchProfileAndStatus();
   }, [fetchProfileAndStatus]);
 
+  // --- ВОССТАНОВЛЕННАЯ ЛОГИКА ДЕЙСТВИЙ ---
   const handleAction = async (action) => {
     const config = { headers: { Authorization: `Bearer ${authToken}` } };
     try {
       switch (action) {
         case 'add':
-          await axios.post(`${API_BASE_URL}/friendships/requests`, { receiverId: profile.id }, config);
+          await axios.post(`/friendships/requests`, { receiverId: profile.id }, config);
           break;
         case 'accept':
-          await axios.patch(`${API_BASE_URL}/friendships/requests/${friendship.requestId}/accept`, {}, config);
+          await axios.patch(`/friendships/requests/${friendship.requestId}/accept`, {}, config);
           break;
         case 'reject':
-          await axios.delete(`${API_BASE_URL}/friendships/requests/${friendship.requestId}`, config);
-          break;
-        case 'cancel':
-          alert("Cancel request functionality not implemented yet.");
+        case 'cancel': // Объединяем логику, т.к. эндпоинт один
+          await axios.delete(`/friendships/requests/${friendship.requestId}`, config);
           break;
         case 'remove':
-          await axios.delete(`${API_BASE_URL}/friendships/${friendship.friendshipId}`, config);
+          await axios.delete(`/friendships/${friendship.friendshipId}`, config);
           break;
         case 'block':
-          await axios.post(`${API_BASE_URL}/friendships/block/${profile.id}`, {}, config);
+          await axios.post(`/friendships/block/${profile.id}`, {}, config);
           break;
         case 'unblock':
-          await axios.delete(`${API_BASE_URL}/friendships/block/${profile.id}`, config);
+          await axios.delete(`/friendships/block/${profile.id}`, config);
           break;
         default:
           break;
@@ -93,11 +92,25 @@ function PublicProfilePage() {
       console.error(`Error performing action ${action}:`, err);
     }
   };
+  
+  const handleToggleBanStatus = async () => {
+    if (!profile) return;
+    const action = profile.is_banned ? 'unban' : 'ban';
+    if (!window.confirm(`Are you sure you want to ${action} ${profile.username}?`)) return;
+
+    try {
+      const config = { headers: { Authorization: `Bearer ${authToken}` } };
+      await axios.post(`/admin/users/${profile.id}/${action}`, {}, config);
+      fetchProfileAndStatus();
+    } catch (err) {
+      alert(`Failed to ${action} user.`);
+      console.error(err);
+    }
+  };
 
   const renderActionButtons = () => {
-    if (!isLoggedIn || friendship.status === 'self') return null;
+    if (!isLoggedIn || friendship.status === 'self' || friendship.status === 'guest') return null;
 
-    // --- ИЗМЕНЕНО: Убрано 'ml: auto' из кнопок, так как родительский Stack теперь управляет выравниванием ---
     switch (friendship.status) {
       case 'ACCEPTED':
         return (
@@ -119,7 +132,7 @@ function PublicProfilePage() {
           </Box>
         );
       case 'PENDING_OUTGOING':
-        return <Button disabled startDecorator={<AccessTimeIcon />}>Request Sent</Button>;
+        return <Button disabled startDecorator={<AccessTimeIcon />} onClick={() => handleAction('cancel')}>Request Sent</Button>;
       case 'BLOCKED':
         return <Button color="warning" onClick={() => handleAction('unblock')}>Unblock</Button>;
       case 'NONE':
@@ -133,7 +146,7 @@ function PublicProfilePage() {
   };
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
-  if (error) return <Alert color="danger" sx={{ mt: 2 }}>{error}</Alert>;
+  if (error) return <Alert color="danger">{error}</Alert>;
   if (!profile) return <Typography>User not found.</Typography>;
 
   return (
@@ -143,30 +156,29 @@ function PublicProfilePage() {
           <Avatar src={constructImageUrl(profile.pfp_url)} sx={{ '--Avatar-size': '100px' }} />
           <Box>
             <Typography level="h2" component="h1">{profile.username}</Typography>
-            <Chip
-                size="sm"
-                color="neutral"
-                variant="outlined"
-                startDecorator={<ThumbUpOffAltIcon />}
-                sx={{ mt: 1 }}
-            >
-                Reputation: {profile.reputation_count}
+            <Chip size="sm" color="neutral" variant="outlined" startDecorator={<ThumbUpOffAltIcon />} sx={{ mt: 1 }}>
+              Reputation: {profile.reputation_count}
             </Chip>
           </Box>
           
-          {/* --- ДОБАВЛЕНО: Контейнер для всех кнопок действий --- */}
           <Stack direction="row" spacing={1} sx={{ ml: 'auto' }}>
             {isLoggedIn && friendship.status !== 'self' && (
-              <Button
-                variant="solid"
-                color="primary"
-                startDecorator={<MailIcon />}
-                onClick={() => navigate(`/messages/${profile.id}`)}
-              >
+              <Button variant="solid" color="primary" startDecorator={<MailIcon />} onClick={() => navigate(`/messages/${profile.id}`)}>
                 Message
               </Button>
             )}
             {renderActionButtons()}
+            {isAdmin && friendship.status !== 'self' && (
+                profile.is_banned ? (
+                    <Button variant="soft" color="success" startDecorator={<CheckCircleOutlineIcon />} onClick={handleToggleBanStatus}>
+                        Unban
+                    </Button>
+                ) : (
+                    <Button variant="soft" color="danger" startDecorator={<BlockIcon />} onClick={handleToggleBanStatus}>
+                        Ban
+                    </Button>
+                )
+            )}
           </Stack>
         </Box>
         <Divider sx={{ my: 2 }}/>

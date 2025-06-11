@@ -27,6 +27,7 @@ import EditPostPage from './pages/EditPostPage';
 import SettingsPage from './pages/SettingsPage';
 import SearchPage from './pages/SearchPage';
 import AdminPage from './pages/AdminPage';
+import AdminPostsPage from './pages/AdminPostsPage'; // <-- ДОБАВЬТЕ ЭТО
 
 import axios from 'axios'; // <-- Убедитесь, что axios импортирован
 
@@ -57,8 +58,8 @@ function App() {
                   <Route path="posts/:postId/edit" element={<ProtectedRoute><EditPostPage /></ProtectedRoute>} />
                   <Route path="/profile/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                   <Route path="search" element={<SearchPage />} />
-                  <Route path="admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
-                  <Route path="profile/me" element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} />
+                  <Route path="/admin/users" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+                  <Route path="/admin/posts" element={<ProtectedRoute><AdminPostsPage /></ProtectedRoute>} />                  <Route path="profile/me" element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} />
                 </Route>
 
                 <Route path="/login" element={<LoginPage />} />
