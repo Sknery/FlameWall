@@ -8,7 +8,7 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger, UseGuards, ValidationPipe } from '@nestjs/common';
 import { MessagesService } from '../messages/messages.service';
 import { WsGuard } from '../auth/guards/ws.guard';
 import { User } from '../users/entities/user.entity';
@@ -17,6 +17,7 @@ import { JwtService } from '@nestjs/jwt';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Notification } from '../notifications/entities/notification.entity';
 import { FriendshipsService } from 'src/friendships/friendships.service';
+import { CreateMessageDto } from 'src/messages/dto/create-message.dto';
 
 
 @WebSocketGateway({ cors: { origin: '*' } })
@@ -71,10 +72,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  @UseGuards(WsGuard)
+   @UseGuards(WsGuard)
   @SubscribeMessage('sendMessage')
+  // --- ИЗМЕНЕНО: Применяем DTO и ValidationPipe к данным ---
   async handleMessage(
-    @MessageBody() data: { recipientId: number; content: string },
+    @MessageBody(new ValidationPipe()) data: CreateMessageDto,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
     const sender: User = client['user'];
@@ -83,13 +85,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const recipient = await this.usersService.findUserEntityById(data.recipientId);
     if (!recipient) return;
     
-    // --- ДОБАВЛЕНО: Проверка на дружбу ---
     const areFriends = await this.friendshipsService.areTheyFriends(sender.id, recipient.id);
     if (!areFriends) {
-      // Можно отправить событие с ошибкой обратно клиенту, если нужно
-      // client.emit('sendMessageError', { message: 'You can only message friends.' });
       this.logger.warn(`BLOCKED: User ${sender.id} attempted to message non-friend ${recipient.id}.`);
-      // Просто прерываем выполнение, сообщение не будет отправлено
       return;
     }
 

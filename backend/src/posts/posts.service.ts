@@ -6,6 +6,7 @@ import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { User } from '../users/entities/user.entity';
 import { Ranks } from '../common/enums/ranks.enum';
+import { FindAllPostsDto } from './dto/find-all-posts';
 
 @Injectable()
 export class PostsService {
@@ -30,23 +31,37 @@ export class PostsService {
     return this.postsRepository.save(post);
   }
 
- async findAll(): Promise<any[]> {
-    const posts = await this.postsRepository.find({
-      relations: ['author', 'votes'], // Загружаем автора и голоса
-      order: {
-        created_at: 'DESC',
-      },
-    });
+async findAll(queryDto: FindAllPostsDto): Promise<any[]> {
+    const { sortBy, order, search } = queryDto;
 
-    // Для каждого поста добавляем информацию о голосах
-    return posts.map(post => {
-      const likes = post.votes.filter(v => v.value === 1).length;
-      const dislikes = post.votes.filter(v => v.value === -1).length;
-      
-      // Создаем новый объект, исключая из него полное свойство votes
-      const { votes, ...restOfPost } = post;
+    const queryBuilder = this.postsRepository.createQueryBuilder('post');
 
-      return { ...restOfPost, likes, dislikes };
+    queryBuilder
+      .leftJoinAndSelect('post.author', 'author')
+      // Добавляем вычисляемое поле 'score' (сумма значений из таблицы votes)
+      .addSelect('COALESCE(SUM(votes.value), 0)', 'score')
+      .leftJoin('post.votes', 'votes')
+      .groupBy('post.id, author.id');
+
+    if (search) {
+      queryBuilder.where('post.title ILIKE :search', { search: `%${search}%` });
+    }
+
+    // Безопасная сортировка
+    if (sortBy === 'score') {
+      queryBuilder.orderBy('score', order);
+    } else {
+      queryBuilder.orderBy('post.created_at', order);
+    }
+
+    const posts = await queryBuilder.getRawAndEntities();
+
+    // getRawAndEntities возвращает сложный объект, нам нужно его обработать
+    return posts.entities.map((post, index) => {
+      return {
+        ...post,
+        score: parseInt(posts.raw[index].score, 10),
+      };
     });
   }
 

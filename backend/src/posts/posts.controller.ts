@@ -12,6 +12,7 @@ import {
   UsePipes,
   ValidationPipe,
   Injectable,
+  Query,
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -21,6 +22,7 @@ import { Post as PostEntity } from './entities/post.entity';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger'; // Импортируем декораторы Swagger
 import { AuthGuard } from '@nestjs/passport';
 import { OptionalJwtAuthGuard } from 'src/auth/guards/optional-jwt-auth.guard';
+import { FindAllPostsDto } from './dto/find-all-posts';
 
 @ApiTags('Posts') 
 @Controller('posts')
@@ -43,8 +45,9 @@ export class PostsController {
   @Get()
   @ApiOperation({ summary: 'Get all posts' })
   @ApiResponse({ status: 200, description: 'Return all posts.', type: [PostEntity] })
-  findAll(): Promise<PostEntity[]> {
-    return this.postsService.findAll();
+  // --- ИЗМЕНЕНО: Принимаем query-параметры ---
+  findAll(@Query(new ValidationPipe({ transform: true, forbidNonWhitelisted: true })) query: FindAllPostsDto): Promise<PostEntity[]> {
+    return this.postsService.findAll(query);
   }
 
  @Get(':id')

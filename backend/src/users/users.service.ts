@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not } from 'typeorm';
+import { Repository, Not, ILike, FindManyOptions } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { Ranks } from '../common/enums/ranks.enum';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { FindAllUsersDto } from './dto/find-all-users.dto';
 
 import { JwtService } from '@nestjs/jwt';
 
@@ -100,8 +101,27 @@ export class UsersService {
     }
   }
 
-  async findAll(): Promise<PublicUser[]> {
-    const users = await this.usersRepository.find();
+  async findAll(queryDto: FindAllUsersDto): Promise<PublicUser[]> {
+    // Явно задаем значения по умолчанию при деструктуризации
+    const { search, order = 'DESC', sortBy: requestedSortBy = 'first_login' } = queryDto;
+
+    // Проверяем, входит ли поле для сортировки в список разрешенных
+    const allowedSortFields: (keyof User)[] = ['username', 'reputation_count', 'first_login'];
+    const sortBy = allowedSortFields.includes(requestedSortBy as keyof User) ? requestedSortBy : 'first_login';
+
+    // Динамически строим объект опций для TypeORM
+    const findOptions: FindManyOptions<User> = {
+      order: {
+        [sortBy]: order,
+      },
+    };
+
+    if (search) {
+      findOptions.where = { username: ILike(`%${search}%`) };
+    }
+
+    const users = await this.usersRepository.find(findOptions);
+    
     return users.map(user => {
         const { password_hash, validatePassword, deleted_at, ...result } = user;
         return result as PublicUser;

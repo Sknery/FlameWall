@@ -1,6 +1,7 @@
 import { 
   Controller, Get, Post, Body, Param, UsePipes, ValidationPipe, Patch, UseGuards, Request, Delete, HttpCode, HttpStatus,
-  UseInterceptors, UploadedFile, ParseFilePipe, MaxFileSizeValidator, Logger, BadRequestException
+  UseInterceptors, UploadedFile, ParseFilePipe, MaxFileSizeValidator, Logger, BadRequestException,
+  Query
 } from '@nestjs/common';
 import { PublicUser, UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -12,6 +13,7 @@ import { UpdateProfileResponseDto } from './dto/update-profile-response.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { FindAllUsersDto } from './dto/find-all-users.dto';
 
 const generateUniqueFilename = (req, file, callback) => {
   const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -66,8 +68,9 @@ export class UsersController {
   @Get()
   @ApiOperation({ summary: 'Get all users' })
   @ApiResponse({ status: 200, description: 'Return all users.', type: [User] })
-  findAll() {
-    return this.usersService.findAll();
+  // --- ИЗМЕНЕНО: Принимаем query-параметры ---
+  findAll(@Query(new ValidationPipe({ transform: true, forbidNonWhitelisted: true })) query: FindAllUsersDto) {
+    return this.usersService.findAll(query);
   }
 
  @Get(':identifier')

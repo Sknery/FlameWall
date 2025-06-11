@@ -3,23 +3,9 @@ import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import {
-  Typography,
-  List,
-  ListItem,
-  ListItemContent,
-  CircularProgress,
-  Alert,
-  Box,
-  Sheet,
-  Divider,
-  Avatar,
-  Link as JoyLink,
-  Button,
-  IconButton,
-  Dropdown,
-  Menu,
-  MenuButton,
-  MenuItem,
+  Typography, List, ListItem, ListItemContent, CircularProgress, Alert, Box, Sheet, Divider, Avatar, Link as JoyLink, Button, IconButton, Dropdown, Menu, MenuButton, MenuItem,
+  // --- ДОБАВЛЕНО: Компоненты для сортировки ---
+  FormControl, FormLabel, Select, Option, Stack
 } from '@mui/joy';
 import AddIcon from '@mui/icons-material/Add';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -37,17 +23,25 @@ function PostsPage() {
   const { isLoggedIn, authToken, user: currentUser } = useAuth();
   const navigate = useNavigate();
 
+  // --- ДОБАВЛЕНО: Состояния для сортировки ---
+  const [sortBy, setSortBy] = useState('created_at');
+  const [order, setOrder] = useState('DESC');
+
+  // --- ИЗМЕНЕНО: fetchPosts теперь использует параметры сортировки ---
   const fetchPosts = useCallback(async () => {
     try {
+      setLoading(true);
       setError(null);
-      const response = await axios.get(`${API_BASE_URL}/posts`);
+      const response = await axios.get(`${API_BASE_URL}/posts`, {
+        params: { sortBy, order }
+      });
       setPosts(response.data);
     } catch (err) {
       setError('Failed to load posts. Please try again later.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sortBy, order]); // Зависимости обновлены
 
   useEffect(() => {
     fetchPosts();
@@ -64,6 +58,7 @@ function PostsPage() {
         { value },
         { headers: { Authorization: `Bearer ${authToken}` } }
       );
+      // Просто перезапрашиваем данные, чтобы обновить счетчики
       fetchPosts();
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to vote.');
@@ -76,6 +71,7 @@ function PostsPage() {
       await axios.delete(`${API_BASE_URL}/posts/${postIdToDelete}`, {
         headers: { Authorization: `Bearer ${authToken}` },
       });
+      // Оптимистично удаляем пост из списка
       setPosts(prevPosts => prevPosts.filter(p => p.id !== postIdToDelete));
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to delete post.');
@@ -100,9 +96,28 @@ function PostsPage() {
           </Button>
         )}
       </Box>
+
+      {/* --- ДОБАВЛЕНО: Блок с выпадающими списками для сортировки --- */}
+      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+        <FormControl size="sm">
+          <FormLabel>Sort by</FormLabel>
+          <Select value={sortBy} onChange={(e, newValue) => setSortBy(newValue)}>
+            <Option value="created_at">Date</Option>
+            <Option value="score">Rating</Option>
+          </Select>
+        </FormControl>
+        <FormControl size="sm">
+          <FormLabel>Order</FormLabel>
+          <Select value={order} onChange={(e, newValue) => setOrder(newValue)}>
+            <Option value="DESC">Descending</Option>
+            <Option value="ASC">Ascending</Option>
+          </Select>
+        </FormControl>
+      </Stack>
+
       <List variant="outlined" sx={{ borderRadius: 'sm', bgcolor: 'background.body' }}>
         {posts.map((post) => {
-          const canManagePost = isLoggedIn && currentUser?.id === post?.author?.id;
+          const canManagePost = isLoggedIn && currentUser?.id === post.author?.id;
           return (
             <React.Fragment key={post.id}>
               <ListItem>
@@ -111,7 +126,6 @@ function PostsPage() {
                     <Avatar src={constructImageUrl(post.author?.pfp_url)}>{post.author ? post.author.username.charAt(0) : '?'}</Avatar>
                     <Typography level="title-md">{post.author ? post.author.username : 'Anonymous'}</Typography>
                     {canManagePost && (
-                      // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Добавляем zIndex, чтобы меню было кликабельным ---
                       <Box sx={{ ml: 'auto', position: 'relative', zIndex: 2 }}>
                         <Dropdown>
                           <MenuButton slots={{ root: IconButton }} slotProps={{ root: { variant: 'plain', color: 'neutral', size: 'sm' } }}>
