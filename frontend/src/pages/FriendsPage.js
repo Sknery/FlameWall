@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
@@ -35,6 +35,7 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:300
 function FriendsPage() {
   const { authToken } = useAuth();
   const { friendshipUpdateTrigger, markNotificationsAsReadByLink } = useNotifications();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState(0);
 
@@ -73,14 +74,10 @@ function FriendsPage() {
     fetchData();
   }, [fetchData, friendshipUpdateTrigger]);
 
-  // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
   useEffect(() => {
-    // Если мы находимся на вкладке "Incoming Requests"...
     if (activeTab === 1) {
-      // ...отмечаем уведомления как прочитанные.
       markNotificationsAsReadByLink('/friends');
     }
-    // Этот эффект теперь сработает при смене вкладки ИЛИ при получении нового запроса в друзья
   }, [activeTab, friendshipUpdateTrigger, markNotificationsAsReadByLink]);
 
   const handleRequestAction = async (action, requestId) => {
@@ -136,19 +133,42 @@ function FriendsPage() {
         </TabList>
 
         <TabPanel value={0}> {/* Friends */}
-          <List>{friends.length > 0 ? friends.map(item => ( <ListItem key={item.friendshipId} /* ... */><ListItemButton component={RouterLink} to={`/users/${item.user.profile_slug || item.user.id}`}><ListItemDecorator><Avatar src={constructImageUrl(item.user.pfp_url)} /></ListItemDecorator><ListItemContent>{item.user.username}</ListItemContent></ListItemButton></ListItem>)) : <Typography sx={{mt: 2}}>Your friends list is empty.</Typography>}</List>
+          <List>{friends.length > 0 ? friends.map(item => ( <ListItem key={item.friendshipId} endAction={<IconButton variant="plain" color="danger" onClick={() => handleRemoveFriend(item.friendshipId)}><PersonRemoveIcon /></IconButton>}><ListItemButton component={RouterLink} to={`/users/${item.user.profile_slug || item.user.id}`}><ListItemDecorator><Avatar src={constructImageUrl(item.user.pfp_url)} /></ListItemDecorator><ListItemContent>{item.user.username}</ListItemContent></ListItemButton></ListItem>)) : <Typography sx={{mt: 2}}>Your friends list is empty.</Typography>}</List>
         </TabPanel>
 
         <TabPanel value={1}> {/* Incoming Requests */}
-          <List>{pendingRequests.length > 0 ? pendingRequests.map(req => (<ListItem key={req.id} /* ... */><ListItemButton component={RouterLink} to={`/users/${req.requester.profile_slug || req.requester.id}`}><ListItemDecorator><Avatar src={constructImageUrl(req.requester.pfp_url)} /></ListItemDecorator><ListItemContent><Typography>{req.requester.username}</Typography><Typography level="body-xs">Wants to be your friend</Typography></ListItemContent></ListItemButton></ListItem>)) : <Typography sx={{mt: 2}}>No pending friend requests.</Typography>}</List>
+          <List>{pendingRequests.length > 0 ? pendingRequests.map(req => (
+            // --- ИСПРАВЛЕНО: Возвращаем `endAction` с кнопками ---
+            <ListItem 
+              key={req.id} 
+              endAction={
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <IconButton variant="solid" color="success" onClick={() => handleRequestAction('accept', req.id)}>
+                    <CheckCircleIcon />
+                  </IconButton>
+                  <IconButton variant="solid" color="danger" onClick={() => handleRequestAction('reject', req.id)}>
+                    <CancelIcon />
+                  </IconButton>
+                </Box>
+              }
+            >
+              <ListItemButton component={RouterLink} to={`/users/${req.requester.profile_slug || req.requester.id}`}>
+                <ListItemDecorator><Avatar src={constructImageUrl(req.requester.pfp_url)} /></ListItemDecorator>
+                <ListItemContent>
+                  <Typography>{req.requester.username}</Typography>
+                  <Typography level="body-xs">Wants to be your friend</Typography>
+                </ListItemContent>
+              </ListItemButton>
+            </ListItem>
+          )) : <Typography sx={{mt: 2}}>No pending friend requests.</Typography>}</List>
         </TabPanel>
         
         <TabPanel value={2}> {/* Outgoing Requests */}
-            <List>{outgoingRequests.length > 0 ? outgoingRequests.map(req => (<ListItem key={req.id} /* ... */><ListItemButton component={RouterLink} to={`/users/${req.receiver.profile_slug || req.receiver.id}`}><ListItemDecorator><Avatar src={constructImageUrl(req.receiver.pfp_url)} /></ListItemDecorator><ListItemContent><Typography>Request sent to {req.receiver.username}</Typography></ListItemContent></ListItemButton></ListItem>)) : <Typography sx={{mt: 2}}>You have no outgoing friend requests.</Typography>}</List>
+            <List>{outgoingRequests.length > 0 ? outgoingRequests.map(req => (<ListItem key={req.id} endAction={<Button variant="outlined" color="neutral" size="sm" startDecorator={<UnsubscribeIcon />} onClick={() => handleRequestAction('cancel', req.id)}>Cancel</Button>}><ListItemButton component={RouterLink} to={`/users/${req.receiver.profile_slug || req.receiver.id}`}><ListItemDecorator><Avatar src={constructImageUrl(req.receiver.pfp_url)} /></ListItemDecorator><ListItemContent><Typography>Request sent to {req.receiver.username}</Typography></ListItemContent></ListItemButton></ListItem>)) : <Typography sx={{mt: 2}}>You have no outgoing friend requests.</Typography>}</List>
         </TabPanel>
 
         <TabPanel value={3}> {/* Blocked Users */}
-            <List>{blockedUsers.length > 0 ? blockedUsers.map(item => (<ListItem key={item.id} /* ... */><ListItemButton component={RouterLink} to={`/users/${item.receiver.profile_slug || item.receiver.id}`}><ListItemDecorator><Avatar src={constructImageUrl(item.receiver.pfp_url)} /></ListItemDecorator><ListItemContent>{item.receiver.username}</ListItemContent></ListItemButton></ListItem>)) : <Typography sx={{mt: 2}}>You have not blocked any users.</Typography>}</List>
+            <List>{blockedUsers.length > 0 ? blockedUsers.map(item => (<ListItem key={item.id} endAction={<Button variant="solid" color="warning" size="sm" startDecorator={<LockOpenIcon />} onClick={() => handleUnblock(item.receiver.id)}>Unblock</Button>}><ListItemButton component={RouterLink} to={`/users/${item.receiver.profile_slug || item.receiver.id}`}><ListItemDecorator><Avatar src={constructImageUrl(item.receiver.pfp_url)} /></ListItemDecorator><ListItemContent>{item.receiver.username}</ListItemContent></ListItemButton></ListItem>)) : <Typography sx={{mt: 2}}>You have not blocked any users.</Typography>}</List>
         </TabPanel>
       </Tabs>
     </Box>

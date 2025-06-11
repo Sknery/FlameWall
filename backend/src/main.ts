@@ -3,12 +3,10 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule, SwaggerCustomOptions } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-// --- ДОБАВЛЕНО ---
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 
 async function bootstrap() {
-  // --- ИЗМЕНЕНО: Указываем, что наше приложение - NestExpressApplication ---
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
 
