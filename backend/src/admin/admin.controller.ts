@@ -1,4 +1,4 @@
-import { Controller, Post, Param, ParseIntPipe, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Param, ParseIntPipe, UseGuards, HttpCode, HttpStatus, Body, Patch } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { UsersService, PublicUser } from '../users/users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -6,6 +6,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Ranks } from '../common/enums/ranks.enum';
 import { User } from '../users/entities/user.entity';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -32,5 +33,18 @@ export class AdminController {
     @ApiResponse({ status: 404, description: 'User not found.' })
     unbanUser(@Param('id', ParseIntPipe) id: number): Promise<PublicUser> {
         return this.usersService.unbanUser(id);
+    }
+
+        @Patch('/users/:id/update') // <-- Полный путь будет /admin/users/:id/update
+    @Roles(Ranks.ADMIN, Ranks.OWNER)
+    @ApiOperation({ summary: 'Update a user by admin' })
+    @ApiResponse({ status: 200, description: 'User has been updated successfully.', type: User })
+    @ApiResponse({ status: 403, description: 'Forbidden.' })
+    @ApiResponse({ status: 404, description: 'User not found.' })
+    updateUser(
+        @Param('id', ParseIntPipe) id: number,
+        @Body() adminUpdateUserDto: AdminUpdateUserDto,
+    ): Promise<PublicUser> {
+        return this.usersService.adminUpdateUser(id, adminUpdateUserDto);
     }
 }

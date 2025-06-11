@@ -1,7 +1,8 @@
 import { 
   Controller, Get, Post, Body, Param, UsePipes, ValidationPipe, Patch, UseGuards, Request, Delete, HttpCode, HttpStatus,
   UseInterceptors, UploadedFile, ParseFilePipe, MaxFileSizeValidator, Logger, BadRequestException,
-  Query
+  Query,
+  ParseIntPipe
 } from '@nestjs/common';
 import { PublicUser, UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -14,6 +15,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { FindAllUsersDto } from './dto/find-all-users.dto';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { AdminUpdateUserDto } from 'src/admin/dto/admin-update-user.dto';
+import { Ranks } from 'src/common/enums/ranks.enum';
 
 const generateUniqueFilename = (req, file, callback) => {
   const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);

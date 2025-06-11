@@ -9,6 +9,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { FindAllUsersDto } from './dto/find-all-users.dto';
 
 import { JwtService } from '@nestjs/jwt';
+import { AdminUpdateUserDto } from 'src/admin/dto/admin-update-user.dto';
 
 
 export type PublicUser = Omit<User, 'password_hash' | 'validatePassword' | 'deleted_at'>;
@@ -18,9 +19,9 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
-        private jwtService: JwtService,
+    private jwtService: JwtService,
 
-  ) {}
+  ) { }
 
   async create(createUserDto: CreateUserDto): Promise<PublicUser> {
     const { email, username, password } = createUserDto;
@@ -37,14 +38,14 @@ export class UsersService {
       password_hash: hashedPassword,
       rank: Ranks.DEFAULT,
     });
-    
+
     const savedUser = await this.usersRepository.save(userToCreate);
-    
+
     const { password_hash, validatePassword, deleted_at, ...result } = savedUser;
     return result as PublicUser;
   }
 
-   async updateProfile(userId: number, updateUserDto: UpdateUserDto): Promise<{ user: PublicUser, access_token: string }> {
+  async updateProfile(userId: number, updateUserDto: UpdateUserDto): Promise<{ user: PublicUser, access_token: string }> {
     const user = await this.usersRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found.`);
@@ -67,7 +68,7 @@ export class UsersService {
     const newAccessToken = this.jwtService.sign(jwtTokenPayload);
 
     const { password_hash, validatePassword, deleted_at, ...publicData } = updatedUser;
-    
+
     return { user: publicData as PublicUser, access_token: newAccessToken };
   }
 
@@ -101,6 +102,21 @@ export class UsersService {
     }
   }
 
+   async adminUpdateUser(userId: number, dto: AdminUpdateUserDto): Promise<PublicUser> {
+    const user = await this.usersRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found.`);
+    }
+
+    // Применяем изменения из DTO к пользователю
+    Object.assign(user, dto);
+    
+    const updatedUser = await this.usersRepository.save(user);
+
+    const { password_hash, validatePassword, deleted_at, ...result } = updatedUser;
+    return result as PublicUser;
+  }
+
   async findAll(queryDto: FindAllUsersDto): Promise<PublicUser[]> {
     // Явно задаем значения по умолчанию при деструктуризации
     const { search, order = 'DESC', sortBy: requestedSortBy = 'first_login' } = queryDto;
@@ -121,14 +137,14 @@ export class UsersService {
     }
 
     const users = await this.usersRepository.find(findOptions);
-    
+
     return users.map(user => {
-        const { password_hash, validatePassword, deleted_at, ...result } = user;
-        return result as PublicUser;
+      const { password_hash, validatePassword, deleted_at, ...result } = user;
+      return result as PublicUser;
     });
   }
 
- async findOne(identifier: string | number): Promise<PublicUser> {
+  async findOne(identifier: string | number): Promise<PublicUser> {
     // Проверяем, является ли идентификатор числом или строкой, состоящей только из цифр
     const isNumeric = typeof identifier === 'number' || /^\d+$/.test(String(identifier));
 
@@ -141,20 +157,20 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException(`User with identifier '${identifier}' not found`);
     }
-    
+
     const { password_hash, validatePassword, deleted_at, ...result } = user;
     return result as PublicUser;
   }
-  
+
   async findOneByUsername(username: string): Promise<User | null> {
     return this.usersRepository.findOne({ where: { username } });
   }
 
-  async findOneWithPasswordByEmail(email: string): Promise<User | null> { 
+  async findOneWithPasswordByEmail(email: string): Promise<User | null> {
     return this.usersRepository.createQueryBuilder("user")
-        .addSelect("user.password_hash")
-        .where("user.email = :email", { email })
-        .getOne();
+      .addSelect("user.password_hash")
+      .where("user.email = :email", { email })
+      .getOne();
   }
 
   async updatePassword(userId: number, newHashedPassword: string): Promise<void> {
@@ -163,16 +179,16 @@ export class UsersService {
 
   async findOneWithPasswordById(id: number): Promise<User | null> {
     return this.usersRepository.createQueryBuilder("user")
-        .addSelect("user.password_hash")
-        .where("user.id = :id", { id })
-        .getOne();
+      .addSelect("user.password_hash")
+      .where("user.id = :id", { id })
+      .getOne();
   }
 
-    async findUserEntityById(id: number): Promise<User | null> {
+  async findUserEntityById(id: number): Promise<User | null> {
     return this.usersRepository.findOneBy({ id });
   }
 
-   async updateAvatar(userId: number, avatarUrl: string): Promise<User> {
+  async updateAvatar(userId: number, avatarUrl: string): Promise<User> {
     const user = await this.usersRepository.findOneBy({ id: userId });
     if (!user) {
       throw new NotFoundException('User not found');
@@ -190,4 +206,5 @@ export class UsersService {
     user.banner_url = bannerUrl;
     return this.usersRepository.save(user);
   }
+
 }

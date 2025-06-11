@@ -1,3 +1,5 @@
+// frontend/src/context/AuthContext.js
+
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import axios from 'axios';
@@ -7,32 +9,51 @@ const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(undefined);
+  // Изначально user - undefined, чтобы мы могли показать загрузку, пока идет проверка
+  const [user, setUser] = useState(undefined); 
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('authToken') || null);
-
-  // Создаем сокет и храним его здесь
   const socketRef = useRef(null);
   const [socket, setSocket] = useState(null);
 
+  // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Эффект для проверки токена и профиля ---
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      const decoded = jwtDecode(token);
-      if (decoded.exp * 1000 < Date.now()) {
-        localStorage.removeItem('authToken');
-      } else {
-        setAuthToken(token);
-        setUser({ id: decoded.sub, username: decoded.username, rank: decoded.rank });
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      }
-    } else {
-      setUser(null);
-    }
-  }, []);
+    const initializeAuth = async () => {
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        try {
+          const decoded = jwtDecode(token);
+          if (decoded.exp * 1000 < Date.now()) {
+            throw new Error("Token expired");
+          }
+          
+          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          
+          // Делаем запрос на бэкенд за актуальным профилем
+          const response = await axios.get('/auth/profile');
 
-  // Этот эффект управляет жизненным циклом сокета
+          // Сохраняем полный объект пользователя из ответа API
+          setUser(response.data);
+          setAuthToken(token);
+
+        } catch (error) {
+          // Если токен невалиден или профиль не загрузился
+          localStorage.removeItem('authToken');
+          delete axios.defaults.headers.common['Authorization'];
+          setUser(null);
+          setAuthToken(null);
+        }
+      } else {
+        // Если токена нет, просто устанавливаем user в null
+        setUser(null);
+      }
+    };
+
+    initializeAuth();
+  }, []); // Пустой массив зависимостей, чтобы выполнялось один раз при старте
+
+  // ... остальная часть файла (useEffect для сокета, login, logout) остается без изменений ...
   useEffect(() => {
-    if (authToken) {
+    if (authToken && user && !user.is_banned) { // <-- Добавлена проверка на бан
       if (!socketRef.current) {
         console.log('AuthProvider: Connecting socket...');
         const newSocket = io(process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000', {
@@ -50,38 +71,44 @@ export const AuthProvider = ({ children }) => {
         setSocket(null);
       }
     }
-  }, [authToken]);
+    // Добавляем user в зависимости, чтобы сокет отключился, если юзера забанят
+  }, [authToken, user]);
 
-  const login = useCallback((token) => {
+  const login = useCallback(async (token) => {
     localStorage.setItem('authToken', token);
-    const decoded = jwtDecode(token);
-    setUser({ id: decoded.sub, username: decoded.username, rank: decoded.rank });
-    setAuthToken(token);
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    try {
+      // После логина сразу запрашиваем актуальный профиль
+      const response = await axios.get('/auth/profile');
+      setUser(response.data);
+      setAuthToken(token);
+    } catch (error) {
+       // Обработка ошибки, если профиль не загрузился
+       logout();
+    }
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem('authToken');
+    delete axios.defaults.headers.common['Authorization'];
     setAuthToken(null);
     setUser(null);
-    delete axios.defaults.headers.common['Authorization'];
   }, []);
-
+  
   const updateAuthToken = useCallback((token) => {
-    // Эта логика идентична логину, так как нам нужно сделать то же самое:
-    // обновить токен в localStorage и обновить состояние user
     login(token);
   }, [login]);
 
   const value = useMemo(() => ({
-    isLoggedIn: !!user,
+    // Теперь `user` может быть undefined, null или объектом
+    isLoggedIn: !!user, 
     user,
     authToken,
-    socket, // <-- Передаем сокет через AuthContext
+    socket,
     login,
     logout,
-    updateAuthToken, // <-- Экспортируем новую функцию
-  }), [user, authToken, socket, login, logout]);
+    updateAuthToken,
+  }), [user, authToken, socket, login, logout, updateAuthToken]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

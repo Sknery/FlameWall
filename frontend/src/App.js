@@ -26,7 +26,11 @@ import ConversationPage from './pages/ConversationPage';
 import EditPostPage from './pages/EditPostPage';
 import SettingsPage from './pages/SettingsPage';
 import SearchPage from './pages/SearchPage';
+import AdminPage from './pages/AdminPage';
 
+import axios from 'axios'; // <-- Убедитесь, что axios импортирован
+
+axios.defaults.baseURL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
 function App() {
   return (
@@ -53,6 +57,7 @@ function App() {
                   <Route path="posts/:postId/edit" element={<ProtectedRoute><EditPostPage /></ProtectedRoute>} />
                   <Route path="/profile/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                   <Route path="search" element={<SearchPage />} />
+                  <Route path="admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
                   <Route path="profile/me" element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} />
                 </Route>
 
