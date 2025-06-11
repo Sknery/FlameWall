@@ -18,6 +18,9 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Notification } from '../notifications/entities/notification.entity';
 import { FriendshipsService } from 'src/friendships/friendships.service';
 import { CreateMessageDto } from 'src/messages/dto/create-message.dto';
+// --- НОВЫЕ ИМПОРТЫ ---
+import { EditMessageDto } from 'src/messages/dto/edit-message.dto';
+import { DeleteMessageDto } from 'src/messages/dto/delete-message.dto';
 
 
 @WebSocketGateway({ cors: { origin: '*' } })
@@ -27,9 +30,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private logger: Logger = new Logger('ChatGateway');
   private onlineUsers = new Map<number, string>();
-  // --- ДОБАВЛЕНО: Хранилище для отслеживания, кто какой чат смотрит ---
-  //   Ключ: ID пользователя, который смотрит чат.
-  //   Значение: ID пользователя, с которым открыт чат.
   private currentlyViewing = new Map<number, number>();
 
   constructor(
@@ -37,14 +37,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly eventEmitter: EventEmitter2,
-        private readonly friendshipsService: FriendshipsService,
-
+    private readonly friendshipsService: FriendshipsService,
   ) {}
   
   async handleConnection(client: Socket) {
     const token = client.handshake.auth.token;
     if (!token) return client.disconnect();
-
     try {
       const payload = this.jwtService.verify(token);
       const user = await this.usersService.findUserEntityById(payload.sub);
@@ -53,8 +51,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client['user'] = user;
       client.join(`user-${user.id}`);
       this.onlineUsers.set(user.id, client.id);
-      this.logger.log(`Client Authenticated & Connected: SID ${client.id}, User ID ${user.id}, Joined room user-${user.id}`);
-
+      this.logger.log(`Client Authenticated & Connected: SID ${client.id}, User ID ${user.id}`);
     } catch (e) {
       return client.disconnect();
     }
@@ -64,19 +61,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const user: User = client['user'];
     if (user) {
       if (this.onlineUsers.get(user.id) === client.id) {
-          this.onlineUsers.delete(user.id);
-          this.logger.log(`Client disconnected: User ID ${user.id}`);
+        this.onlineUsers.delete(user.id);
+        this.logger.log(`Client disconnected: User ID ${user.id}`);
       }
-      // --- ДОБАВЛЕНО: Убираем пользователя из списка смотрящих при дисконнекте ---
       this.currentlyViewing.delete(user.id);
     }
   }
 
-   @UseGuards(WsGuard)
+  @UseGuards(WsGuard)
   @SubscribeMessage('sendMessage')
-  // --- ИЗМЕНЕНО: Применяем DTO и ValidationPipe к данным ---
   async handleMessage(
-    @MessageBody(new ValidationPipe()) data: CreateMessageDto,
+    // --- ИЗМЕНЕНО: Добавляем parentMessageId для ответов ---
+    @MessageBody(new ValidationPipe()) data: CreateMessageDto & { parentMessageId?: number },
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
     const sender: User = client['user'];
@@ -91,48 +87,82 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    const savedMessage = await this.messagesService.createMessage(sender, recipient, data.content);
+    // --- ИЗМЕНЕНО: Передаем parentMessageId в сервис ---
+    const savedMessage = await this.messagesService.createMessage(sender, recipient, data.content, data.parentMessageId);
     if (!savedMessage) return;
 
     const recipientIsViewing = this.currentlyViewing.get(recipient.id) === sender.id;
 
     if (recipientIsViewing) {
       this.logger.log(`Recipient ${recipient.id} is viewing chat with ${sender.id}. Notification suppressed.`);
-    } else {
+    } else if (sender.id !== recipient.id) { // Не отправляем уведомление о сообщении самому себе
       this.eventEmitter.emit('message.sent', { sender, recipient });
     }
 
-    const recipientRoom = `user-${data.recipientId}`;
-    this.server.to(recipientRoom).emit('newMessage', savedMessage);
-    
-    if (sender.id !== data.recipientId) {
+    // Отправляем новое сообщение обоим участникам диалога
+    this.server.to(`user-${recipient.id}`).emit('newMessage', savedMessage);
+    if (sender.id !== recipient.id) {
         this.server.to(`user-${sender.id}`).emit('newMessage', savedMessage);
     }
   }
 
-  // --- НОВЫЙ МЕТОД: Пользователь начал просмотр чата ---
+  // --- НОВЫЙ ОБРАБОТЧИК: Редактирование сообщения ---
   @UseGuards(WsGuard)
-  @SubscribeMessage('startViewingChat')
-  handleStartViewingChat(
-    @MessageBody() data: { otherUserId: number },
+  @SubscribeMessage('editMessage')
+  async handleEditMessage(
+    @MessageBody(new ValidationPipe()) data: EditMessageDto,
     @ConnectedSocket() client: Socket,
-  ): void {
-      const currentUser: User = client['user'];
-      if (currentUser && data.otherUserId) {
-        this.currentlyViewing.set(currentUser.id, data.otherUserId);
-        this.logger.log(`User ${currentUser.id} started viewing chat with ${data.otherUserId}`);
-      }
+  ): Promise<void> {
+    const sender: User = client['user'];
+    try {
+      const updatedMessage = await this.messagesService.updateMessage(sender.id, data.messageId, data.content);
+      
+      this.server.to(`user-${updatedMessage.sender_id}`).emit('messageEdited', updatedMessage);
+      this.server.to(`user-${updatedMessage.receiver_id}`).emit('messageEdited', updatedMessage);
+    } catch (error) {
+      this.logger.error(`Failed to edit message for user ${sender.id}: ${error.message}`);
+      client.emit('error', { message: 'Failed to edit message.' });
+    }
   }
 
-  // --- НОВЫЙ МЕТОД: Пользователь закончил просмотр чата ---
+  // --- НОВЫЙ ОБРАБОТЧИК: Удаление сообщения ---
+  @UseGuards(WsGuard)
+  @SubscribeMessage('deleteMessage')
+  async handleDeleteMessage(
+    @MessageBody(new ValidationPipe()) data: DeleteMessageDto,
+    @ConnectedSocket() client: Socket,
+  ): Promise<void> {
+    const sender: User = client['user'];
+    try {
+      const deletedMessage = await this.messagesService.deleteMessage(sender.id, data.messageId);
+
+      const payload = { messageId: deletedMessage.id };
+      this.server.to(`user-${deletedMessage.sender_id}`).emit('messageDeleted', payload);
+      this.server.to(`user-${deletedMessage.receiver_id}`).emit('messageDeleted', payload);
+    } catch (error) {
+      this.logger.error(`Failed to delete message for user ${sender.id}: ${error.message}`);
+      client.emit('error', { message: 'Failed to delete message.' });
+    }
+  }
+
+  @UseGuards(WsGuard)
+  @SubscribeMessage('startViewingChat')
+  handleStartViewingChat(@MessageBody() data: { otherUserId: number }, @ConnectedSocket() client: Socket): void {
+    const currentUser: User = client['user'];
+    if (currentUser && data.otherUserId) {
+        this.currentlyViewing.set(currentUser.id, data.otherUserId);
+        this.logger.log(`User ${currentUser.id} started viewing chat with ${data.otherUserId}`);
+    }
+  }
+
   @UseGuards(WsGuard)
   @SubscribeMessage('stopViewingChat')
   handleStopViewingChat(@ConnectedSocket() client: Socket): void {
-      const currentUser: User = client['user'];
-      if (currentUser && this.currentlyViewing.has(currentUser.id)) {
+    const currentUser: User = client['user'];
+    if (currentUser && this.currentlyViewing.has(currentUser.id)) {
         this.currentlyViewing.delete(currentUser.id);
         this.logger.log(`User ${currentUser.id} stopped viewing chat.`);
-      }
+    }
   }
 
   @OnEvent('notification.created')
@@ -142,7 +172,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.log(`Event 'notification.created' caught. Emitting 'newNotification' to room ${room}`);
       this.server.to(room).emit('newNotification', payload);
     } else {
-        this.logger.warn('Caught notification.created event with invalid payload', payload);
+      this.logger.warn('Caught notification.created event with invalid payload', payload);
     }
   }
 }

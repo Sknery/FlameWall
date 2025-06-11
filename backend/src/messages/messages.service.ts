@@ -1,9 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Message } from './entities/message.entity';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
-import { recentMessageSignatures } from '../chat/connection-lock'; // <-- Импортируем замок
+import { recentMessageSignatures } from '../chat/connection-lock';
 
 @Injectable()
 export class MessagesService {
@@ -14,38 +14,58 @@ export class MessagesService {
     private messagesRepository: Repository<Message>,
   ) {}
 
-  async createMessage(sender: User, receiver: User, content: string): Promise<Message | null> {
-    // Создаем уникальный "отпечаток" сообщения
+  async createMessage(sender: User, receiver: User, content: string, parentMessageId?: number): Promise<Message | null> {
     const signature = `${sender.id}-${receiver.id}-${content}`;
-
-    // Проверяем, не обрабатывали ли мы точно такое же сообщение только что
     if (recentMessageSignatures.has(signature)) {
       this.logger.warn(`Duplicate message signature detected, ignoring: ${signature}`);
-      return null; // Если да, игнорируем
+      return null;
     }
-
-    // Если нет, добавляем отпечаток в замок и устанавливаем таймер на его удаление
     recentMessageSignatures.add(signature);
     setTimeout(() => {
       recentMessageSignatures.delete(signature);
-    }, 2000); // Сообщение считается уникальным в течение 2 секунд
+    }, 2000);
 
-    // Продолжаем обычное сохранение
     const message = this.messagesRepository.create({
       sender: sender,
       receiver: receiver,
       content: content,
+      parentMessageId: parentMessageId,
     });
 
     try {
       const savedMessage = await this.messagesRepository.save(message);
-      this.logger.log(`Message saved successfully with ID: ${savedMessage.id}`);
-      return savedMessage;
+      return this.findMessageById(savedMessage.id);
     } catch (error) {
-      this.logger.error(`Failed to save message to database.`, error.stack);
-      recentMessageSignatures.delete(signature); // Удаляем подпись в случае ошибки
+      this.logger.error(`Failed to save message.`, error.stack);
+      recentMessageSignatures.delete(signature);
       return null;
     }
+  }
+
+  async updateMessage(userId: number, messageId: number, content: string): Promise<Message> {
+    const message = await this.findMessageById(messageId);
+    if (!message) {
+      throw new NotFoundException('Message not found.');
+    }
+    if (message.sender_id !== userId) {
+      throw new ForbiddenException('You can only edit your own messages.');
+    }
+    message.content = content;
+    const updatedMessage = await this.messagesRepository.save(message);
+    return updatedMessage;
+  }
+
+  async deleteMessage(userId: number, messageId: number): Promise<Message> {
+    const message = await this.findMessageById(messageId);
+    if (!message) {
+      throw new NotFoundException('Message not found.');
+    }
+    if (message.sender_id !== userId) {
+      throw new ForbiddenException('You can only delete your own messages.');
+    }
+    message.is_deleted = true;
+    message.content = 'Message has been deleted.';
+    return this.messagesRepository.save(message);
   }
 
   async getConversation(userId1: number, userId2: number): Promise<Message[]> {
@@ -54,10 +74,22 @@ export class MessagesService {
         { sender_id: userId1, receiver_id: userId2 },
         { sender_id: userId2, receiver_id: userId1 },
       ],
-      relations: ['sender', 'receiver'],
+      relations: [
+        'sender',
+        'receiver',
+        'parentMessage',
+        'parentMessage.sender',
+      ],
       order: {
         sent_at: 'ASC',
       },
+    });
+  }
+  
+  async findMessageById(id: number): Promise<Message | null> {
+    return this.messagesRepository.findOne({
+      where: { id },
+      relations: ['sender', 'receiver', 'parentMessage', 'parentMessage.sender'],
     });
   }
 }

@@ -3,8 +3,10 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
@@ -19,8 +21,14 @@ export class Message {
   @CreateDateColumn({ type: 'timestamp', name: 'sent_at', default: () => 'CURRENT_TIMESTAMP' })
   sent_at: Date;
 
+  @UpdateDateColumn({ type: 'timestamp', name: 'updated_at' })
+  updated_at: Date;
+
   @Column({ type: 'timestamp', name: 'viewed_at', nullable: true, default: null })
   viewed_at: Date | null;
+
+  @Column({ name: 'is_deleted', type: 'boolean', default: false })
+  is_deleted: boolean;
 
   @Column({ name: 'sender_id' })
   sender_id: number;
@@ -35,4 +43,17 @@ export class Message {
   @ManyToOne(() => User, (user) => user.received_messages, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'receiver_id' })
   receiver: User;
+
+  @ManyToOne(() => Message, (message) => message.replies, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'parent_message_id' })
+  parentMessage: Message | null;
+
+  @Column({ name: 'parent_message_id', nullable: true })
+  parentMessageId: number | null;
+
+  @OneToMany(() => Message, (message) => message.parentMessage)
+  replies: Message[];
 }
