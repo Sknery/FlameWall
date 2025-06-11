@@ -28,6 +28,7 @@ import SettingsPage from './pages/SettingsPage';
 import SearchPage from './pages/SearchPage';
 import AdminPage from './pages/AdminPage';
 import AdminPostsPage from './pages/AdminPostsPage'; // <-- ДОБАВЬТЕ ЭТО
+import CreateNewsPage from './pages/CreateNewsPage'; // <-- ДОБАВЬТЕ ЭТО
 
 import axios from 'axios'; // <-- Убедитесь, что axios импортирован
 
@@ -59,6 +60,7 @@ function App() {
                   <Route path="/profile/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                   <Route path="search" element={<SearchPage />} />
                   <Route path="/admin/users" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+                  <Route path="/admin/news/create" element={<ProtectedRoute><CreateNewsPage /></ProtectedRoute>} />
                   <Route path="/admin/posts" element={<ProtectedRoute><AdminPostsPage /></ProtectedRoute>} />                  <Route path="profile/me" element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} />
                 </Route>
 
