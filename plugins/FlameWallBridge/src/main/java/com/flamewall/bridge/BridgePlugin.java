@@ -19,18 +19,30 @@ import java.util.UUID;
 public final class BridgePlugin extends JavaPlugin {
 
     private Socket socket;
+    private PrivateMessageManager messageManager;
+    // Теперь храним полный список правил
+    private List<Map<?, ?>> interceptRules;
 
     @Override
     public void onEnable() {
         getLogger().info("FlameWallBridge is enabling...");
-        this.getCommand("link").setExecutor(new LinkCommand(this));
+        this.saveDefaultConfig();
+        this.reloadConfig();
+        this.messageManager = new PrivateMessageManager();
 
-        // --- ПРОВЕРЬ НАЛИЧИЕ ЭТОЙ СТРОКИ ---
-        this.getCommand("m").setExecutor(new MessageCommand(this));
+        // Загружаем правила из конфига
+        this.interceptRules = getConfig().getMapList("intercept-rules");
+        getLogger().info("Loaded " + interceptRules.size() + " message interception rules.");
+
+        this.getCommand("link").setExecutor(new LinkCommand(this));
+        // Мы больше не регистрируем команды /msg и /r, так как только перехватываем их
 
         Bukkit.getPluginManager().registerEvents(new PlayerConnectionListener(this), this);
         connectToWebSocket();
     }
+
+    public PrivateMessageManager getMessageManager() { return messageManager; }
+    public List<Map<?, ?>> getInterceptRules() { return interceptRules; }
 
     @Override
     public void onDisable() {
