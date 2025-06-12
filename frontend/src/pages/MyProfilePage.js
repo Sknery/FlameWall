@@ -12,17 +12,41 @@ import { Link as RouterLink } from 'react-router-dom';
 import ThumbUpOffAltIcon from '@mui/icons-material/ThumbUpOffAlt';
 import SportsEsportsIcon from '@mui/icons-material/SportsEsports'; // <-- Иконка для Minecraft
 import { constructImageUrl } from '../utils/url';
+import CircleIcon from '@mui/icons-material/Circle';
 
 
 function MyProfilePage() {
   // --- ИЗМЕНЕНИЕ: Достаем полный объект user из useAuth ---
-  const { user: profile, loading: authLoading, error: authError } = useAuth();
+  const { user: profile, loading: authLoading, error: authError, socket, updateAuthToken } = useAuth();
 
   // Локальное состояние для ошибок, если понадобится
   const [error, setError] = useState(authError);
-  
+
   // Больше не нужен отдельный fetch, все данные уже в `user` из AuthContext
   const loading = authLoading;
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleStatusUpdate = (data) => {
+      // Мы обновляем только статус, а не весь объект пользователя,
+      // чтобы не вызывать лишних перерисовок и не запрашивать новый токен
+      if (profile && data.userId === profile.id) {
+        // Имитируем обновление токена, чтобы данные в useAuth обновились
+        // Это простой способ, можно реализовать и сложнее через отдельную функцию в контексте
+        const newToken = localStorage.getItem('authToken');
+        if (newToken) {
+          updateAuthToken(newToken);
+        }
+      }
+    };
+
+    socket.on('userStatusUpdate', handleStatusUpdate);
+
+    return () => {
+      socket.off('userStatusUpdate', handleStatusUpdate);
+    };
+  }, [socket, profile, updateAuthToken]);
 
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
@@ -55,8 +79,15 @@ function MyProfilePage() {
               </Chip>
               {/* --- НОВЫЙ БЛОК: Отображение ника из Minecraft --- */}
               {profile.minecraft_username && (
-                <Chip size="sm" color="success" variant="soft" startDecorator={<SportsEsportsIcon />}>
-                    {profile.minecraft_username}
+                <Chip
+                  size="sm"
+                  variant="soft"
+                  color={profile.is_minecraft_online ? 'success' : 'neutral'}
+                  startDecorator={
+                    <CircleIcon sx={{ fontSize: '10px' }} />
+                  }
+                >
+                  {profile.minecraft_username} ({profile.is_minecraft_online ? 'Online' : 'Offline'})
                 </Chip>
               )}
             </Stack>

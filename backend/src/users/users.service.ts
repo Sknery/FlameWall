@@ -20,7 +20,6 @@ export class UsersService {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
     private jwtService: JwtService,
-
   ) { }
 
   async create(createUserDto: CreateUserDto): Promise<PublicUser> {
@@ -102,7 +101,7 @@ export class UsersService {
     }
   }
 
-   async adminUpdateUser(userId: number, dto: AdminUpdateUserDto): Promise<PublicUser> {
+  async adminUpdateUser(userId: number, dto: AdminUpdateUserDto): Promise<PublicUser> {
     const user = await this.usersRepository.findOneBy({ id: userId });
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found.`);
@@ -110,7 +109,7 @@ export class UsersService {
 
     // Применяем изменения из DTO к пользователю
     Object.assign(user, dto);
-    
+
     const updatedUser = await this.usersRepository.save(user);
 
     const { password_hash, validatePassword, deleted_at, ...result } = updatedUser;
@@ -207,4 +206,20 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
+  async setMinecraftOnlineStatus(minecraftUuid: string, isOnline: boolean): Promise<User | null> {
+    const user = await this.usersRepository.findOneBy({ minecraft_uuid: minecraftUuid });
+    if (user) {
+      user.is_minecraft_online = isOnline;
+      return this.usersRepository.save(user);
+    }
+    return null;
+  }
+
+  async findUserByMinecraftUuid(uuid: string): Promise<User | null> {
+    return this.usersRepository.findOneBy({ minecraft_uuid: uuid });
+  }
+
+  async findOneByMinecraftUsername(mcUsername: string): Promise<User | null> {
+    return this.usersRepository.findOne({ where: { minecraft_username: mcUsername } });
+  }
 }

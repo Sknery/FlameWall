@@ -24,6 +24,11 @@ public final class BridgePlugin extends JavaPlugin {
     public void onEnable() {
         getLogger().info("FlameWallBridge is enabling...");
         this.getCommand("link").setExecutor(new LinkCommand(this));
+
+        // --- ПРОВЕРЬ НАЛИЧИЕ ЭТОЙ СТРОКИ ---
+        this.getCommand("m").setExecutor(new MessageCommand(this));
+
+        Bukkit.getPluginManager().registerEvents(new PlayerConnectionListener(this), this);
         connectToWebSocket();
     }
 
@@ -77,6 +82,14 @@ public final class BridgePlugin extends JavaPlugin {
                 }
             });
 
+            socket.on("webPrivateMessage", args -> {
+                if (args.length > 0 && args[0] instanceof JSONObject) {
+                    handleWebMessage((JSONObject) args[0]);
+                }
+            });
+
+            socket.connect();
+
             socket.connect();
             getLogger().info("Attempting to connect to website backend...");
 
@@ -84,6 +97,25 @@ public final class BridgePlugin extends JavaPlugin {
             getLogger().severe("Failed to initialize WebSocket connection!");
             e.printStackTrace();
         }
+    }
+
+    private void handleWebMessage(JSONObject data) {
+        Bukkit.getScheduler().runTask(this, () -> {
+            try {
+                String recipientUuid = data.getString("recipientUuid");
+                String senderUsername = data.getString("senderUsername");
+                String content = data.getString("content");
+
+                Player recipientPlayer = Bukkit.getPlayer(UUID.fromString(recipientUuid));
+                if (recipientPlayer != null && recipientPlayer.isOnline()) {
+                    recipientPlayer.sendMessage(
+                            ChatColor.GRAY + "From " + senderUsername + ": " + content
+                    );
+                }
+            } catch (Exception e) {
+                getLogger().warning("Could not parse webPrivateMessage from backend: " + data.toString());
+            }
+        });
     }
 
     private void handleBackendMessage(JSONObject data) {

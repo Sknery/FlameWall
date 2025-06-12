@@ -8,3 +8,8 @@ commands:
   link:
     description: Links your website account to your Minecraft account.
     usage: "/link <code>"
+  # --- УБЕДИСЬ, ЧТО ЭТОТ БЛОК ЕСТЬ И ОТСТУПЫ ПРАВИЛЬНЫЕ ---
+  m:
+    description: Sends a private message to a player, synced with the website.
+    usage: "/m <player> <message>"
+    aliases: [msg, tell, w]

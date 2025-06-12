@@ -1,3 +1,5 @@
+// frontend/src/pages/ConversationPage.js
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +17,8 @@ import ReplyIcon from '@mui/icons-material/Reply';
 import CloseIcon from '@mui/icons-material/Close';
 import axios from 'axios';
 import { constructImageUrl } from '../utils/url';
+// --- ДОБАВЛЕНО ---
+import CircleIcon from '@mui/icons-material/Circle';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -38,56 +42,68 @@ function ConversationPage() {
 
   const messagesEndRef = useRef(null);
   const messages = conversations[otherUserId] || [];
+
+  // --- ДОБАВЛЕНО: Слушатель для статуса собеседника ---
+  useEffect(() => {
+    if (!socket || !otherUser) return;
+
+    const handleStatusUpdate = (data) => {
+        if (data.userId === otherUser.id) {
+            setOtherUser(prevUser => ({
+                ...prevUser,
+                is_minecraft_online: data.is_minecraft_online
+            }));
+        }
+    };
+
+    socket.on('userStatusUpdate', handleStatusUpdate);
+
+    return () => {
+        socket.off('userStatusUpdate', handleStatusUpdate);
+    };
+  }, [socket, otherUser]);
   
   const handleReplyLinkClick = (event, messageId) => {
     event.preventDefault(); 
-    
     const element = document.getElementById(`msg-${messageId}`);
     if (element) {
-      element.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHighlightedMessageId(messageId);
-      setTimeout(() => {
-        setHighlightedMessageId(null);
-      }, 1500); // Немного уменьшил время подсветки для динамичности
+      setTimeout(() => { setHighlightedMessageId(null); }, 1500);
     }
   };
 
-  // Остальные обработчики и useEffect'ы остаются без изменений
   useEffect(() => {
     if (socket && otherUserId) {
       socket.emit('startViewingChat', { otherUserId: Number(otherUserId) });
-      return () => {
-        socket.emit('stopViewingChat');
-      };
+      return () => { socket.emit('stopViewingChat'); };
     }
   }, [socket, otherUserId]);
 
-  useEffect(() => {
-    const loadInitialData = async () => {
-      if (!otherUserId || !authToken) return;
-      try {
-        setLoading(true);
-        const config = { headers: { Authorization: `Bearer ${authToken}` } };
-        const [userRes, friendshipRes, conversationRes] = await Promise.all([
-          axios.get(`${API_BASE_URL}/users/${otherUserId}`, config),
-          axios.get(`${API_BASE_URL}/friendships/status/${otherUserId}`, config),
-          axios.get(`${API_BASE_URL}/messages/conversation/${otherUserId}`, config)
-        ]);
-        setOtherUser(userRes.data);
-        setFriendshipStatus(friendshipRes.data.status);
-        setConversations(prev => ({ ...prev, [otherUserId]: conversationRes.data }));
-        markNotificationsAsReadByLink(`/messages/${otherUserId}`);
-      } catch (err) {
-        setError('Failed to load chat data. This user may not exist.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadInitialData();
+  const loadInitialData = useCallback(async () => {
+    if (!otherUserId || !authToken) return;
+    try {
+      setLoading(true);
+      const config = { headers: { Authorization: `Bearer ${authToken}` } };
+      const [userRes, friendshipRes, conversationRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/users/${otherUserId}`, config),
+        axios.get(`${API_BASE_URL}/friendships/status/${otherUserId}`, config),
+        axios.get(`${API_BASE_URL}/messages/conversation/${otherUserId}`, config)
+      ]);
+      setOtherUser(userRes.data);
+      setFriendshipStatus(friendshipRes.data.status);
+      setConversations(prev => ({ ...prev, [otherUserId]: conversationRes.data }));
+      markNotificationsAsReadByLink(`/messages/${otherUserId}`);
+    } catch (err) {
+      setError('Failed to load chat data. This user may not exist.');
+    } finally {
+      setLoading(false);
+    }
   }, [otherUserId, authToken, markNotificationsAsReadByLink]);
+
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
 
   useEffect(() => {
     if (!socket) return;
@@ -199,7 +215,19 @@ function ConversationPage() {
         <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center' }}>
           <IconButton onClick={() => navigate('/messages')} sx={{ mr: 2 }}><ArrowBackIcon /></IconButton>
           <Avatar src={constructImageUrl(otherUser.pfp_url)} />
-          <Typography level="title-lg" sx={{ ml: 2 }}>{otherUser.username}</Typography>
+          {/* --- ИЗМЕНЕНО: Добавляем Stack для имени и статуса --- */}
+          <Stack sx={{ ml: 2 }}>
+            <Typography level="title-lg">{otherUser.username}</Typography>
+            {otherUser.minecraft_username && (
+                 <Typography 
+                    level="body-xs" 
+                    startDecorator={<CircleIcon sx={{ fontSize: '8px' }} />} 
+                    sx={{ color: otherUser.is_minecraft_online ? 'success.400' : 'text.tertiary' }}
+                 >
+                    {otherUser.is_minecraft_online ? 'Online' : 'Offline'}
+                 </Typography>
+            )}
+          </Stack>
         </Box>
 
         <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
@@ -234,7 +262,7 @@ function ConversationPage() {
             <IconButton size="sm" onClick={cancelActions} variant="plain"><CloseIcon /></IconButton>
           </Sheet>
         )}
-        <FormControl>
+         <FormControl>
           <Textarea
             placeholder={placeholderText}
             disabled={isInputDisabled}
@@ -266,11 +294,9 @@ const MessageBubble = ({ message, isOwn, isHighlighted, onReplyLinkClick, onEdit
         borderRadius: 'lg', 
         maxWidth: '750px', 
         wordBreak: 'break-word',
-        // --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ ЗДЕСЬ ---
         transition: 'background-color 0.3s ease-in-out',
-        // Управляем цветом фона напрямую, только когда нужно его подсветить
         ...(isHighlighted && {
-          bgcolor: isOwn ? 'primary.500' : 'neutral.700', // Используем более темные оттенки
+          bgcolor: isOwn ? 'primary.500' : 'neutral.700',
         })
       }}
     >

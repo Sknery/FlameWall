@@ -75,6 +75,9 @@ export class User {
   @Column({ type: 'integer', name: 'reputation_count', default: 0 })
   reputation_count: number;
 
+  @Column({ type: 'boolean', default: false, name: 'is_minecraft_online' })
+  is_minecraft_online: boolean;
+
   @UpdateDateColumn({ type: 'timestamp', name: 'updated_at' })
   updated_at: Date;
   

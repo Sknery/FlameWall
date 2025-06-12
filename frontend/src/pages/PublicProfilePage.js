@@ -14,12 +14,14 @@ import MailIcon from '@mui/icons-material/Mail';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import SportsEsportsIcon from '@mui/icons-material/SportsEsports'; // <-- Иконка для Minecraft
 import { constructImageUrl } from '../utils/url';
+import CircleIcon from '@mui/icons-material/Circle'; 
+
 
 function PublicProfilePage() {
   const { userId } = useParams();
   const navigate = useNavigate();
-  const { isLoggedIn, user: currentUser, authToken } = useAuth();
-  
+  const { isLoggedIn, user: currentUser, authToken, socket } = useAuth();
+
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -91,7 +93,7 @@ function PublicProfilePage() {
       console.error(`Error performing action ${action}:`, err);
     }
   };
-  
+
   const handleToggleBanStatus = async () => {
     if (!profile) return;
     const action = profile.is_banned ? 'unban' : 'ban';
@@ -119,7 +121,7 @@ function PublicProfilePage() {
             </MenuButton>
             <Menu>
               <MenuItem onClick={() => handleAction('remove')}><PersonRemoveIcon /> Remove Friend</MenuItem>
-              <MenuItem onClick={() => handleAction('block')} sx={{color: 'danger.500'}}><BlockIcon /> Block User</MenuItem>
+              <MenuItem onClick={() => handleAction('block')} sx={{ color: 'danger.500' }}><BlockIcon /> Block User</MenuItem>
             </Menu>
           </Dropdown>
         );
@@ -144,7 +146,26 @@ function PublicProfilePage() {
     }
   };
 
-   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
+  useEffect(() => {
+    if (!socket || !profile) return;
+
+    const handleStatusUpdate = (data) => {
+      if (data.userId === profile.id) {
+        setProfile(prevProfile => ({
+          ...prevProfile,
+          is_minecraft_online: data.is_minecraft_online
+        }));
+      }
+    };
+
+    socket.on('userStatusUpdate', handleStatusUpdate);
+
+    return () => {
+      socket.off('userStatusUpdate', handleStatusUpdate);
+    };
+  }, [socket, profile]);
+
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
   if (error) return <Alert color="danger">{error}</Alert>;
   if (!profile) return <Typography>User not found.</Typography>;
 
@@ -162,13 +183,20 @@ function PublicProfilePage() {
               </Chip>
               {/* --- НОВЫЙ БЛОК: Отображение ника из Minecraft --- */}
               {profile.minecraft_username && (
-                <Chip size="sm" color="success" variant="soft" startDecorator={<SportsEsportsIcon />}>
-                    {profile.minecraft_username}
+                <Chip
+                  size="sm"
+                  variant="soft"
+                  color={profile.is_minecraft_online ? 'success' : 'neutral'}
+                  startDecorator={
+                    <CircleIcon sx={{ fontSize: '10px' }} />
+                  }
+                >
+                  {profile.minecraft_username} ({profile.is_minecraft_online ? 'Online' : 'Offline'})
                 </Chip>
               )}
             </Stack>
           </Box>
-          
+
           <Stack direction="row" spacing={1} sx={{ ml: 'auto' }}>
             {isLoggedIn && friendship.status !== 'self' && (
               <Button variant="solid" color="primary" startDecorator={<MailIcon />} onClick={() => navigate(`/messages/${profile.id}`)}>
@@ -177,19 +205,19 @@ function PublicProfilePage() {
             )}
             {renderActionButtons()}
             {isAdmin && friendship.status !== 'self' && (
-                profile.is_banned ? (
-                    <Button variant="soft" color="success" startDecorator={<CheckCircleOutlineIcon />} onClick={handleToggleBanStatus}>
-                        Unban
-                    </Button>
-                ) : (
-                    <Button variant="soft" color="danger" startDecorator={<BlockIcon />} onClick={handleToggleBanStatus}>
-                        Ban
-                    </Button>
-                )
+              profile.is_banned ? (
+                <Button variant="soft" color="success" startDecorator={<CheckCircleOutlineIcon />} onClick={handleToggleBanStatus}>
+                  Unban
+                </Button>
+              ) : (
+                <Button variant="soft" color="danger" startDecorator={<BlockIcon />} onClick={handleToggleBanStatus}>
+                  Ban
+                </Button>
+              )
             )}
           </Stack>
         </Box>
-        <Divider sx={{ my: 2 }}/>
+        <Divider sx={{ my: 2 }} />
         <Typography level="body-lg">{profile.description || 'No description provided.'}</Typography>
       </Sheet>
     </Box>
