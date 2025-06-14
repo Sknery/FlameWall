@@ -185,4 +185,51 @@ export class FriendshipsService {
 
     return !!friendship; // Вернет true, если дружба найдена, иначе false
   }
+
+   async sendRequestFromPlugin(requesterUuid: string, receiverName: string): Promise<Friendship> {
+    const requester = await this.usersRepository.findOneBy({ minecraft_uuid: requesterUuid });
+    const receiver = await this.usersRepository.findOneBy({ minecraft_username: receiverName });
+
+    if (!requester || !receiver) {
+      throw new NotFoundException('One of the players is not linked to a website account.');
+    }
+    // Используем уже существующий метод для отправки запроса
+    return this.sendRequest(requester.id, receiver.id);
+  }
+
+  // --- НОВЫЙ МЕТОД ДЛЯ ПЛАГИНА ---
+  async removeFriendFromPlugin(removerUuid: string, friendToRemoveName: string): Promise<void> {
+    const remover = await this.usersRepository.findOneBy({ minecraft_uuid: removerUuid });
+    const friendToRemove = await this.usersRepository.findOneBy({ minecraft_username: friendToRemoveName });
+
+    if (!remover || !friendToRemove) {
+      throw new NotFoundException('One of the players is not linked to a website account.');
+    }
+
+    const friendship = await this.friendshipsRepository.findOne({
+        where: [
+            { requester_id: remover.id, receiver_id: friendToRemove.id, status: FriendStatuses.ACCEPTED },
+            { requester_id: friendToRemove.id, receiver_id: remover.id, status: FriendStatuses.ACCEPTED },
+        ]
+    });
+
+    if (!friendship) {
+        throw new NotFoundException('Friendship not found.');
+    }
+
+    // Используем уже существующий метод для удаления
+    return this.removeFriend(friendship.id, remover.id);
+  }
+
+  // --- НОВЫЙ МЕТОД ДЛЯ ПЛАГИНА ---
+  async listFriendsForPlugin(playerUuid: string): Promise<string[]> {
+    const user = await this.usersRepository.findOneBy({ minecraft_uuid: playerUuid });
+    if (!user) {
+      throw new NotFoundException('Player is not linked to a website account.');
+    }
+
+    const friendsWithData = await this.listFriends(user.id);
+    // Возвращаем только массив никнеймов, как и ожидает плагин
+    return friendsWithData.map(f => f.user.minecraft_username || f.user.username);
+  }
 }

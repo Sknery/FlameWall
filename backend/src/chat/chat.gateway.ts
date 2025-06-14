@@ -144,11 +144,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     // Отправляем в игру
-    if (recipient.is_minecraft_online && recipient.minecraft_uuid) {
+ if (recipient.is_minecraft_online && recipient.minecraft_uuid) {
         this.logger.log(`Forwarding message from ${sender.username} to Minecraft player ${recipient.username}`);
         this.server.to('minecraft-plugins').emit('webPrivateMessage', {
             recipientUuid: recipient.minecraft_uuid,
-            senderUsername: sender.username,
+            // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+            senderUsername: sender.minecraft_username || sender.username,
             content: data.content,
         });
     }
@@ -189,11 +190,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(`user-${recipient.id}`).emit('newMessage', savedMessage);
 
       // 2. Проверяем, онлайн ли получатель в игре, чтобы переслать ему сообщение
-      if (recipient.is_minecraft_online && recipient.minecraft_uuid) {
+    if (recipient.is_minecraft_online && recipient.minecraft_uuid) {
         this.logger.log(`Forwarding in-game message from ${sender.username} to Minecraft player ${recipient.username}`);
         this.server.to('minecraft-plugins').emit('webPrivateMessage', {
           recipientUuid: recipient.minecraft_uuid,
-          senderUsername: sender.minecraft_username || sender.username, // Отправляем игровое имя отправителя, если есть
+          // --- И ИЗМЕНЕНИЕ ЗДЕСЬ ---
+          senderUsername: sender.minecraft_username || sender.username,
           content: data.content,
         });
       }

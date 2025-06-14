@@ -2,27 +2,8 @@
 
 websocket-url: "http://localhost:3000"
 plugin-secret-key: "your_super_secret_and_long_string_12345"
+api-base-url: "http://localhost:3000"
 
-# Rules for intercepting commands.
-# You can define any command structure using regular expressions.
-# Key components:
-# (?<recipient>\S+) - This is a named capturing group for the recipient's name. \S+ means "one or more non-space characters".
-# (?<message>.+)    - This is a named capturing group for the message content. .+ means "one or more of any character".
-intercept-rules:
-  # Rule for standard commands like /msg, /tell, /w
-  - command-aliases: ["msg", "tell", "w", "m", "pm"]
-    type: "direct"
-    # This pattern matches: /<command> <one_word_recipient> <rest_is_message>
-    pattern: '^\S+ (?<recipient>\S+) (?<message>.+)$'
-
-  # Rule for standard reply commands like /r, /reply
-  - command-aliases: ["r", "reply"]
-    type: "reply"
-    # This pattern matches: /<command> <rest_is_message>
-    pattern: '^\S+ (?<message>.+)$'
-
-  # --- EXAMPLE of a convoluted command ---
-  # This is an example for a custom command like: /custompm --to PlayerName --text "This is the message"
-  # - command-aliases: ["custompm"]
-  #   type: "direct"
-  #   pattern: '^\S+ --to (?<recipient>\S+) --text "(?<message>.+)"$'
+# Should the bridge send its own in-game notification for private messages received from the website?
+# This is useful on servers without other chat formatting plugins.
+display-web-messages-in-game: true

@@ -16,31 +16,42 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.HoverEvent;
+import net.md_5.bungee.api.chat.TextComponent;
+import net.md_5.bungee.api.chat.hover.content.Text;
+
 public final class BridgePlugin extends JavaPlugin {
 
     private Socket socket;
     private PrivateMessageManager messageManager;
     // Теперь храним полный список правил
     private List<Map<?, ?>> interceptRules;
+    private ApiClient apiClient; // <-- ДОБАВЛЕНО
 
     @Override
     public void onEnable() {
         getLogger().info("FlameWallBridge is enabling...");
         this.saveDefaultConfig();
         this.reloadConfig();
+
         this.messageManager = new PrivateMessageManager();
+        this.apiClient = new ApiClient(this); // <-- ДОБАВЛЕНО
 
-        // Загружаем правила из конфига
-        this.interceptRules = getConfig().getMapList("intercept-rules");
-        getLogger().info("Loaded " + interceptRules.size() + " message interception rules.");
+        // --- РЕГИСТРИРУЕМ НАШ НОВЫЙ ЕДИНЫЙ ОБРАБОТЧИК ---
+        FlameCommand flameCommand = new FlameCommand(this);
+        getCommand("flame").setExecutor(flameCommand);
+        getCommand("flame").setTabCompleter(flameCommand); // Регистрируем автодополнение
 
-        this.getCommand("link").setExecutor(new LinkCommand(this));
-        // Мы больше не регистрируем команды /msg и /r, так как только перехватываем их
+        // Регистрируем остальные команды и слушатели
+        getCommand("link").setExecutor(new LinkCommand(this));
+        // ... (если есть fwb_syncfriends, он остается здесь) ...
 
         Bukkit.getPluginManager().registerEvents(new PlayerConnectionListener(this), this);
         connectToWebSocket();
     }
 
+    public ApiClient getApiClient() { return apiClient; } // <-- ДОБАВЛЕНО
     public PrivateMessageManager getMessageManager() { return messageManager; }
     public List<Map<?, ?>> getInterceptRules() { return interceptRules; }
 
@@ -113,6 +124,11 @@ public final class BridgePlugin extends JavaPlugin {
 
     private void handleWebMessage(JSONObject data) {
         Bukkit.getScheduler().runTask(this, () -> {
+            // Проверяем настройку в конфиге перед отправкой сообщения
+            if (!getConfig().getBoolean("display-web-messages-in-game", true)) {
+                return;
+            }
+
             try {
                 String recipientUuid = data.getString("recipientUuid");
                 String senderUsername = data.getString("senderUsername");
@@ -120,9 +136,30 @@ public final class BridgePlugin extends JavaPlugin {
 
                 Player recipientPlayer = Bukkit.getPlayer(UUID.fromString(recipientUuid));
                 if (recipientPlayer != null && recipientPlayer.isOnline()) {
-                    recipientPlayer.sendMessage(
-                            ChatColor.GRAY + "From " + senderUsername + ": " + content
+
+                    // --- НАЧАЛО НОВОЙ ЛОГИКИ ---
+
+                    // 1. Создаем основной текст сообщения
+                    TextComponent messageComponent = new TextComponent(
+                            ChatColor.GRAY + "[WEB] " + senderUsername + " » " + content
                     );
+
+                    // 2. Создаем действие при клике: подставить команду в чат
+                    messageComponent.setClickEvent(new ClickEvent(
+                            ClickEvent.Action.SUGGEST_COMMAND,
+                            "/flame msg " + senderUsername + " " // Используем /flame msg
+                    ));
+
+                    // 3. Создаем подсказку при наведении
+                    messageComponent.setHoverEvent(new HoverEvent(
+                            HoverEvent.Action.SHOW_TEXT,
+                            new Text(ChatColor.AQUA + "Нажмите, чтобы ответить игроку " + senderUsername)
+                    ));
+
+                    // 4. Отправляем интерактивное сообщение игроку
+                    recipientPlayer.spigot().sendMessage(messageComponent);
+
+                    // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
                 }
             } catch (Exception e) {
                 getLogger().warning("Could not parse webPrivateMessage from backend: " + data.toString());
