@@ -1,9 +1,0 @@
-# FlameWallBridge Configuration
-
-websocket-url: "http://localhost:3000"
-plugin-secret-key: "your_super_secret_and_long_string_12345"
-api-base-url: "http://localhost:3000"
-
-# Should the bridge send its own in-game notification for private messages received from the website?
-# This is useful on servers without other chat formatting plugins.
-display-web-messages-in-game: true
