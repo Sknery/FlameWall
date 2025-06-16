@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prod
+    container_name: flamewall_backend_prod
+    restart: unless-stopped
+    env_file: ./.env
+    networks:
+      - flamewall_net
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.prod
+    container_name: flamewall_frontend_prod
+    restart: unless-stopped
+    networks:
+      - flamewall_net
+
+  db:
+    image: postgres:15
+    container_name: flamewall_db_prod
+    restart: unless-stopped
+    env_file: ./.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - flamewall_net
+
+  nginx:
+    image: nginx:alpine
+    container_name: flamewall_nginx_proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - flamewall_net
+
+volumes:
+  postgres_data:
+
+networks:
+  flamewall_net:
+    driver: bridge

@@ -1,44 +1,37 @@
-version: '3.8'
-
 services:
+  # Фронтенд больше не выставляет свой порт наружу.
+  # С ним будет общаться только Nginx внутри сети Docker.
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: flamewall_frontend
+    container_name: flamewall_frontend_dev # Назовем его иначе, чтобы не было конфликтов
     ports:
-      - "5173:5173"
+      - "5173:3000" # <-- ВАЖНО: Пробрасываем порт 3000 из контейнера на порт 5173 вашего компьютера
     volumes:
-      - ./frontend:/app
+      - ./frontend:/app # <-- ВАЖНО: Связываем папку с кодом для live-reload
       - /app/node_modules
-    env_file:
-      - ./.env
     restart: unless-stopped
     networks:
       - flamewall_net
-    # --- ИЗМЕНЕНО: Убираем entrypoint и используем прямую команду ---
-    command: sh -c "npm install --silent && npm run start"
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      target: development
-    container_name: flamewall_backend
+    container_name: flamewall_backend_dev
     ports:
-      - "${API_PORT:-3000}:${API_PORT:-3000}"
-    depends_on:
-      - db
+      - "3001:3000" # <-- ВОТ РЕШЕНИЕ: внутренний порт 3000 "смотрит" наружу через порт 3001
     volumes:
       - ./backend:/usr/src/app
-      - /usr/src/app/node_modules 
+      - /usr/src/app/node_modules
     env_file:
-      - ./.env
+      - ./.env # Убедитесь, что эта строка есть
+    depends_on:
+      - db
     restart: unless-stopped
     networks:
       - flamewall_net
-    # --- ИЗМЕНЕНО: Убираем entrypoint и используем прямую команду ---
-    command: sh -c "npm install --silent && npm run start:dev"
 
   db:
     image: postgres:15
@@ -46,12 +39,11 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env
-    ports:
-      - "${DB_PORT:-5432}:5432" 
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - flamewall_net
+    # ports: - "${DB_PORT:-5432}:5432"
 
   pgadmin:
     image: dpage/pgadmin4
@@ -65,6 +57,22 @@ services:
       - db
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - flamewall_net
+
+  nginx:
+    image: nginx:alpine
+    container_name: flamewall_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"     # Открываем стандартный HTTP порт
+      - "443:443"   # Открываем стандартный HTTPS порт
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf # Подключаем наш файл конфигурации
+      # В будущем здесь будут SSL-сертификаты
+    depends_on:
+      - frontend
+      - backend
     networks:
       - flamewall_net
 
