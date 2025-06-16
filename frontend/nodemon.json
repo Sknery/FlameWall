@@ -1,8 +1,0 @@
-{
-  "watch": ["src"],
-  "ext": "js,jsx,ts,tsx,css,json",
-  "ignore": ["src/**/*.spec.ts"],
-  "exec": "npm run start:react",
-  "legacyWatch": true,
-  "signal": "SIGINT"
-}
