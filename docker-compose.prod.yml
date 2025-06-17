@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile.prod
+    image: maximceahur/flamewall-backend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_backend_prod
     restart: unless-stopped
     env_file: ./.env
@@ -17,6 +18,7 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile.prod
+    image: maximceahur/flamewall-backend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_frontend_prod
     restart: unless-stopped
     networks:
