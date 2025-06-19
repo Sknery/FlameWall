@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     env_file: ./.env
     volumes:
-      - ./uploads:/usr/src/app/uploads 
+      - ./uploads:/usr/src/app/uploads
     networks:
       - flamewall_net
     depends_on:
@@ -20,7 +20,9 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile.prod
-    image: maximceahur/flamewall-backend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+      args:
+        - REACT_APP_FULL_API_URL=${REACT_APP_FULL_API_URL}
+    image: maximceahur/flamewall-frontend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_frontend_prod
     restart: unless-stopped
     networks:
@@ -45,6 +47,11 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./uploads:/usr/share/nginx/html/uploads:ro
+      # Сертификаты (чтобы Nginx их нашел)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # Файлы для проверки Certbot (для авто-обновления)
+      - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       - frontend
       - backend
