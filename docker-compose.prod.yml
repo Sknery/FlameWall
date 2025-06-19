@@ -9,6 +9,8 @@ services:
     container_name: flamewall_backend_prod
     restart: unless-stopped
     env_file: ./.env
+    volumes:
+      - ./uploads:/usr/src/app/uploads 
     networks:
       - flamewall_net
     depends_on:
