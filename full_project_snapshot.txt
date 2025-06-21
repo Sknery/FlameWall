@@ -1,5 +1,5 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Sat Jun 21 12:14:32 EEST 2025
+PROJECT SNAPSHOT CREATED ON: Sat Jun 21 13:59:52 EEST 2025
 ===============================================
 
 
@@ -2875,11 +2875,15 @@ export class CreatePostDto {
 
 --- START FILE: backend/src/posts/dto/find-all-posts.ts ---
 
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+// backend/src/posts/dto/find-all-posts.ts
+
+// --- ИЗМЕНЕНО: Добавляем IsInt, Min, Max и Type ---
+import { IsEnum, IsOptional, IsString, IsInt, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class FindAllPostsDto {
   @IsOptional()
-  @IsEnum(['created_at', 'score']) // score - это будет наш расчетный рейтинг поста
+  @IsEnum(['created_at', 'score'])
   sortBy?: 'created_at' | 'score' = 'created_at';
 
   @IsOptional()
@@ -2889,6 +2893,20 @@ export class FindAllPostsDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  // --- НОВЫЕ ПОЛЯ ДЛЯ ПАГИНАЦИИ ---
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 10;
 }
 --- END FILE: backend/src/posts/dto/find-all-posts.ts ---
 
@@ -3025,8 +3043,8 @@ export class PostsController {
   @Get()
   @ApiOperation({ summary: 'Get all posts' })
   @ApiResponse({ status: 200, description: 'Return all posts.', type: [PostEntity] })
-  // --- ИЗМЕНЕНО: Принимаем query-параметры ---
-  findAll(@Query(new ValidationPipe({ transform: true, forbidNonWhitelisted: true })) query: FindAllPostsDto): Promise<PostEntity[]> {
+  // --- ИЗМЕНЕНО: Уточняем возвращаемый тип ---
+  findAll(@Query(new ValidationPipe({ transform: true, forbidNonWhitelisted: true })) query: FindAllPostsDto) {
     return this.postsService.findAll(query);
   }
 
@@ -3137,17 +3155,16 @@ export class PostsService {
     return this.postsRepository.save(post);
   }
 
-  async findAll(queryDto: FindAllPostsDto): Promise<any[]> {
-    const { sortBy, order, search } = queryDto;
+ async findAll(queryDto: FindAllPostsDto): Promise<{ data: any[], total: number }> {
+    const { sortBy, order, search, page = 1, limit = 10 } = queryDto;
+
     const queryBuilder = this.postsRepository.createQueryBuilder('post');
 
     queryBuilder
       .leftJoinAndSelect('post.author', 'author')
-      // --- ДОБАВЛЕНО: Явно подгружаем связь автора с его рангом ---
       .leftJoinAndSelect('author.rank', 'rank')
       .addSelect('COALESCE(SUM(votes.value), 0)', 'score')
       .leftJoin('post.votes', 'votes')
-      // --- ИЗМЕНЕНО: Добавляем rank.id в группировку, чтобы избежать ошибок ---
       .groupBy('post.id, author.id, rank.id');
 
     if (search) {
@@ -3160,14 +3177,29 @@ export class PostsService {
       queryBuilder.orderBy('post.created_at', order);
     }
 
-    const posts = await queryBuilder.getRawAndEntities();
+    // Добавляем пагинацию
+    queryBuilder.take(limit);
+    queryBuilder.skip((page - 1) * limit);
 
-    return posts.entities.map((post, index) => {
-      return {
-        ...post,
-        score: parseInt(posts.raw[index].score, 10),
-      };
+    // Используем getManyAndCount для получения постов и их общего количества
+    const [entities, total] = await queryBuilder.getManyAndCount();
+    
+    // Получаем "сырые" данные для поля score, так как getMany не вернет его
+    const rawEntities = await queryBuilder.getRawMany();
+
+    // Соединяем сущности с рассчитанным полем score
+    const postsWithScores = entities.map(post => {
+        const rawPost = rawEntities.find(raw => raw.post_id === post.id);
+        return {
+            ...post,
+            score: rawPost ? parseInt(rawPost.score, 10) : 0,
+        };
     });
+
+    return {
+      data: postsWithScores,
+      total: total,
+    };
   }
 
 
@@ -3536,11 +3568,15 @@ export class RanksController {
     return this.ranksService.update(id, updateRankDto);
   }
 
-  @Delete(':id')
+ @Delete(':id')
   @Roles(SystemRanks.ADMIN.power_level)
   @ApiOperation({ summary: 'Delete a rank (Admin only)' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.ranksService.remove(id);
+  // --- ИЗМЕНЕНО: Добавляем @Body для получения ID миграции ---
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('migrationRankId') migrationRankId?: number // Это поле будет необязательным
+  ) {
+    return this.ranksService.remove(id, migrationRankId);
   }
 }
 --- END FILE: backend/src/ranks/ranks.controller.ts ---
@@ -3556,9 +3592,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { RanksService } from './ranks.service';
 import { RanksController } from './ranks.controller';
 import { Rank } from './entities/rank.entity';
+import { User } from 'src/users/entities/user.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Rank])],
+  imports: [TypeOrmModule.forFeature([Rank, User])],
   controllers: [RanksController],
   providers: [RanksService],
   exports: [RanksService] // Экспортируем сервис для использования в других модулях
@@ -3574,10 +3611,11 @@ export class RanksModule {}
 
 import { Injectable, OnModuleInit, NotFoundException, ConflictException, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Rank } from './entities/rank.entity';
 import { CreateRankDto } from './dto/create-rank.dto';
 import { UpdateRankDto } from './dto/update-rank.dto';
+import { User } from 'src/users/entities/user.entity';
 
 // Определяем наши "цементированные" ранги
 const a = 1;
@@ -3593,7 +3631,10 @@ export class RanksService implements OnModuleInit {
   constructor(
     @InjectRepository(Rank)
     private ranksRepository: Repository<Rank>,
-  ) {}
+    @InjectRepository(User)
+    private usersRepository: Repository<User>,
+    private dataSource: DataSource,
+  ) { }
 
   // Этот метод выполнится при старте приложения
   async onModuleInit() {
@@ -3612,16 +3653,16 @@ export class RanksService implements OnModuleInit {
 
   async create(createRankDto: CreateRankDto): Promise<Rank> {
     const existingRank = await this.ranksRepository.findOne({
-        where: [
-            { name: createRankDto.name },
-            { power_level: createRankDto.power_level }
-        ]
+      where: [
+        { name: createRankDto.name },
+        { power_level: createRankDto.power_level }
+      ]
     });
 
     if (existingRank) {
-        throw new ConflictException('Rank with this name or power level already exists.');
+      throw new ConflictException('Rank with this name or power level already exists.');
     }
-    
+
     const rank = this.ranksRepository.create(createRankDto);
     return this.ranksRepository.save(rank);
   }
@@ -3637,35 +3678,77 @@ export class RanksService implements OnModuleInit {
     }
     return rank;
   }
-  
+
   async findDefaultRank(): Promise<Rank> {
-      const rank = await this.ranksRepository.findOneBy({ id: SystemRanks.DEFAULT.id });
-      if (!rank) {
-        // Если ранг по умолчанию не найден в БД, это критическая ошибка.
-        // Приложение не сможет создавать новых пользователей.
-        throw new InternalServerErrorException('Default rank not found in database. Seeding may have failed.');
-      }
-      return rank;
+    const rank = await this.ranksRepository.findOneBy({ id: SystemRanks.DEFAULT.id });
+    if (!rank) {
+      // Если ранг по умолчанию не найден в БД, это критическая ошибка.
+      // Приложение не сможет создавать новых пользователей.
+      throw new InternalServerErrorException('Default rank not found in database. Seeding may have failed.');
+    }
+    return rank;
   }
 
   async update(id: number, updateRankDto: UpdateRankDto): Promise<Rank> {
     const rank = await this.findOne(id);
-    
+
     // Системные ранги можно только переименовывать и менять цвет
     if (!rank.is_removable) {
-        delete updateRankDto.power_level; // Запрещаем менять power_level
+      delete updateRankDto.power_level; // Запрещаем менять power_level
     }
 
     Object.assign(rank, updateRankDto);
     return this.ranksRepository.save(rank);
   }
 
-  async remove(id: number): Promise<void> {
-    const rank = await this.findOne(id);
-    if (!rank.is_removable) {
+  async remove(id: number, migrationRankId?: number): Promise<void> {
+    // Используем транзакцию, чтобы оба действия (обновление пользователей и удаление ранга)
+    // выполнились успешно, либо не выполнились вовсе.
+    return this.dataSource.transaction(async (manager) => {
+      const rankToRemove = await manager.findOneBy(Rank, { id });
+
+      if (!rankToRemove) {
+        throw new NotFoundException(`Rank with ID ${id} not found.`);
+      }
+      if (!rankToRemove.is_removable) {
         throw new ConflictException('Cannot delete a system rank.');
-    }
-    await this.ranksRepository.remove(rank);
+      }
+
+      // Находим всех пользователей с этим рангом
+      const usersWithRank = await manager.find(User, { where: { rank_id: id } });
+
+      // Если пользователей с таким рангом нет, просто удаляем его
+      if (usersWithRank.length === 0) {
+        await manager.remove(Rank, rankToRemove);
+        return;
+      }
+
+      // Если пользователи есть, но не указан ранг для миграции, выбрасываем ошибку.
+      // Фронтенд поймает эту ошибку и покажет модальное окно.
+      if (!migrationRankId) {
+        throw new ConflictException(`Rank is currently assigned to ${usersWithRank.length} user(s). Please provide a migration rank.`);
+      }
+
+      // Проверяем, существует ли ранг, на который мы хотим перевести пользователей
+      const migrationRank = await manager.findOneBy(Rank, { id: migrationRankId });
+      if (!migrationRank) {
+        throw new NotFoundException(`Migration rank with ID ${migrationRankId} not found.`);
+      }
+
+      // Запрещаем мигрировать на тот же ранг, который удаляем
+      if (migrationRank.id === rankToRemove.id) {
+        throw new ConflictException('Cannot migrate users to the same rank that is being deleted.');
+      }
+
+      // Собираем ID пользователей для обновления
+      const userIdsToUpdate = usersWithRank.map(user => user.id);
+
+      // Массово обновляем ранг для всех этих пользователей
+      await manager.update(User, userIdsToUpdate, { rank_id: migrationRankId });
+
+      // Наконец, удаляем старый ранг
+      await manager.remove(Rank, rankToRemove);
+    });
   }
 }
 --- END FILE: backend/src/ranks/ranks.service.ts ---
@@ -3876,7 +3959,8 @@ export class CreateUserDto {
 
 --- START FILE: backend/src/users/dto/find-all-users.dto.ts ---
 
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer'; // <-- ДОБАВЛЕНО\
 
 export class FindAllUsersDto {
   @IsOptional()
@@ -3890,6 +3974,21 @@ export class FindAllUsersDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  // --- НОВОЕ ПОЛЕ: Номер страницы ---
+  @IsOptional()
+  @Type(() => Number) // Преобразуем query-параметр из строки в число
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  // --- НОВОЕ ПОЛЕ: Лимит элементов на странице ---
+  @IsOptional()
+  @Type(() => Number) // Преобразуем query-параметр из строки в число
+  @IsInt()
+  @Min(1)
+  @Max(100) // Установим максимальный лимит, чтобы избежать злоупотреблений
+  limit?: number = 10;
 }
 --- END FILE: backend/src/users/dto/find-all-users.dto.ts ---
 
@@ -4126,7 +4225,7 @@ export class User {
 
 --- START FILE: backend/src/users/users.controller.ts ---
 
-import { 
+import {
   Controller, Get, Post, Body, Param, UsePipes, ValidationPipe, Patch, UseGuards, Request, Delete, HttpCode, HttpStatus,
   UseInterceptors, UploadedFile, ParseFilePipe, MaxFileSizeValidator, Logger, BadRequestException,
   Query,
@@ -4157,14 +4256,14 @@ const generateUniqueFilename = (req, file, callback) => {
 @Controller('users')
 export class UsersController {
 
-    private readonly logger = new Logger(UsersController.name);
+  private readonly logger = new Logger(UsersController.name);
 
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a new user (for future admin use)' })
   @ApiResponse({ status: 201, description: 'User created successfully.', type: User })
-  @ApiResponse({ status: 409, description: 'Conflict. Email already exists.'})
+  @ApiResponse({ status: 409, description: 'Conflict. Email already exists.' })
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
   create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
@@ -4177,7 +4276,7 @@ export class UsersController {
   // --- ИЗМЕНЕНО: Обновляем тип в декораторе Swagger ---
   @ApiResponse({ status: 200, description: 'Profile updated successfully.', type: UpdateProfileResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 409, description: 'Conflict. Profile slug is already in use.'})
+  @ApiResponse({ status: 409, description: 'Conflict. Profile slug is already in use.' })
   // --- ИЗМЕНЕНО: Обновляем тип возвращаемого значения ---
   updateMyProfile(@Request() req, @Body() updateUserDto: UpdateUserDto): Promise<{ user: PublicUser; access_token: string; }> {
     const userId = req.user.userId;
@@ -4199,13 +4298,15 @@ export class UsersController {
 
   @Get()
   @ApiOperation({ summary: 'Get all users' })
-  @ApiResponse({ status: 200, description: 'Return all users.', type: [User] })
-  // --- ИЗМЕНЕНО: Принимаем query-параметры ---
-  findAll(@Query(new ValidationPipe({ transform: true, forbidNonWhitelisted: true })) query: FindAllUsersDto) {
+  // --- ИЗМЕНЕНО: Уточняем тип возвращаемых данных для Swagger и TypeScript ---
+  @ApiResponse({ status: 200, description: 'Return a paginated list of users.' })
+  findAll(
+    @Query(new ValidationPipe({ transform: true, forbidNonWhitelisted: true })) query: FindAllUsersDto
+  ): Promise<{ data: PublicUser[], total: number }> { // <-- Уточняем тип
     return this.usersService.findAll(query);
   }
 
- @Get(':identifier')
+  @Get(':identifier')
   @ApiOperation({ summary: 'Get a single user by ID or slug' })
   @ApiResponse({ status: 200, description: 'Return a single user.', type: User })
   @ApiResponse({ status: 404, description: 'User not found.' })
@@ -4216,7 +4317,7 @@ export class UsersController {
     return this.usersService.findOne(queryIdentifier);
   }
 
-@Post('me/avatar')
+  @Post('me/avatar')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @UseInterceptors(FileInterceptor('file', {
@@ -4245,8 +4346,8 @@ export class UsersController {
     // --- ДОБАВЛЕНО: Ручная, надежная проверка MIME-типа ---
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
-        this.logger.error(`Invalid file type uploaded: ${file.mimetype}`);
-        throw new BadRequestException(`Invalid file type. Only JPEG, PNG, and GIF are allowed.`);
+      this.logger.error(`Invalid file type uploaded: ${file.mimetype}`);
+      throw new BadRequestException(`Invalid file type. Only JPEG, PNG, and GIF are allowed.`);
     }
 
     const userId = req.user.userId;
@@ -4281,8 +4382,8 @@ export class UsersController {
     // --- ДОБАВЛЕНО: Ручная, надежная проверка MIME-типа ---
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
-        this.logger.error(`Invalid file type uploaded: ${file.mimetype}`);
-        throw new BadRequestException(`Invalid file type. Only JPEG, PNG, and GIF are allowed.`);
+      this.logger.error(`Invalid file type uploaded: ${file.mimetype}`);
+      throw new BadRequestException(`Invalid file type. Only JPEG, PNG, and GIF are allowed.`);
     }
 
     const userId = req.user.userId;
@@ -4477,29 +4578,38 @@ export class UsersService {
     return result as PublicUser;
   }
 
-   async findAll(queryDto: FindAllUsersDto): Promise<PublicUser[]> {
-    const { search, order = 'DESC', sortBy: requestedSortBy = 'first_login' } = queryDto;
+    async findAll(queryDto: FindAllUsersDto): Promise<{ data: PublicUser[], total: number }> {
+    const { search, order = 'DESC', sortBy: requestedSortBy = 'first_login', page = 1, limit = 10 } = queryDto;
+
     const allowedSortFields: (keyof User)[] = ['username', 'reputation_count', 'first_login'];
     const sortBy = allowedSortFields.includes(requestedSortBy as keyof User) ? requestedSortBy : 'first_login';
 
     const findOptions: FindManyOptions<User> = {
-      // --- ДОБАВЛЕНО: Явно подгружаем ранги для каждого пользователя в списке ---
       relations: ['rank'],
       order: {
         [sortBy]: order,
       },
+      take: limit, // <-- Взять 'limit' записей
+      skip: (page - 1) * limit, // <-- Пропустить (page - 1) * limit записей
     };
 
     if (search) {
       findOptions.where = { username: ILike(`%${search}%`) };
     }
 
-    const users = await this.usersRepository.find(findOptions);
+    // Используем findAndCount, который возвращает массив с данными и общее количество
+    const [users, total] = await this.usersRepository.findAndCount(findOptions);
 
-    return users.map(user => {
+    const publicUsers = users.map(user => {
       const { password_hash, validatePassword, deleted_at, ...result } = user;
       return result as PublicUser;
     });
+
+    // Возвращаем объект с данными и общим количеством
+    return {
+      data: publicUsers,
+      total: total,
+    };
   }
   
   async findOne(identifier: string | number): Promise<PublicUser> {
@@ -4905,53 +5015,61 @@ import AdminPostsPage from './pages/AdminPostsPage'; // <-- ДОБАВЬТЕ Э�
 import CreateNewsPage from './pages/CreateNewsPage'; // <-- ДОБАВЬТЕ ЭТО
 import LinkMinecraftPage from './pages/LinkMinecraftPage'; // <-- ДОБАВЬТЕ ЭТО
 import AdminRanksPage from './pages/AdminRanksPage';
+import { ThemeProvider as MuiThemeProvider, createTheme as createMuiTheme } from '@mui/material/styles';
+
 
 import axios from 'axios'; // <-- Убедитесь, что axios импортирован
 
 axios.defaults.baseURL = process.env.REACT_APP_API_BASE_URL;
 
+const muiTheme = createMuiTheme({
+  palette: {
+    mode: 'dark',
+  },
+});
 
 function App() {
   return (
-    <CssVarsProvider theme={monochromeDarkTheme} defaultMode="dark">
-      <CssBaseline />
-      <AuthProvider>
-        <ChatProvider>
-          <NotificationsProvider>
-            <Router>
-              <Toaster position="bottom-right" toastOptions={{ duration: 5000 }} />
+    <MuiThemeProvider theme={muiTheme}>
+      <CssVarsProvider theme={monochromeDarkTheme} defaultMode="dark">
+        <CssBaseline />
+        <AuthProvider>
+          <ChatProvider>
+            <NotificationsProvider>
+              <Router>
+                <Toaster position="bottom-right" toastOptions={{ duration: 5000 }} />
+                <Routes>
+                  <Route path="/" element={<MainLayout />}>
+                    <Route index element={<LandingPage />} />
+                    <Route path="news" element={<NewsPage />} />
+                    <Route path="posts" element={<PostsPage />} />
+                    <Route path="posts/:postId" element={<SinglePostPage />} />
+                    <Route path="players" element={<PlayersPage />} />
+                    <Route path="users/:userId" element={<PublicProfilePage />} />
+                    <Route path="friends" element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />
+                    <Route path="messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
+                    <Route path="messages/:userId" element={<ProtectedRoute><ConversationPage /></ProtectedRoute>} />
+                    <Route path="posts/new" element={<ProtectedRoute><CreatePostPage /></ProtectedRoute>} />
+                    <Route path="posts/:postId/edit" element={<ProtectedRoute><EditPostPage /></ProtectedRoute>} />
+                    <Route path="/profile/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+                    <Route path="search" element={<SearchPage />} />
+                    <Route path="/admin/users" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+                    <Route path="/admin/news/create" element={<ProtectedRoute><CreateNewsPage /></ProtectedRoute>} />
+                    <Route path="/admin/posts" element={<ProtectedRoute><AdminPostsPage /></ProtectedRoute>} />
+                    <Route path="profile/me" element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} />
+                    <Route path="/profile/link-minecraft" element={<ProtectedRoute><LinkMinecraftPage /></ProtectedRoute>} />
+                    <Route path="/admin/ranks" element={<ProtectedRoute><AdminRanksPage /></ProtectedRoute>} />
+                  </Route>
 
-              <Routes>
-                <Route path="/" element={<MainLayout />}>
-                  <Route index element={<LandingPage />} />
-                  <Route path="news" element={<NewsPage />} />
-                  <Route path="posts" element={<PostsPage />} />
-                  <Route path="posts/:postId" element={<SinglePostPage />} />
-                  <Route path="players" element={<PlayersPage />} />
-                  <Route path="users/:userId" element={<PublicProfilePage />} />
-                  <Route path="friends" element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />
-                  <Route path="messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
-                  <Route path="messages/:userId" element={<ProtectedRoute><ConversationPage /></ProtectedRoute>} />
-                  <Route path="posts/new" element={<ProtectedRoute><CreatePostPage /></ProtectedRoute>} />
-                  <Route path="posts/:postId/edit" element={<ProtectedRoute><EditPostPage /></ProtectedRoute>} />
-                  <Route path="/profile/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-                  <Route path="search" element={<SearchPage />} />
-                  <Route path="/admin/users" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
-                  <Route path="/admin/news/create" element={<ProtectedRoute><CreateNewsPage /></ProtectedRoute>} />
-                  <Route path="/admin/posts" element={<ProtectedRoute><AdminPostsPage /></ProtectedRoute>} />                  
-                  <Route path="profile/me" element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} />
-                  <Route path="/profile/link-minecraft" element={<ProtectedRoute><LinkMinecraftPage /></ProtectedRoute>} />
-                  <Route path="/admin/ranks" element={<ProtectedRoute><AdminRanksPage /></ProtectedRoute>} />
-                </Route>
-
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/register" element={<RegisterPage />} />
-              </Routes>
-            </Router>
-          </NotificationsProvider>
-        </ChatProvider>
-      </AuthProvider>
-    </CssVarsProvider>
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/register" element={<RegisterPage />} />
+                </Routes>
+              </Router>
+            </NotificationsProvider>
+          </ChatProvider>
+        </AuthProvider>
+      </CssVarsProvider>
+    </MuiThemeProvider>
   );
 }
 
@@ -5333,6 +5451,48 @@ const CollapsiblePushSidebar = ({ children }) => {
 
 export default CollapsiblePushSidebar;
 --- END FILE: frontend/src/components/CollapsiblePushSidebar.js ---
+
+
+
+--- START FILE: frontend/src/components/JoyPagination.js ---
+
+import React from 'react';
+import { Box, Button, IconButton, Typography } from '@mui/joy';
+import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+
+function JoyPagination({ count, page, onChange }) {
+  if (count <= 1) {
+    return null; // Не показывать пагинацию, если всего одна страница или меньше
+  }
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+      <IconButton
+        disabled={page === 1}
+        onClick={(e) => onChange(e, page - 1)}
+        variant="outlined"
+        color="neutral"
+      >
+        <KeyboardArrowLeftIcon />
+      </IconButton>
+      <Typography>
+        Page {page} of {count}
+      </Typography>
+      <IconButton
+        disabled={page === count}
+        onClick={(e) => onChange(e, page + 1)}
+        variant="outlined"
+        color="neutral"
+      >
+        <KeyboardArrowRightIcon />
+      </IconButton>
+    </Box>
+  );
+}
+
+export default JoyPagination;
+--- END FILE: frontend/src/components/JoyPagination.js ---
 
 
 
@@ -6011,6 +6171,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import EditIcon from '@mui/icons-material/Edit';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import JoyPagination from '../components/JoyPagination';
 
 // --- Вспомогательная функция для определения цвета текста на цветном фоне ---
 function isColorLight(hexColor) {
@@ -6028,17 +6189,18 @@ function isColorLight(hexColor) {
 function AdminPage() {
     const { authToken } = useAuth();
     const [users, setUsers] = useState([]);
-    // --- ДОБАВЛЕНО: Состояние для хранения списка рангов ---
     const [ranks, setRanks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
 
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(15); // Будем показывать по 15 пользователей
+    const [totalPages, setTotalPages] = useState(0);
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
-    // --- ИЗМЕНЕНО: Храним ID ранга, а не его название ---
     const [selectedRankId, setSelectedRankId] = useState('');
-
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -6047,17 +6209,25 @@ function AdminPage() {
         try {
             const config = {
                 headers: { Authorization: `Bearer ${authToken}` },
-                params: { search: query },
+                // Добавляем параметры пагинации в запрос
+                params: { search: query, page, limit },
             };
             const response = await axios.get(`/api/users`, config);
-            setUsers(response.data);
+
+            // Берем данные из поля 'data'
+            setUsers(response.data.data);
+            // Рассчитываем общее количество страниц
+            setTotalPages(Math.ceil(response.data.total / limit));
+
         } catch (err) {
             setError('Failed to load user data.');
             console.error(err);
         } finally {
             setLoading(false);
         }
-    }, [authToken]);
+        // Обновляем зависимости useCallback
+    }, [authToken, page, limit]);
+
 
     // --- ДОБАВЛЕНО: Функция для получения списка всех рангов ---
     const fetchRanks = useCallback(async () => {
@@ -6073,15 +6243,16 @@ function AdminPage() {
 
 
     useEffect(() => {
-        // При первой загрузке получаем и пользователей, и ранги
-        fetchUsers('');
+        // Запускаем загрузку пользователей и рангов
+        fetchUsers(searchQuery);
         fetchRanks();
-    }, [fetchUsers, fetchRanks]);
+    }, [fetchUsers, fetchRanks, searchQuery]);
 
 
     const handleSearch = (event) => {
         if (event.key === 'Enter') {
-            fetchUsers(searchQuery);
+            setPage(1); // При новом поиске всегда сбрасываем на первую страницу
+            // Обновление searchQuery вызовет нужный useEffect
         }
     };
 
@@ -6092,15 +6263,15 @@ function AdminPage() {
         setIsModalOpen(true);
     };
 
-  const handleSaveChanges = async () => {
+    const handleSaveChanges = async () => {
         if (!selectedUser) return;
         try {
             const config = { headers: { Authorization: `Bearer ${authToken}` } };
-            
+
             // Отправляем объект с правильным именем поля (rank_id) и правильным значением (числом ID)
             await axios.patch(
                 `/api/admin/users/${selectedUser.id}/update`,
-                { rank_id: selectedRankId }, 
+                { rank_id: selectedRankId },
                 config
             );
 
@@ -6204,7 +6375,15 @@ function AdminPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleSearch}
             />
-
+            {!loading && totalPages > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                    <JoyPagination
+                        count={totalPages}
+                        page={page}
+                        onChange={(event, value) => setPage(value)}
+                    />
+                </Box>
+            )}
             {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
                     <CircularProgress />
@@ -6314,7 +6493,15 @@ function AdminPage() {
                     </Sheet>
                 )
             )}
-
+            {totalPages > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+                    <JoyPagination
+                        count={totalPages}
+                        page={page}
+                        onChange={(event, value) => setPage(value)}
+                    />
+                </Box>
+            )}
             <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)}>
                 <ModalDialog>
                     <ModalClose />
@@ -6355,7 +6542,6 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import {
     Box, Typography, Sheet, Table, Input, CircularProgress, Alert, Button, Tooltip, Link, Stack,
-    // --- ИЗМЕНЕНО: Добавляем хуки и компоненты для адаптивного макета ---
     useTheme,
     IconButton,
 } from '@mui/joy';
@@ -6363,6 +6549,8 @@ import { useMediaQuery } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+// --- ШАГ 1: Импортируем наш компонент пагинации ---
+import JoyPagination from '../components/JoyPagination';
 
 function AdminPostsPage() {
     const { authToken } = useAuth();
@@ -6371,35 +6559,49 @@ function AdminPostsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
-
-    // --- ИЗМЕНЕНО: Определяем тип устройства ---
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-    // Логика получения данных и обработчики остаются без изменений
+    // --- ШАГ 2: Добавляем состояния для пагинации ---
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(15);
+    const [totalPages, setTotalPages] = useState(0);
+
+    // --- ШАГ 3: Обновляем функцию загрузки данных ---
     const fetchPosts = useCallback(async (query) => {
         setLoading(true);
         try {
             const config = {
                 headers: { Authorization: `Bearer ${authToken}` },
-                params: { search: query, sortBy: 'created_at', order: 'DESC' },
+                params: {
+                    search: query,
+                    sortBy: 'created_at',
+                    order: 'DESC',
+                    page,
+                    limit
+                },
             };
             const response = await axios.get('/api/posts', config);
-            setPosts(response.data);
+
+            // Правильно обрабатываем новый ответ от API
+            setPosts(response.data.data);
+            setTotalPages(Math.ceil(response.data.total / limit));
+
         } catch (err) {
             setError('Failed to load post data.');
             console.error(err);
         } finally {
             setLoading(false);
         }
-    }, [authToken]);
+    }, [authToken, page, limit]); // Добавляем page и limit в зависимости
 
     useEffect(() => {
-        fetchPosts('');
-    }, [fetchPosts]);
+        fetchPosts(searchQuery);
+    }, [fetchPosts, searchQuery]);
 
     const handleSearch = (event) => {
         if (event.key === 'Enter') {
+            setPage(1); // Сбрасываем на первую страницу при поиске
             fetchPosts(searchQuery);
         }
     };
@@ -6410,6 +6612,7 @@ function AdminPostsPage() {
             await axios.delete(`/api/posts/${postId}`, {
                 headers: { Authorization: `Bearer ${authToken}` },
             });
+            // Перезагружаем данные для текущей страницы
             fetchPosts(searchQuery);
         } catch (err) {
             alert('Failed to delete the post.');
@@ -6425,22 +6628,16 @@ function AdminPostsPage() {
         return <Alert color="danger">{error}</Alert>;
     }
 
-    // --- ИЗМЕНЕНО: Функция для рендера карточки поста на мобильных ---
     const renderPostCard = (post) => (
         <Sheet key={post.id} variant="outlined" sx={{ p: 2, borderRadius: 'sm' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
-                {/* Основная информация о посте */}
                 <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                     <Link
                         component={RouterLink}
                         to={`/posts/${post.id}`}
                         level="title-md"
                         overlay
-                        sx={{
-                            // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-                            // Убираем старые стили и добавляем новые, разрешающие перенос
-                            wordBreak: 'break-word', // или 'break-all'
-                        }}
+                        sx={{ wordBreak: 'break-word' }}
                     >
                         {post.title}
                     </Link>
@@ -6448,8 +6645,6 @@ function AdminPostsPage() {
                         by {post.author?.username || 'N/A'} on {new Date(post.created_at).toLocaleDateString()}
                     </Typography>
                 </Box>
-
-                {/* Кнопки действий */}
                 <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
                     <Tooltip title="Edit Post" variant="outlined" size="sm">
                         <IconButton size="sm" variant="plain" color="neutral" onClick={() => handleEditPost(post.id)}>
@@ -6465,7 +6660,7 @@ function AdminPostsPage() {
             </Box>
         </Sheet>
     );
-    
+
     return (
         <Box>
             <Typography level="h1" component="h1" sx={{ mb: 3 }}>
@@ -6480,67 +6675,80 @@ function AdminPostsPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleSearch}
             />
-
+            {!loading && totalPages > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                    <JoyPagination
+                        count={totalPages}
+                        page={page}
+                        onChange={(event, value) => setPage(value)}
+                    />
+                </Box>
+            )}
             {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
                     <CircularProgress />
                 </Box>
             ) : (
-                isMobile ? (
-                    <Stack spacing={1.5}>
-                        {posts.map(post => renderPostCard(post))}
-                    </Stack>
-                ) : (
-                    // Десктопная версия таблицы остается без изменений
-                    <Sheet variant="outlined" sx={{ borderRadius: 'sm', overflow: 'auto' }}>
-                        <Table
-                            hoverRow
-                            sx={{
-                                '& thead th': { verticalAlign: 'middle' },
-                                '& tbody td': { verticalAlign: 'middle' },
-                                tableLayout: 'fixed'
-                            }}
-                        >
-                            <thead>
-                                <tr>
-                                    <th style={{ width: '60px' }}>ID</th>
-                                    <th style={{ width: '40%' }}>Title</th>
-                                    <th style={{ width: '20%' }}>Author</th>
-                                    <th style={{ width: '15%' }}>Created At</th>
-                                    <th style={{ width: '15%' }}>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {posts.map((post) => (
-                                    <tr key={post.id}>
-                                        <td>{post.id}</td>
-                                        <td>
-                                            <Link component={RouterLink} to={`/posts/${post.id}`} sx={{ wordBreak: 'break-all' }}>
-                                                {post.title}
-                                            </Link>
-                                        </td>
-                                        <td>{post.author?.username || 'N/A'}</td>
-                                        <td>{new Date(post.created_at).toLocaleDateString()}</td>
-                                        <td>
-                                            <Stack direction="row" spacing={1}>
-                                                <Tooltip title="Edit Post" variant="outlined" size="sm">
-                                                    <IconButton size="sm" variant="outlined" color="neutral" onClick={() => handleEditPost(post.id)}>
-                                                        <EditIcon />
-                                                    </IconButton>
-                                                </Tooltip>
-                                                <Tooltip title="Delete Post" variant="outlined" size="sm">
-                                                    <IconButton size="sm" variant="soft" color="danger" onClick={() => handleDeletePost(post.id)}>
-                                                        <DeleteForeverIcon />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </Stack>
-                                        </td>
+                <>
+                    {isMobile ? (
+                        <Stack spacing={1.5}>
+                            {posts.map(post => renderPostCard(post))}
+                        </Stack>
+                    ) : (
+                        <Sheet variant="outlined" sx={{ borderRadius: 'sm', overflow: 'auto' }}>
+                            <Table hoverRow sx={{ tableLayout: 'fixed' }}>
+                                <thead>
+                                    <tr>
+                                        <th style={{ width: '60px' }}>ID</th>
+                                        <th style={{ width: '40%' }}>Title</th>
+                                        <th style={{ width: '20%' }}>Author</th>
+                                        <th style={{ width: '15%' }}>Created At</th>
+                                        <th style={{ width: '15%' }}>Actions</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </Table>
-                    </Sheet>
-                )
+                                </thead>
+                                <tbody>
+                                    {posts.map((post) => (
+                                        <tr key={post.id}>
+                                            <td>{post.id}</td>
+                                            <td>
+                                                <Link component={RouterLink} to={`/posts/${post.id}`} sx={{ wordBreak: 'break-all' }}>
+                                                    {post.title}
+                                                </Link>
+                                            </td>
+                                            <td>{post.author?.username || 'N/A'}</td>
+                                            <td>{new Date(post.created_at).toLocaleDateString()}</td>
+                                            <td>
+                                                <Stack direction="row" spacing={1}>
+                                                    <Tooltip title="Edit Post" variant="outlined" size="sm">
+                                                        <IconButton size="sm" variant="outlined" color="neutral" onClick={() => handleEditPost(post.id)}>
+                                                            <EditIcon />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                    <Tooltip title="Delete Post" variant="outlined" size="sm">
+                                                        <IconButton size="sm" variant="soft" color="danger" onClick={() => handleDeletePost(post.id)}>
+                                                            <DeleteForeverIcon />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </Stack>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </Table>
+                        </Sheet>
+                    )}
+
+                    {/* --- ШАГ 4: Добавляем компонент пагинации --- */}
+                    {totalPages > 1 && (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+                            <JoyPagination
+                                count={totalPages}
+                                page={page}
+                                onChange={(event, value) => setPage(value)}
+                            />
+                        </Box>
+                    )}
+                </>
             )}
         </Box>
     );
@@ -6561,7 +6769,7 @@ import { useAuth } from '../context/AuthContext';
 import {
     Box, Typography, Sheet, Table, Input, CircularProgress, Alert, Chip, Button,
     Modal, ModalDialog, ModalClose, FormControl, FormLabel, FormHelperText,
-    Stack, Tooltip, IconButton
+    Stack, Tooltip, IconButton, Select, Option
 } from '@mui/joy';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
@@ -6584,6 +6792,10 @@ function AdminRanksPage() {
     const [ranks, setRanks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [rankToDelete, setRankToDelete] = useState(null);
+    const [migrationRankId, setMigrationRankId] = useState('');
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingRank, setEditingRank] = useState(null);
@@ -6623,9 +6835,9 @@ function AdminRanksPage() {
         setIsModalOpen(false);
     };
 
-  const handleFormChange = (e) => {
+    const handleFormChange = (e) => {
         const { name, value } = e.target;
-        
+
         // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
         // Если мы меняем поле 'power_level', преобразуем его в число
         if (name === 'power_level') {
@@ -6662,14 +6874,52 @@ function AdminRanksPage() {
         }
     };
 
-    const handleDeleteRank = async (rankId) => {
-        if (!window.confirm('Are you sure you want to delete this rank? This cannot be undone.')) return;
-        
+    const handleDeleteRank = async (rank) => {
+        if (!window.confirm(`Are you sure you want to delete the rank "${rank.name}"? This cannot be undone.`)) {
+            return;
+        }
+
         try {
-            await axios.delete(`/api/ranks/${rankId}`, { headers: { Authorization: `Bearer ${authToken}` } });
+            // Первая попытка: простое удаление
+            await axios.delete(`/api/ranks/${rank.id}`, { headers: { Authorization: `Bearer ${authToken}` } });
+            // Если успешно, обновляем список
             fetchRanks();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to delete rank.');
+            // Если бэкенд вернул ошибку "ранг используется" (409)
+            if (err.response && err.response.status === 409) {
+                // Открываем модальное окно для выбора миграции
+                setRankToDelete(rank);
+                setModalError(err.response.data.message); // Показываем сообщение от API
+                setIsDeleteModalOpen(true);
+            } else {
+                // Другая ошибка
+                alert(err.response?.data?.message || 'Failed to delete rank.');
+            }
+        }
+    };
+
+    const handleConfirmDeleteWithMigration = async () => {
+        if (!rankToDelete || !migrationRankId) {
+            setModalError('You must select a rank to migrate users to.');
+            return;
+        }
+
+        try {
+            // Вторая попытка: удаление с указанием migrationRankId в теле запроса
+            await axios.delete(`/api/ranks/${rankToDelete.id}`, {
+                headers: { Authorization: `Bearer ${authToken}` },
+                data: { migrationRankId: Number(migrationRankId) } // axios для DELETE требует тело в поле data
+            });
+
+            // Успех! Закрываем окно и обновляем данные
+            setIsDeleteModalOpen(false);
+            setRankToDelete(null);
+            setMigrationRankId('');
+            setModalError('');
+            fetchRanks();
+        } catch (err) {
+            // Показываем ошибку внутри модального окна
+            setModalError(err.response?.data?.message || 'An error occurred during migration.');
         }
     };
 
@@ -6721,7 +6971,8 @@ function AdminRanksPage() {
                                                 <IconButton
                                                     size="sm"
                                                     color="danger"
-                                                    onClick={() => handleDeleteRank(rank.id)}
+                                                    // --- ИЗМЕНЕНО: передаем весь объект rank, а не только id ---
+                                                    onClick={() => handleDeleteRank(rank)}
                                                     disabled={!rank.is_removable}
                                                 >
                                                     <DeleteForeverIcon />
@@ -6759,6 +7010,43 @@ function AdminRanksPage() {
                             <Button type="submit" sx={{ mt: 1 }}>Save Changes</Button>
                         </Stack>
                     </form>
+                </ModalDialog>
+            </Modal>
+            <Modal open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)}>
+                <ModalDialog>
+                    <ModalClose />
+                    <Typography level="h4">Delete Rank: {rankToDelete?.name}</Typography>
+                    <Stack spacing={2} sx={{ mt: 2 }}>
+                        <Alert color="warning">
+                            {modalError || `The rank "${rankToDelete?.name}" is currently in use. To delete it, please select a new rank to which all current members will be migrated.`}
+                        </Alert>
+
+                        <FormControl>
+                            <FormLabel>Migrate Users To</FormLabel>
+                            <Select
+                                placeholder="Select a new rank..."
+                                value={migrationRankId}
+                                onChange={(e, newValue) => setMigrationRankId(newValue)}
+                            >
+                                {ranks
+                                    .filter(r => r.id !== rankToDelete?.id) // Нельзя мигрировать на удаляемый ранг
+                                    .map(rank => (
+                                        <Option key={rank.id} value={rank.id}>
+                                            {rank.name} (Power: {rank.power_level})
+                                        </Option>
+                                    ))
+                                }
+                            </Select>
+                        </FormControl>
+
+                        <Button
+                            color="danger"
+                            onClick={handleConfirmDeleteWithMigration}
+                            disabled={!migrationRankId}
+                        >
+                            Confirm Deletion and Migrate Users
+                        </Button>
+                    </Stack>
                 </ModalDialog>
             </Modal>
         </Box>
@@ -8549,11 +8837,12 @@ import { Link as RouterLink } from 'react-router-dom';
 import axios from 'axios';
 import {
     Typography, CircularProgress, Alert, Box, Grid, Card, CardContent, Avatar, Chip, AspectRatio,
-    FormControl, FormLabel, Select, Option, Stack
+    FormControl, FormLabel, Select, Option, Stack,
 } from '@mui/joy';
 import { constructImageUrl } from '../utils/url';
 import { useAuth } from '../context/AuthContext';
 import CircleIcon from '@mui/icons-material/Circle';
+import JoyPagination from '../components/JoyPagination';
 
 // --- ДОБАВЛЕНО: Вспомогательная функция для цвета ---
 function isColorLight(hexColor) {
@@ -8575,28 +8864,40 @@ function PlayersPage() {
     const [order, setOrder] = useState('DESC');
     const { socket } = useAuth();
 
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(12); // 12 карточек хорошо смотрятся в сетке
+    const [totalPages, setTotalPages] = useState(0);
+
     const fetchUsers = useCallback(async () => {
         try {
             setError(null);
-            const response = await axios.get(`/api/users`, { params: { sortBy, order } });
-            setUsers(response.data);
+            setLoading(true); // Устанавливаем загрузку в начале
+            // --- ИЗМЕНЕНО: Добавляем page и limit в параметры запроса ---
+            const response = await axios.get(`/api/users`, { params: { sortBy, order, page, limit } });
+
+            // --- ИЗМЕНЕНО: Обрабатываем новый формат ответа ---
+            setUsers(response.data.data);
+            // Рассчитываем общее количество страниц
+            setTotalPages(Math.ceil(response.data.total / limit));
+
         } catch (err) {
             setError('Failed to load players list.');
         } finally {
             setLoading(false);
         }
-    }, [sortBy, order]);
-    
+        // --- ИЗМЕНЕНО: Добавляем page и limit в зависимости ---
+    }, [sortBy, order, page, limit]);
+
     useEffect(() => { setLoading(true); fetchUsers(); }, [fetchUsers]);
 
     useEffect(() => {
         if (!socket) return;
         const handleStatusUpdate = (data) => {
-            setUsers(prevUsers => 
-                prevUsers.map(user => 
-                    user.id === data.userId 
-                    ? { ...user, is_minecraft_online: data.is_minecraft_online } 
-                    : user
+            setUsers(prevUsers =>
+                prevUsers.map(user =>
+                    user.id === data.userId
+                        ? { ...user, is_minecraft_online: data.is_minecraft_online }
+                        : user
                 )
             );
         };
@@ -8610,11 +8911,11 @@ function PlayersPage() {
     return (
         <Box>
             <Typography level={{ xs: 'h2', sm: 'h1' }} component="h1" sx={{ mb: 3 }}>Community Players</Typography>
-            
-            <Stack 
-                direction={{ xs: 'column', sm: 'row' }} 
-                spacing={2} 
-                sx={{ mb: 3, alignItems: { xs: 'stretch', sm: 'flex-end'} }}
+
+            <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={2}
+                sx={{ mb: 3, alignItems: { xs: 'stretch', sm: 'flex-end' } }}
             >
                 <FormControl size="sm">
                     <FormLabel>Sort by</FormLabel>
@@ -8632,7 +8933,15 @@ function PlayersPage() {
                     </Select>
                 </FormControl>
             </Stack>
-
+            {!loading && totalPages > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                    <JoyPagination
+                        count={totalPages}
+                        page={page}
+                        onChange={(event, value) => setPage(value)}
+                    />
+                </Box>
+            )}
             <Grid container spacing={2} sx={{ flexGrow: 1 }}>
                 {users.map((user) => (
                     <Grid xs={6} sm={6} md={4} key={user.id}>
@@ -8649,26 +8958,26 @@ function PlayersPage() {
                                     <Box />
                                 )}
                             </AspectRatio>
-                            
-                            <CardContent sx={{ 
-                                display: 'flex', 
+
+                            <CardContent sx={{
+                                display: 'flex',
                                 flexDirection: 'column',
-                                alignItems: 'center', 
+                                alignItems: 'center',
                                 textAlign: 'center',
                                 mt: { xs: -4.5, sm: -5 },
                             }}>
-                                <Avatar 
-                                    src={constructImageUrl(user.pfp_url)} 
-                                    sx={{ 
-                                        '--Avatar-size': { xs: '60px', sm: '70px' }, 
-                                        border: '2px solid', 
+                                <Avatar
+                                    src={constructImageUrl(user.pfp_url)}
+                                    sx={{
+                                        '--Avatar-size': { xs: '60px', sm: '70px' },
+                                        border: '2px solid',
                                         borderColor: 'background.body',
                                     }}
                                 />
                                 <Typography level="title-md" sx={{ mt: 1 }}>{user.username}</Typography>
-                                <Stack 
-                                    direction="row" 
-                                    spacing={1} 
+                                <Stack
+                                    direction="row"
+                                    spacing={1}
                                     sx={{ mt: 0.5, flexWrap: 'wrap', gap: 0.5, justifyContent: 'center' }}
                                 >
                                     {/* --- ИЗМЕНЕНИЕ ЗДЕСЬ --- */}
@@ -8683,7 +8992,7 @@ function PlayersPage() {
                                             {user.rank.name}
                                         </Chip>
                                     ) : null}
-                                    
+
                                     {user.minecraft_username && (
                                         <Chip
                                             size="sm"
@@ -8700,6 +9009,16 @@ function PlayersPage() {
                     </Grid>
                 ))}
             </Grid>
+            {totalPages > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                    {/* --- ИЗМЕНЕНО: Заменяем старый компонент на наш --- */}
+                    <JoyPagination
+                        count={totalPages}
+                        page={page}
+                        onChange={(event, value) => setPage(value)}
+                    />
+                </Box>
+            )}
         </Box>
     );
 }
@@ -8727,11 +9046,11 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import BlockIcon from '@mui/icons-material/Block';
+import JoyPagination from '../components/JoyPagination';
 import VoteButtons from '../components/VoteButtons';
 import { constructImageUrl } from '../utils/url';
 
 function PostsPage() {
-    // Вся логика и состояния остаются без изменений
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -8739,66 +9058,74 @@ function PostsPage() {
     const navigate = useNavigate();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    
+    // Состояния для пагинации
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(10);
+    const [totalPages, setTotalPages] = useState(0);
+
     const fetchPosts = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
-            const config = authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {};
+            const config = { 
+                headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+                params: { page, limit }
+            };
             const response = await axios.get('/api/posts', config);
-            setPosts(response.data);
+            
+            // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+            setPosts(response.data.data); // Берем массив из поля 'data'
+            setTotalPages(Math.ceil(response.data.total / limit));
+
         } catch (err) {
             setError('Failed to load posts. Please try again later.');
         } finally {
             setLoading(false);
         }
-    }, [authToken]);
-    useEffect(() => { fetchPosts(); }, [fetchPosts]);
+    }, [authToken, page, limit]);
+
+    useEffect(() => { 
+        fetchPosts(); 
+    }, [fetchPosts]);
+
     const handleVote = useCallback(async (postId, value) => {
         if (!isLoggedIn) { alert('Please log in to vote.'); return; }
         try {
             await axios.post(`/api/votes/posts/${postId}`, { value }, { headers: { Authorization: `Bearer ${authToken}` } });
-           setPosts(prevPosts => prevPosts.map(p => {
-                if (p.id === postId) {
-                    const oldVote = p.currentUserVote;
-                    let newScore = p.score;
-                    // Отмена голоса
-                    if (oldVote === value) {
-                        newScore = oldVote === 1 ? newScore - 1 : newScore + 1;
-                        return { ...p, score: newScore, currentUserVote: 0 };
-                    }
-                    // Смена голоса
-                    if (oldVote === 1) newScore--;
-                    if (oldVote === -1) newScore++;
-                    // Новый голос
-                    newScore = value === 1 ? newScore + 1 : newScore - 1;
-                    return { ...p, score: newScore, currentUserVote: value };
-                }
-                return p;
-            }));
+            // Вместо полной перезагрузки, можно было бы обновлять состояние локально,
+            // но для простоты пока оставим fetchPosts()
+            fetchPosts(); 
         } catch (error) {
             alert(error.response?.data?.message || 'Failed to vote.');
             fetchPosts();
         }
     }, [isLoggedIn, authToken, fetchPosts]);
+
     const handleDeletePost = useCallback(async (postIdToDelete) => {
         if (!window.confirm('Are you sure you want to permanently delete this post?')) return;
         try {
             await axios.delete(`/api/posts/${postIdToDelete}`, { headers: { Authorization: `Bearer ${authToken}` } });
-            setPosts(prevPosts => prevPosts.filter(p => p.id !== postIdToDelete));
-        } catch (err) { alert(err.response?.data?.message || 'Failed to delete post.'); }
-    }, [authToken]);
+            fetchPosts(); // Перезагружаем посты после удаления
+        } catch (err) { 
+            alert(err.response?.data?.message || 'Failed to delete post.'); 
+        }
+    }, [authToken, fetchPosts]);
+
     const handleBanUser = useCallback(async (author) => {
         if (!author || !window.confirm(`Are you sure you want to ban ${author.username}?`)) return;
         try {
             await axios.post(`/api/admin/users/${author.id}/ban`, {}, { headers: { Authorization: `Bearer ${authToken}` } });
             alert(`User ${author.username} has been banned.`);
-        } catch (err) { alert(err.response?.data?.message || 'Failed to ban user.'); }
+        } catch (err) { 
+            alert(err.response?.data?.message || 'Failed to ban user.'); 
+        }
     }, [authToken]);
 
     if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
     if (error) return <Alert color="danger" sx={{ mt: 2 }}>{error}</Alert>;
 
-    const isAdmin = currentUser && ['ADMIN', 'MODERATOR', 'OWNER'].includes(currentUser.rank);
+    const isAdmin = currentUser && ['ADMIN', 'MODERATOR', 'OWNER'].includes(currentUser.rank.name);
 
     return (
         <Box>
@@ -8811,6 +9138,15 @@ function PostsPage() {
                 )}
             </Box>
 
+            {!loading && totalPages > 1 && (
+                 <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                    <JoyPagination
+                        count={totalPages}
+                        page={page}
+                        onChange={(event, value) => setPage(value)}
+                    />
+                </Box>
+            )}
             <List sx={{ borderRadius: 'sm', p: 0, bgcolor: 'background.body', border: '1px solid', borderColor: 'divider' }}>
                 {posts.map((post) => {
                     const canManagePost = isLoggedIn && (currentUser?.id === post.author?.id || isAdmin);
@@ -8823,9 +9159,8 @@ function PostsPage() {
                                         {post.author ? (<JoyLink component={RouterLink} to={`/users/${post.author.profile_slug || post.author.id}`}><Avatar src={constructImageUrl(post.author.pfp_url)}>{post.author.username.charAt(0)}</Avatar></JoyLink>) : ( <Avatar>?</Avatar> )}
                                         <Typography level="title-md" sx={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                                             {post.author ? (
-                                                // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
                                                 <JoyLink 
-                                                    level="title-lg" // <-- Размер задаем прямо здесь
+                                                    level="title-lg" 
                                                     component={RouterLink} 
                                                     to={`/users/${post.author.profile_slug || post.author.id}`} 
                                                     overlay 
@@ -8850,18 +9185,16 @@ function PostsPage() {
                                     )}
                                 </Box>
                                 
-                                {/* --- ИЗМЕНЕНО: Добавлено свойство для переноса длинных слов --- */}
                                 <JoyLink component={RouterLink} to={`/posts/${post.id}`} level="h4" fontWeight="lg" sx={{ '&:hover': { textDecoration: 'underline' }, mb: 1, color: 'text.primary', wordBreak: 'break-word' }}>
                                     {post.title}
                                 </JoyLink>
 
-                                {/* --- ИЗМЕНЕНО: Добавлено свойство для переноса длинных слов --- */}
                                 <Typography level="body-md" sx={{ mb: 2, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', wordBreak: 'break-word' }}>
                                     {post.content}
                                 </Typography>
 
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'text.tertiary' }}>
-                                    <VoteButtons initialScore={post.score} currentUserVote={post.current_user_vote} onVote={(value) => handleVote(post.id, value)} disabled={!isLoggedIn} />
+                                    <VoteButtons initialScore={post.score} currentUserVote={post.currentUserVote} onVote={(value) => handleVote(post.id, value)} disabled={!isLoggedIn} />
                                     <Typography level="body-xs">{new Date(post.created_at).toLocaleDateString()}</Typography>
                                 </Box>
                             </Sheet>
@@ -8869,6 +9202,16 @@ function PostsPage() {
                     );
                 })}
             </List>
+
+            {totalPages > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+                    <JoyPagination
+                        count={totalPages}
+                        page={page}
+                        onChange={(event, value) => setPage(value)}
+                    />
+                </Box>
+            )}
         </Box>
     );
 }
@@ -10272,6 +10615,770 @@ http {
 
 
 
+--- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/ApiClient.java ---
+
+package com.flamewall.bridge;
+
+import okhttp3.*;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.IOException;
+
+public class ApiClient {
+
+    private final BridgePlugin plugin;
+    private final OkHttpClient httpClient;
+    private final String baseUrl;
+    private final String apiKey;
+
+    public ApiClient(BridgePlugin plugin) {
+        this.plugin = plugin;
+        this.httpClient = new OkHttpClient();
+        this.baseUrl = plugin.getConfig().getString("api-base-url", "http://localhost:3000");
+        this.apiKey = plugin.getConfig().getString("plugin-secret-key");
+    }
+
+    public void sendFriendRequest(Player sender, String receiverName) {
+        try {
+            JSONObject jsonBody = new JSONObject();
+            jsonBody.put("requesterUuid", sender.getUniqueId().toString());
+            jsonBody.put("receiverName", receiverName);
+            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
+            Request request = new Request.Builder()
+                    .url(baseUrl + "/api/friendships/from-plugin/add")
+                    .header("x-api-key", apiKey)
+                    .post(body)
+                    .build();
+            httpClient.newCall(request).enqueue(new HttpCallback(sender, "Friend request sent to " + receiverName + "!"));
+        } catch (JSONException e) {
+            handlePluginError(sender, "Could not create JSON body for friend request", e);
+        }
+    }
+
+    public void removeFriend(Player sender, String friendToRemoveName) {
+        try {
+            JSONObject jsonBody = new JSONObject();
+            jsonBody.put("removerUuid", sender.getUniqueId().toString());
+            jsonBody.put("friendToRemoveName", friendToRemoveName);
+            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
+            Request request = new Request.Builder()
+                    .url(baseUrl + "/api/friendships/from-plugin/remove")
+                    .header("x-api-key", apiKey)
+                    .delete(body)
+                    .build();
+            httpClient.newCall(request).enqueue(new HttpCallback(sender, friendToRemoveName + " has been removed from your friends list."));
+        } catch (JSONException e) {
+            handlePluginError(sender, "Could not create JSON body for friend removal", e);
+        }
+    }
+
+    public void getFriendsList(Player sender) {
+        Request request = new Request.Builder()
+                .url(baseUrl + "/api/friendships/from-plugin/list/" + sender.getUniqueId().toString())
+                .header("x-api-key", apiKey)
+                .get()
+                .build();
+
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                handleApiFailure(sender, e);
+            }
+
+            @Override
+            public void onResponse(@NotNull Call call, @NotNull Response response) {
+                if (!response.isSuccessful()) {
+                    handleApiError(sender, response);
+                    return;
+                }
+                try (ResponseBody responseBody = response.body()) {
+                    String responseString = responseBody.string();
+                    JSONArray friendsArray = new JSONArray(responseString);
+                    runOnMainThread(() -> {
+                        sender.sendMessage(ChatColor.GOLD + "--- Your Friends (" + friendsArray.length() + ") ---");
+                        if (friendsArray.length() == 0) {
+                            sender.sendMessage(ChatColor.GRAY + "Your friends list is empty. Use /flame friend add <player>");
+                        } else {
+                            for (int i = 0; i < friendsArray.length(); i++) {
+                                // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: Оборачиваем getString в try-catch ---
+                                try {
+                                    sender.sendMessage(ChatColor.AQUA + "- " + friendsArray.getString(i));
+                                } catch (JSONException e) {
+                                    plugin.getLogger().warning("Could not get friend name at index " + i + ": " + e.getMessage());
+                                }
+                            }
+                        }
+                    });
+                } catch (IOException | JSONException e) {
+                    plugin.getLogger().severe("Failed to parse friends list JSON from API: " + e.getMessage());
+                    runOnMainThread(() -> sender.sendMessage(ChatColor.RED + "Error: Could not read response from the website."));
+                } finally {
+                    response.close();
+                }
+            }
+        });
+    }
+
+    private void runOnMainThread(Runnable task) {
+        Bukkit.getScheduler().runTask(plugin, task);
+    }
+
+    private void handlePluginError(Player sender, String logMessage, Exception e) {
+        plugin.getLogger().severe(logMessage + ": " + e.getMessage());
+        runOnMainThread(() -> sender.sendMessage(ChatColor.RED + "An internal plugin error occurred."));
+    }
+
+    private void handleApiFailure(Player player, IOException e) {
+        plugin.getLogger().severe("Failed to send API request: " + e.getMessage());
+        runOnMainThread(() -> player.sendMessage(ChatColor.RED + "Error: Could not connect to the website API."));
+    }
+
+    private void handleApiError(Player player, Response response) {
+        try (ResponseBody responseBody = response.body()) {
+            String errorBody = responseBody.string();
+            JSONObject errorJson = new JSONObject(errorBody);
+            String message = errorJson.optString("message", "An unknown error occurred (" + response.code() + ")");
+            runOnMainThread(() -> player.sendMessage(ChatColor.RED + "Error: " + message));
+        } catch (IOException | JSONException e) {
+            plugin.getLogger().warning("Could not parse error response from API. Body was not valid JSON or network error occurred.");
+            runOnMainThread(() -> player.sendMessage(ChatColor.RED + "An unknown error occurred while processing the server response."));
+        } finally {
+            if (response != null) response.close();
+        }
+    }
+
+    private class HttpCallback implements Callback {
+        private final Player sender;
+        private final String successMessage;
+
+        public HttpCallback(Player sender, String successMessage) {
+            this.sender = sender;
+            this.successMessage = successMessage;
+        }
+
+        @Override
+        public void onFailure(@NotNull Call call, @NotNull IOException e) {
+            handleApiFailure(sender, e);
+        }
+
+        @Override
+        public void onResponse(@NotNull Call call, @NotNull Response response) {
+            if (response.isSuccessful()) {
+                runOnMainThread(() -> sender.sendMessage(ChatColor.GREEN + successMessage));
+            } else {
+                handleApiError(sender, response);
+            }
+        }
+    }
+}
+--- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/ApiClient.java ---
+
+
+
+--- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/BridgePlugin.java ---
+
+package com.flamewall.bridge;
+
+import io.socket.client.IO;
+import io.socket.client.Socket;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.net.URI;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.HoverEvent;
+import net.md_5.bungee.api.chat.TextComponent;
+import net.md_5.bungee.api.chat.hover.content.Text;
+
+public final class BridgePlugin extends JavaPlugin {
+
+    private Socket socket;
+    private PrivateMessageManager messageManager;
+    // Теперь храним полный список правил
+    private List<Map<?, ?>> interceptRules;
+    private ApiClient apiClient; // <-- ДОБАВЛЕНО
+
+    @Override
+    public void onEnable() {
+        getLogger().info("FlameWallBridge is enabling...");
+        this.saveDefaultConfig();
+        this.reloadConfig();
+
+        this.messageManager = new PrivateMessageManager();
+        this.apiClient = new ApiClient(this); // <-- ДОБАВЛЕНО
+
+        // --- РЕГИСТРИРУЕМ НАШ НОВЫЙ ЕДИНЫЙ ОБРАБОТЧИК ---
+        FlameCommand flameCommand = new FlameCommand(this);
+        getCommand("flame").setExecutor(flameCommand);
+        getCommand("flame").setTabCompleter(flameCommand); // Регистрируем автодополнение
+
+        // Регистрируем остальные команды и слушатели
+        getCommand("link").setExecutor(new LinkCommand(this));
+        // ... (если есть fwb_syncfriends, он остается здесь) ...
+
+        Bukkit.getPluginManager().registerEvents(new PlayerConnectionListener(this), this);
+        connectToWebSocket();
+    }
+
+    public ApiClient getApiClient() { return apiClient; } // <-- ДОБАВЛЕНО
+    public PrivateMessageManager getMessageManager() { return messageManager; }
+    public List<Map<?, ?>> getInterceptRules() { return interceptRules; }
+
+    @Override
+    public void onDisable() {
+        if (socket != null) {
+            socket.disconnect();
+        }
+        getLogger().info("FlameWallBridge has been disabled.");
+    }
+
+    public void sendJsonPayload(String eventName, JSONObject payload) {
+        if (socket != null && socket.connected()) {
+            socket.emit(eventName, payload);
+        } else {
+            getLogger().warning("WebSocket is not connected. Cannot send data.");
+        }
+    }
+
+    private void connectToWebSocket() {
+        try {
+            URI serverUri = URI.create("http://localhost:3000");
+
+            // --- ИСПРАВЛЕНИЕ: Создаем заголовки правильного типа Map<String, List<String>> ---
+            Map<String, List<String>> headers = new HashMap<>();
+            headers.put("x-api-key", Collections.singletonList("your_super_secret_and_long_string_12345"));
+
+            IO.Options options = IO.Options.builder()
+                    .setExtraHeaders(headers)
+                    .build();
+
+            socket = IO.socket(serverUri, options);
+
+            socket.on(Socket.EVENT_CONNECT, args -> {
+                getLogger().info("Successfully connected to the website backend!");
+            });
+
+            socket.on(Socket.EVENT_DISCONNECT, args -> {
+                String reason = args.length > 0 ? args[0].toString() : "No reason given";
+                getLogger().warning("Disconnected from website backend. Reason: " + reason);
+            });
+
+            socket.on(Socket.EVENT_CONNECT_ERROR, args -> {
+                String error = args.length > 0 ? args[0].toString() : "Unknown error";
+                getLogger().severe("Connection error: " + error);
+            });
+
+            socket.on("linkStatus", args -> {
+                if (args.length > 0 && args[0] instanceof JSONObject) {
+                    handleBackendMessage((JSONObject) args[0]);
+                }
+            });
+
+            socket.on("webPrivateMessage", args -> {
+                if (args.length > 0 && args[0] instanceof JSONObject) {
+                    handleWebMessage((JSONObject) args[0]);
+                }
+            });
+
+            socket.connect();
+
+            socket.connect();
+            getLogger().info("Attempting to connect to website backend...");
+
+        } catch (Exception e) {
+            getLogger().severe("Failed to initialize WebSocket connection!");
+            e.printStackTrace();
+        }
+    }
+
+    private void handleWebMessage(JSONObject data) {
+        Bukkit.getScheduler().runTask(this, () -> {
+            // Проверяем настройку в конфиге перед отправкой сообщения
+            if (!getConfig().getBoolean("display-web-messages-in-game", true)) {
+                return;
+            }
+
+            try {
+                String recipientUuid = data.getString("recipientUuid");
+                String senderUsername = data.getString("senderUsername");
+                String content = data.getString("content");
+
+                Player recipientPlayer = Bukkit.getPlayer(UUID.fromString(recipientUuid));
+                if (recipientPlayer != null && recipientPlayer.isOnline()) {
+
+                    // --- НАЧАЛО НОВОЙ ЛОГИКИ ---
+
+                    // 1. Создаем основной текст сообщения
+                    TextComponent messageComponent = new TextComponent(
+                            ChatColor.GRAY + "[WEB] " + senderUsername + " » " + content
+                    );
+
+                    // 2. Создаем действие при клике: подставить команду в чат
+                    messageComponent.setClickEvent(new ClickEvent(
+                            ClickEvent.Action.SUGGEST_COMMAND,
+                            "/flame msg " + senderUsername + " " // Используем /flame msg
+                    ));
+
+                    // 3. Создаем подсказку при наведении
+                    messageComponent.setHoverEvent(new HoverEvent(
+                            HoverEvent.Action.SHOW_TEXT,
+                            new Text(ChatColor.AQUA + "Нажмите, чтобы ответить игроку " + senderUsername)
+                    ));
+
+                    // 4. Отправляем интерактивное сообщение игроку
+                    recipientPlayer.spigot().sendMessage(messageComponent);
+
+                    // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
+                }
+            } catch (Exception e) {
+                getLogger().warning("Could not parse webPrivateMessage from backend: " + data.toString());
+            }
+        });
+    }
+
+    private void handleBackendMessage(JSONObject data) {
+        Bukkit.getScheduler().runTask(this, () -> {
+            try {
+                boolean success = data.getBoolean("success");
+                String minecraftUuid = data.getString("minecraftUuid");
+
+                Player player = Bukkit.getPlayer(UUID.fromString(minecraftUuid));
+                if (player != null && player.isOnline()) {
+                    if (success) {
+                        String websiteUsername = data.getString("websiteUsername");
+                        player.sendMessage(ChatColor.GREEN + "Success! Your account is now linked to the website profile: " + websiteUsername);
+                    } else {
+                        String error = data.getString("error");
+                        player.sendMessage(ChatColor.RED + "Linking failed: " + error);
+                    }
+                }
+            } catch (JSONException e) {
+                getLogger().warning("Could not parse linkStatus message from backend: " + data.toString());
+            }
+        });
+    }
+}
+--- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/BridgePlugin.java ---
+
+
+
+--- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/FlameCommand.java ---
+
+package com.flamewall.bridge;
+
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+public class FlameCommand implements CommandExecutor, TabCompleter {
+
+    private final BridgePlugin plugin;
+
+    public FlameCommand(BridgePlugin plugin) {
+        this.plugin = plugin;
+    }
+
+    @Override
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage("This command can only be used by a player.");
+            return true;
+        }
+        Player player = (Player) sender;
+
+        if (args.length == 0) {
+            sendHelpMessage(player);
+            return true;
+        }
+
+        String subCommand = args[0].toLowerCase();
+        String[] subArgs = Arrays.copyOfRange(args, 1, args.length);
+
+        switch (subCommand) {
+            case "msg":
+                handleMessageCommand(player, subArgs);
+                break;
+            case "r":
+            case "reply":
+                handleReplyCommand(player, subArgs);
+                break;
+            case "friend":
+                handleFriendCommand(player, subArgs);
+                break;
+            default:
+                sendHelpMessage(player);
+                break;
+        }
+        return true;
+    }
+
+    private void handleMessageCommand(Player sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.RED + "Usage: /flame msg <player> <message>");
+            return;
+        }
+        String recipientName = args[0];
+        String message = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
+
+        if (sender.getName().equalsIgnoreCase(recipientName)) {
+            sender.sendMessage(ChatColor.RED + "You cannot send a message to yourself.");
+            return;
+        }
+        sendMessage(sender, recipientName, message);
+    }
+
+    private void handleReplyCommand(Player sender, String[] args) {
+        if (args.length < 1) {
+            sender.sendMessage(ChatColor.RED + "Usage: /flame reply <message>");
+            return;
+        }
+        UUID recipientUuid = plugin.getMessageManager().getReplyTarget(sender);
+        if (recipientUuid == null) {
+            sender.sendMessage(ChatColor.RED + "There is no one to reply to.");
+            return;
+        }
+        Player recipientPlayer = Bukkit.getPlayer(recipientUuid);
+        if (recipientPlayer == null || !recipientPlayer.isOnline()) {
+            sender.sendMessage(ChatColor.RED + "The player you are replying to has gone offline.");
+            return;
+        }
+        String message = String.join(" ", args);
+        sendMessage(sender, recipientPlayer.getName(), message);
+    }
+
+    private void handleFriendCommand(Player player, String[] args) {
+        if (args.length == 0) {
+            player.sendMessage(ChatColor.RED + "Usage: /flame friend <add|remove|list>");
+            return;
+        }
+        String action = args[0].toLowerCase();
+        String[] actionArgs = Arrays.copyOfRange(args, 1, args.length);
+
+        switch(action) {
+            case "add":
+                if (actionArgs.length < 1) {
+                    player.sendMessage(ChatColor.RED + "Usage: /flame friend add <player>");
+                    return;
+                }
+                String targetName = actionArgs[0];
+                if (player.getName().equalsIgnoreCase(targetName)) {
+                    player.sendMessage(ChatColor.RED + "You cannot add yourself as a friend.");
+                    return;
+                }
+                plugin.getApiClient().sendFriendRequest(player, targetName);
+                break;
+
+            case "remove":
+                if (actionArgs.length < 1) {
+                    player.sendMessage(ChatColor.RED + "Usage: /flame friend remove <player>");
+                    return;
+                }
+                plugin.getApiClient().removeFriend(player, actionArgs[0]);
+                break;
+
+            case "list":
+                plugin.getApiClient().getFriendsList(player);
+                break;
+
+            // TODO: В будущем добавить accept, deny
+            default:
+                player.sendMessage(ChatColor.RED + "Unknown friend command. Use: add, remove, list.");
+                break;
+        }
+    }
+
+    private void sendMessage(Player sender, String recipientName, String content) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("senderUuid", sender.getUniqueId().toString());
+            payload.put("recipientUsername", recipientName);
+            payload.put("content", content);
+            plugin.sendJsonPayload("inGamePrivateMessage", payload);
+            sender.sendMessage(ChatColor.GRAY + "To " + recipientName + ": " + ChatColor.WHITE + content);
+
+            Player recipientPlayer = Bukkit.getPlayer(recipientName);
+            if (recipientPlayer != null) {
+                plugin.getMessageManager().setLastPartner(sender, recipientPlayer);
+            }
+        } catch (Exception e) {
+            sender.sendMessage(ChatColor.RED + "An error occurred while sending the message.");
+            plugin.getLogger().severe("Could not send PM to backend for " + sender.getName());
+            e.printStackTrace();
+        }
+    }
+
+    private void sendHelpMessage(Player player) {
+        player.sendMessage(ChatColor.GOLD + "--- FlameWall Bridge Help ---");
+        player.sendMessage(ChatColor.AQUA + "/flame msg <player> <message>" + ChatColor.WHITE + " - Send a private message");
+        player.sendMessage(ChatColor.AQUA + "/flame reply <message>" + ChatColor.WHITE + " - Reply to the last message");
+        player.sendMessage(ChatColor.AQUA + "/flame friend <add|remove|list>" + ChatColor.WHITE + " - Manage your friends");
+    }
+
+    @Override
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        if (args.length == 1) {
+            return List.of("msg", "reply", "friend").stream()
+                    .filter(s -> s.startsWith(args[0].toLowerCase()))
+                    .collect(Collectors.toList());
+        }
+        if (args.length == 2) {
+            String subCommand = args[0].toLowerCase();
+            if (subCommand.equals("msg")) {
+                return null; // Автодополнение ников игроков
+            }
+            if (subCommand.equals("friend")) {
+                return List.of("add", "remove", "list").stream()
+                        .filter(s -> s.startsWith(args[1].toLowerCase()))
+                        .collect(Collectors.toList());
+            }
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("friend") &&
+                (args[1].equalsIgnoreCase("add") || args[1].equalsIgnoreCase("remove"))) {
+            return null; // Автодополнение ников игроков
+        }
+        return new ArrayList<>();
+    }
+}
+--- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/FlameCommand.java ---
+
+
+
+--- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/LinkCommand.java ---
+
+package com.flamewall.bridge;
+
+import org.bukkit.ChatColor;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+public class LinkCommand implements CommandExecutor {
+
+    private final BridgePlugin plugin;
+
+    public LinkCommand(BridgePlugin plugin) {
+        this.plugin = plugin;
+    }
+
+    @Override
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage("This command can only be run by a player.");
+            return true;
+        }
+
+        if (args.length != 1) {
+            sender.sendMessage(ChatColor.RED + "Usage: /link <code>");
+            return false;
+        }
+
+        Player player = (Player) sender;
+        String code = args[0];
+
+        try {
+            // --- ИСПРАВЛЕНИЕ: Оборачиваем создание JSON в try-catch ---
+            JSONObject payload = new JSONObject();
+            payload.put("code", code);
+            payload.put("minecraftUuid", player.getUniqueId().toString());
+            payload.put("minecraftUsername", player.getName());
+
+            // --- ИСПРАВЛЕНИЕ: Передаем два аргумента, как и требует метод ---
+            plugin.sendJsonPayload("linkAccount", payload);
+
+            player.sendMessage(ChatColor.YELLOW + "Sent link request to the website. Please check the website for confirmation.");
+
+        } catch (JSONException e) {
+            player.sendMessage(ChatColor.RED + "An internal error occurred while creating the request.");
+            e.printStackTrace();
+        }
+
+        return true;
+    }
+}
+--- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/LinkCommand.java ---
+
+
+
+--- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/PlayerConnectionListener.java ---
+
+// src/main/java/com/flamewall/bridge/PlayerConnectionListener.java
+
+package com.flamewall.bridge;
+
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.json.JSONObject;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class PlayerConnectionListener implements Listener {
+
+    private final BridgePlugin plugin;
+
+    public PlayerConnectionListener(BridgePlugin plugin) {
+        this.plugin = plugin;
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        plugin.getLogger().info("Player " + player.getName() + " has joined. Sending status update.");
+        sendStatusUpdate(player, true);
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        Player player = event.getPlayer();
+        plugin.getLogger().info("Player " + player.getName() + " has quit. Sending status update.");
+        sendStatusUpdate(player, false);
+    }
+
+    private void sendStatusUpdate(Player player, boolean isOnline) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("minecraftUuid", player.getUniqueId().toString());
+            payload.put("isOnline", isOnline);
+            plugin.sendJsonPayload("minecraftPlayerStatus", payload);
+        } catch (Exception e) {
+            plugin.getLogger().severe("Could not send player status update for " + player.getName());
+            e.printStackTrace();
+        }
+    }
+
+    // --- ИЗМЕНЕНИЕ: Метод теперь принимает имя получателя (String), а не объект Player ---
+    private void sendMessageToBackend(Player sender, String recipientName, String content, String commandLabel) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("senderUuid", sender.getUniqueId().toString());
+            payload.put("recipientUsername", recipientName); // Используем имя как строку
+            payload.put("content", content);
+            plugin.sendJsonPayload("inGamePrivateMessage", payload);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private String getMatcherGroup(Matcher matcher, String groupName) {
+        try {
+            return matcher.group(groupName);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+}
+--- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/PlayerConnectionListener.java ---
+
+
+
+--- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/PrivateMessageManager.java ---
+
+package com.flamewall.bridge;
+
+import org.bukkit.entity.Player;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+public class PrivateMessageManager {
+    // Хранит пару "ключ-значение", где:
+    // Ключ - UUID игрока, который получил сообщение
+    // Значение - UUID игрока, который отправил это сообщение
+    private final Map<UUID, UUID> lastMessagePartners = new HashMap<>();
+
+    public void setLastPartner(Player player1, Player player2) {
+        lastMessagePartners.put(player1.getUniqueId(), player2.getUniqueId());
+        lastMessagePartners.put(player2.getUniqueId(), player1.getUniqueId());
+    }
+
+    public UUID getReplyTarget(Player sender) {
+        return lastMessagePartners.get(sender.getUniqueId());
+    }
+}
+--- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/PrivateMessageManager.java ---
+
+
+
+--- START FILE: FlameWallBridge/src/main/resources/config.yml ---
+
+# FlameWallBridge Configuration
+
+websocket-url: "http://localhost:3000"
+plugin-secret-key: "your_super_secret_and_long_string_12345"
+api-base-url: "http://localhost:3000"
+
+# Should the bridge send its own in-game notification for private messages received from the website?
+# This is useful on servers without other chat formatting plugins.
+display-web-messages-in-game: true
+--- END FILE: FlameWallBridge/src/main/resources/config.yml ---
+
+
+
+--- START FILE: FlameWallBridge/src/main/resources/plugin.yml ---
+
+name: FlameWallBridge
+version: 1.0-SNAPSHOT
+main: com.flamewall.bridge.BridgePlugin
+api-version: '1.20'
+author: YourName
+softdepend: [PlaceholderAPI]
+
+commands:
+  link:
+    description: Links your website account to your Minecraft account.
+    usage: "/link <code>"
+
+  flame:
+    description: Main command for FlameWall website integration.
+    usage: /flame <msg|reply|friend|...>
+    aliases: [fw]
+--- END FILE: FlameWallBridge/src/main/resources/plugin.yml ---
+
+
+
 --- START FILE: .env ---
 
 # ================================================================
@@ -10575,6 +11682,7 @@ CMD ["nginx", "-g", "daemon off;"]
     "@fontsource/inter": "^5.2.5",
     "@mui/icons-material": "^7.1.0",
     "@mui/joy": "^5.0.0-beta.52",
+    "@mui/material": "^7.1.2",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
@@ -10592,11 +11700,10 @@ CMD ["nginx", "-g", "daemon off;"]
   "scripts": {
     "start": "nodemon",
     "start:react": "react-scripts start",
-    "build": "react-scripts build && npm run rename-sw", 
+    "build": "react-scripts build && npm run rename-sw",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "rename-sw": "mv build/service-worker-prod.js build/service-worker.js"
-
   },
   "eslintConfig": {
     "extends": [
@@ -10625,4 +11732,128 @@ CMD ["nginx", "-g", "daemon off;"]
 }
 
 --- END FILE: frontend/package.json ---
+
+
+
+--- START FILE: FlameWallBridge/pom.xml ---
+
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.flamewall</groupId>
+    <artifactId>FlameWallBridge</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <source>21</source>
+                    <target>21</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <configuration>
+                    <relocations>
+                        <relocation>
+                            <pattern>io.socket</pattern>
+                            <shadedPattern>com.flamewall.bridge.lib.io.socket</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>io.engine</pattern>
+                            <shadedPattern>com.flamewall.bridge.lib.io.engine</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>org.json</pattern>
+                            <shadedPattern>com.flamewall.bridge.lib.org.json</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>io.netty</pattern>
+                            <shadedPattern>com.flamewall.bridge.lib.io.netty</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>okhttp3</pattern>
+                            <shadedPattern>com.flamewall.bridge.lib.okhttp3</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>okio</pattern>
+                            <shadedPattern>com.flamewall.bridge.lib.okio</shadedPattern>
+                        </relocation>
+                    </relocations>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+    </build>
+
+    <repositories>
+        <repository>
+            <id>papermc-repo</id>
+            <url>https://repo.papermc.io/repository/maven-public/</url>
+        </repository>
+        <repository>
+            <id>placeholderapi</id>
+            <url>https://repo.extendedclip.com/content/repositories/placeholderapi/</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.papermc.paper</groupId>
+            <artifactId>paper-api</artifactId>
+            <version>1.21-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>me.clip</groupId>
+            <artifactId>placeholderapi</artifactId>
+            <version>2.11.6</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.socket</groupId>
+            <artifactId>socket.io-client</artifactId>
+            <version>2.1.0</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>4.12.0</version>
+            <scope>compile</scope>
+        </dependency>
+    </dependencies>
+</project>
+--- END FILE: FlameWallBridge/pom.xml ---
 

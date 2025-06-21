@@ -1,16 +1,21 @@
 #!/bin/bash
 
 # --- КОНФИГУРАЦИЯ ---
+
+# Имя файла, в который будет сохранен весь код.
 OUTPUT_FILE="full_project_snapshot.txt"
 
+# Список папок, которые нужно полностью скопировать (рекурсивно)
 DIRS_TO_EXPORT=(
     "backend/src"
     "frontend/src"
     "frontend/public"
     "frontend/nginx"
     "nginx"
+    "FlameWallBridge/src" # <-- ДОБАВЛЕНО: Папка с исходниками плагина
 )
 
+# Список отдельных файлов, которые нужно добавить
 FILES_TO_EXPORT=(
     ".env"
     "docker-compose.yml"
@@ -21,21 +26,21 @@ FILES_TO_EXPORT=(
     "frontend/Dockerfile.prod"
     "package.json" 
     "frontend/package.json"
+    "FlameWallBridge/pom.xml" # <-- ДОБАВЛЕНО: Файл конфигурации Maven для плагина
 )
 
-# --- ЛОГИКА СКРИПТА ---
+# --- ЛОГИКА СКРИПТА (без изменений) ---
+
 > "$OUTPUT_FILE"
 echo "Начинаю экспорт кода в файл $OUTPUT_FILE..."
 echo "===============================================" >> "$OUTPUT_FILE"
 echo "PROJECT SNAPSHOT CREATED ON: $(date)" >> "$OUTPUT_FILE"
 echo "===============================================" >> "$OUTPUT_FILE"
 
-# Функция для добавления содержимого папки
 process_directory() {
     local dir_path="$1"
     if [ -d "$dir_path" ]; then
         echo "Обрабатываю папку: $dir_path"
-        # --- ИЗМЕНЕНИЕ ЗДЕСЬ: Добавлен фильтр для исключения бинарных файлов ---
         find "$dir_path" -type f \
         -not \( \
             -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.gif" -o -name "*.ico" \
@@ -51,13 +56,12 @@ process_directory() {
     fi
 }
 
-# Функция для добавления одного файла
 process_file() {
     local file_path="$1"
     if [ -f "$file_path" ]; then
         echo "Обрабатываю файл: $file_path"
         echo -e "\n\n--- START FILE: $file_path ---\n" >> "$OUTPUT_FILE"
-        cat "$file" >> "$OUTPUT_FILE"
+        cat "$file_path" >> "$OUTPUT_FILE"
         echo -e "\n--- END FILE: $file_path ---\n" >> "$OUTPUT_FILE"
     else
         echo "Внимание: Файл '$file_path' не найден, пропускаю."
