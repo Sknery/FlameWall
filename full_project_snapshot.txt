@@ -1,5 +1,5 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Sat Jun 21 13:59:52 EEST 2025
+PROJECT SNAPSHOT CREATED ON: Sat Jun 21 18:38:38 EEST 2025
 ===============================================
 
 
@@ -5184,6 +5184,7 @@ import SupervisedUserCircleIcon from '@mui/icons-material/SupervisedUserCircle';
 import DynamicFeedIcon from '@mui/icons-material/DynamicFeed';
 import MenuIcon from '@mui/icons-material/Menu';
 import ShieldIcon from '@mui/icons-material/Menu';
+import LoginIcon from '@mui/icons-material/Login';
 
 const SIDEBAR_WIDTH = 280;
 const MAIN_CONTENT_MAX_WIDTH = '1000px';
@@ -5191,7 +5192,7 @@ const LARGE_ICON_BUTTON_HEIGHT = '48px';
 
 const navItems = [
     { name: 'Home', icon: <HomeIcon />, path: '/' },
-    { name: 'Community News', icon: <ArticleIcon />, path: '/news' },
+    { name: 'News', icon: <ArticleIcon />, path: '/news' },
     {
         name: 'Community', icon: <PeopleIcon />, subItems: [
             { name: 'Posts', icon: <ForumIcon />, path: '/posts' },
@@ -5210,7 +5211,7 @@ const navItems = [
 const userNavItems = {
     name: 'My Profile', icon: <AccountCircleIcon />, subItems: [
         { name: 'Profile', icon: <AccountCircleIcon />, path: '/profile/me' },
-        { name: 'Chats', icon: <MailIcon />, path: '/messages' },
+        { name: 'Messages', icon: <MailIcon />, path: '/messages' },
         { name: 'Friends', icon: <GroupAddIcon />, path: '/friends' },
         { name: 'Settings', icon: <SettingsIcon />, path: '/profile/settings' },
     ],
@@ -5388,7 +5389,8 @@ const CollapsiblePushSidebar = ({ children }) => {
                             startDecorator={<SearchIcon />}
                             sx={{
                                 display: 'inline-flex', // Теперь поиск виден всегда
-                                width: { xs: 135, md: 'auto' } // На мобильных ширина 150px, на ПК - авто
+                                width: { xs: 120, md: 'auto' }, // На мобильных ширина 150px, на ПК - авто
+                                mr: 0.5
                             }}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -5432,8 +5434,11 @@ const CollapsiblePushSidebar = ({ children }) => {
                         ) : (
                             // --- ИЗМЕНЕНИЕ №2: Убираем лишний div для лучшей верстки ---
                             <>
-                                <Button component={NavLink} to="/login" variant="outlined" color="neutral" size="md">Login</Button>
-                                <Button component={NavLink} to="/register" variant="solid" color="primary" size="md">
+                                <Button component={NavLink} to="/login" variant="outlined" color="primary" size="md">
+                                    <Typography sx={{ display: { xs: 'none', sm: 'inline' } }}>Log in</Typography>
+                                    <LoginIcon sx={{ display: { sm: 'none' } }} />
+                                </Button>                                
+                                <Button component={NavLink} to="/register" variant="outlined" color="primary" size="md">
                                     <Typography sx={{ display: { xs: 'none', sm: 'inline' } }}>Register</Typography>
                                     <GroupAddIcon sx={{ display: { sm: 'none' } }} />
                                 </Button>
@@ -7355,23 +7360,27 @@ const MessageBubble = ({ message, isOwn, isHighlighted, onReplyLinkClick, onEdit
     const wasEdited = new Date(message.updated_at).getTime() - new Date(message.sent_at).getTime() > 1000;
 
     const messageContent = (
-        <Sheet 
-            variant="solid" 
-            color={isOwn ? 'primary' : 'neutral'} 
-            sx={{ 
-                p: 1.2, 
-                borderRadius: 'lg', 
-                // --- ИЗМЕНЕНО: Адаптивная максимальная ширина ---
-                maxWidth: { xs: '85%', sm: '75%', md: '60%' }, 
-                wordBreak: 'break-word',
+        <Sheet
+            variant="solid"
+            color={isOwn ? 'primary' : 'neutral'}
+            sx={{
+                p: 1.2,
+                borderRadius: 'lg',
+                maxWidth: { xs: '85%', sm: '75%', md: '60%' },
+                // Улучшенный перенос слов
+                overflowWrap: 'break-word',
+                // Устанавливаем минимальную ширину, чтобы пузырь не схлопывался
+                minWidth: 60, 
+                // Явно указываем выравнивание текста
+                textAlign: 'left',
                 transition: 'background-color 0.3s ease-in-out',
                 ...(isHighlighted && { bgcolor: isOwn ? 'primary.600' : 'neutral.600' })
             }}
         >
             {message.parentMessage && !message.parentMessage.is_deleted && (
-                <JoyLink 
+                <JoyLink
                     onClick={(e) => onReplyLinkClick(e, message.parentMessage.id)}
-                    href={`#msg-${message.parentMessage.id}`} 
+                    href={`#msg-${message.parentMessage.id}`}
                     sx={{ textDecoration: 'none', color: 'inherit' }}
                 >
                     <Sheet variant="soft" sx={{ p: 1, borderRadius: 'sm', mb: 1, opacity: 0.9 }}>
@@ -7402,9 +7411,10 @@ const MessageBubble = ({ message, isOwn, isHighlighted, onReplyLinkClick, onEdit
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            // --- ИЗМЕНЕНО: Главное изменение! Меню видно на мобильных или при наведении на десктопе ---
             opacity: (isMobile || isHovered) && !message.is_deleted ? 1 : 0,
             transition: 'opacity 0.2s',
+            // Убедимся, что меню не сжимается
+            flexShrink: 0,
             }}>
             <Dropdown>
                 <MenuButton slots={{ root: IconButton }} slotProps={{ root: { variant: 'plain', color: 'neutral', size: 'sm' } }}>
@@ -7420,31 +7430,39 @@ const MessageBubble = ({ message, isOwn, isHighlighted, onReplyLinkClick, onEdit
     );
 
     return (
-        <Box 
-            id={`msg-${message.id}`} 
+        <Box
+            id={`msg-${message.id}`}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
-            sx={{ display: 'flex', alignItems: 'flex-start', gap: {xs: 1, sm: 1.5}, justifyContent: isOwn ? 'flex-end' : 'flex-start' }}
+            // Главный контейнер строки сообщения. Используем display: 'flex'
+            sx={{
+                display: 'flex',
+                alignItems: 'flex-end', // Выравниваем по низу для красивого расположения аватара
+                gap: { xs: 1, sm: 1.5 },
+                justifyContent: isOwn ? 'flex-end' : 'flex-start'
+            }}
         >
+            {/* Для сообщений собеседника */}
             {!isOwn && (
-                <div>
-                    <Avatar src={constructImageUrl(message.sender?.pfp_url)} sx={{ width: {xs: 32, md: 40}, height: {xs: 32, md: 40} }} />
+                <>
+                    <Avatar src={constructImageUrl(message.sender?.pfp_url)} sx={{ width: { xs: 32, md: 40 }, height: { xs: 32, md: 40 }, flexShrink: 0 }} />
                     {messageContent}
                     {menu}
-                </div>
+                </>
             )}
+
+            {/* Для ваших сообщений */}
             {isOwn && (
-                <div>
+                <>
                     {menu}
                     {messageContent}
-                    {/* Аватар для своих сообщений можно скрыть на мобильных, чтобы сэкономить место */}
-                    {!isMobile && <Avatar src={constructImageUrl(message.sender?.pfp_url)} />}
-                </div>
+                    {/* Аватар для своих сообщений можно скрыть на мобильных */}
+                    {!isMobile && <Avatar src={constructImageUrl(message.sender?.pfp_url)} sx={{flexShrink: 0}} />}
+                </>
             )}
         </Box>
     );
 };
-
 
 export default ConversationPage;
 --- END FILE: frontend/src/pages/ConversationPage.js ---
@@ -9596,7 +9614,7 @@ import {
     List,
     ListItem,
     ListItemButton,
-    ListItemContent as JoyListItemContent, // Переименовываем, чтобы избежать конфликта с нашим ListItemContent
+    ListItemContent as JoyListItemContent,
     Link as JoyLink,
     Divider,
 } from '@mui/joy';
@@ -9605,7 +9623,6 @@ import { constructImageUrl } from '../utils/url';
 function SearchPage() {
     const [searchParams] = useSearchParams();
     const query = searchParams.get('query');
-
     const [results, setResults] = useState({ users: [], posts: [] });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -9618,11 +9635,19 @@ function SearchPage() {
         setLoading(true);
         setError(null);
         try {
+            // Запросы остаются теми же
             const [usersRes, postsRes] = await Promise.all([
                 axios.get(`/api/users`, { params: { search: query } }),
                 axios.get(`/api/posts`, { params: { search: query } })
             ]);
-            setResults({ users: usersRes.data, posts: postsRes.data });
+            
+            // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+            // Мы должны брать массивы из поля .data в каждом ответе
+            setResults({ 
+                users: usersRes.data.data, 
+                posts: postsRes.data.data 
+            });
+
         } catch (err) {
             setError('Failed to fetch search results.');
             console.error(err);
@@ -9647,7 +9672,6 @@ function SearchPage() {
 
     return (
         <Box>
-            {/* --- ИЗМЕНЕНО: Адаптивный заголовок --- */}
             <Typography level={{ xs: 'h2', sm: 'h1' }} component="h1" sx={{ mb: 3 }}>
                 Search Results for: "{query}"
             </Typography>
@@ -9658,7 +9682,6 @@ function SearchPage() {
                 <Grid container spacing={4}>
                     {results.posts.length > 0 && (
                         <Grid xs={12}>
-                            {/* --- ИЗМЕНЕНО: Адаптивный подзаголовок --- */}
                             <Typography level={{ xs: 'h3', sm: 'h2' }} component="h2" sx={{ mb: 2 }}>Found Posts</Typography>
                             <List variant="outlined" sx={{ borderRadius: 'sm', p: 0 }}>
                                 {results.posts.map((post, index) => (
@@ -9684,7 +9707,6 @@ function SearchPage() {
 
                     {results.users.length > 0 && (
                         <Grid xs={12}>
-                            {/* --- ИЗМЕНЕНО: Адаптивный подзаголовок --- */}
                             <Typography level={{ xs: 'h3', sm: 'h2' }} component="h2" sx={{ mt: results.posts.length > 0 ? 4 : 0, mb: 2 }}>Found Players</Typography>
                             <Grid container spacing={2}>
                                 {results.users.map((user) => (
