@@ -1,5 +1,5 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Sat Jun 21 18:38:38 EEST 2025
+PROJECT SNAPSHOT CREATED ON: Sat Jun 21 22:07:58 EEST 2025
 ===============================================
 
 
@@ -156,7 +156,6 @@ import { MessagesModule } from './messages/messages.module';
 import { NewsModule } from './news/news.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { CommentsModule } from './comments/comments.module';
-import { PurchasesModule } from './purchases/purchases.module';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { ChatModule } from './chat/chat.module';
@@ -207,7 +206,6 @@ import { Rank } from './ranks/entities/rank.entity';
     NewsModule,
     NotificationsModule,
     CommentsModule,
-    PurchasesModule,
     VotesModule,
     MessagesModule,
     RanksModule
@@ -945,6 +943,7 @@ import { LinkingModule } from 'src/linking/linking.module'; // <-- ДОБАВЛ�
     LinkingModule, // <-- ДОБАВЯЕМ НАШ НОВЫЙ МОДУЛЬ СЮДА
   ],
   providers: [ChatGateway, WsGuard],
+    exports: [ChatGateway] // <-- УБЕДИСЬ, ЧТО ЭТА СТРОКА ЕСТЬ
 })
 export class ChatModule {}
 --- END FILE: backend/src/chat/chat.module.ts ---
@@ -3297,20 +3296,8 @@ export class PostsService {
 
 
 
---- START FILE: backend/src/purchases/dto/create-purchase.dto.ts ---
-
-export class CreatePurchaseDto {}
-
---- END FILE: backend/src/purchases/dto/create-purchase.dto.ts ---
-
-
-
 --- START FILE: backend/src/purchases/dto/update-purchase.dto.ts ---
 
-import { PartialType } from '@nestjs/mapped-types';
-import { CreatePurchaseDto } from './create-purchase.dto';
-
-export class UpdatePurchaseDto extends PartialType(CreatePurchaseDto) {}
 
 --- END FILE: backend/src/purchases/dto/update-purchase.dto.ts ---
 
@@ -3363,40 +3350,6 @@ export class Purchase {
 
 --- START FILE: backend/src/purchases/purchases.controller.ts ---
 
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { PurchasesService } from './purchases.service';
-import { CreatePurchaseDto } from './dto/create-purchase.dto';
-import { UpdatePurchaseDto } from './dto/update-purchase.dto';
-
-@Controller('purchases')
-export class PurchasesController {
-  constructor(private readonly purchasesService: PurchasesService) {}
-
-  @Post()
-  create(@Body() createPurchaseDto: CreatePurchaseDto) {
-    return this.purchasesService.create(createPurchaseDto);
-  }
-
-  @Get()
-  findAll() {
-    return this.purchasesService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.purchasesService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updatePurchaseDto: UpdatePurchaseDto) {
-    return this.purchasesService.update(+id, updatePurchaseDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.purchasesService.remove(+id);
-  }
-}
 
 --- END FILE: backend/src/purchases/purchases.controller.ts ---
 
@@ -3404,15 +3357,6 @@ export class PurchasesController {
 
 --- START FILE: backend/src/purchases/purchases.module.ts ---
 
-import { Module } from '@nestjs/common';
-import { PurchasesService } from './purchases.service';
-import { PurchasesController } from './purchases.controller';
-
-@Module({
-  controllers: [PurchasesController],
-  providers: [PurchasesService],
-})
-export class PurchasesModule {}
 
 --- END FILE: backend/src/purchases/purchases.module.ts ---
 
@@ -3420,32 +3364,6 @@ export class PurchasesModule {}
 
 --- START FILE: backend/src/purchases/purchases.service.ts ---
 
-import { Injectable } from '@nestjs/common';
-import { CreatePurchaseDto } from './dto/create-purchase.dto';
-import { UpdatePurchaseDto } from './dto/update-purchase.dto';
-
-@Injectable()
-export class PurchasesService {
-  create(createPurchaseDto: CreatePurchaseDto) {
-    return 'This action adds a new purchase';
-  }
-
-  findAll() {
-    return `This action returns all purchases`;
-  }
-
-  findOne(id: number) {
-    return `This action returns a #${id} purchase`;
-  }
-
-  update(id: number, updatePurchaseDto: UpdatePurchaseDto) {
-    return `This action updates a #${id} purchase`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} purchase`;
-  }
-}
 
 --- END FILE: backend/src/purchases/purchases.service.ts ---
 
@@ -3755,36 +3673,101 @@ export class RanksService implements OnModuleInit {
 
 
 
---- START FILE: backend/src/shop/dto/create-shop.dto.ts ---
+--- START FILE: backend/src/shop/dto/admin-shop.dto.ts ---
 
-export class CreateShopDto {}
+// backend/src/shop/dto/admin-shop.dto.ts
+import { IsString, IsInt, IsBoolean, IsOptional, IsUrl, Min, MaxLength, IsNotEmpty } from 'class-validator';
 
---- END FILE: backend/src/shop/dto/create-shop.dto.ts ---
+export class CreateShopDto {
+  @IsString({ message: 'Name must be a string.' })
+  @IsNotEmpty({ message: 'Name should not be empty.' })
+  @MaxLength(100)
+  name: string;
+
+  @IsString()
+  @IsOptional() // Делаем описание необязательным
+  @MaxLength(500)
+  description: string;
+
+  @IsInt({ message: 'Price must be an integer.' })
+  @Min(0, { message: 'Price cannot be negative.' })
+  price: number;
+
+  @IsOptional()
+  @IsUrl({}, { message: 'Image URL must be a valid URL.' })
+  @MaxLength(255)
+  image_url?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  ingame_command: string;
+
+  @IsBoolean()
+  is_active: boolean;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  category: string;
+}
+
+// DTO для обновления, где все поля необязательны
+export class UpdateShopDto {
+  @IsOptional() @IsString() @MaxLength(100) name?: string;
+  @IsOptional() @IsString() @MaxLength(500) description?: string;
+  @IsOptional() @IsInt() @Min(0) price?: number;
+  @IsOptional() @IsUrl() @MaxLength(255) image_url?: string;
+  @IsOptional() @IsString() @MaxLength(255) ingame_command?: string;
+  @IsOptional() @IsBoolean() is_active?: boolean;
+  @IsOptional() @IsString() @MaxLength(50) category?: string;
+}
+--- END FILE: backend/src/shop/dto/admin-shop.dto.ts ---
 
 
 
---- START FILE: backend/src/shop/dto/update-shop.dto.ts ---
+--- START FILE: backend/src/shop/dto/purchase.dto.ts ---
 
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateShopDto } from './create-shop.dto';
+import { IsInt, IsOptional, IsString, MinLength } from 'class-validator';
+export class PurchaseDto {
+  @IsInt()
+  itemId: number;
 
-export class UpdateShopDto extends PartialType(CreateShopDto) {}
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  targetUsername?: string;
+}
+--- END FILE: backend/src/shop/dto/purchase.dto.ts ---
 
---- END FILE: backend/src/shop/dto/update-shop.dto.ts ---
+
+
+--- START FILE: backend/src/shop/entities/pending-command.entity.ts ---
+
+// backend/src/shop/entities/pending-command.entity.ts
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+
+@Entity('pending_commands')
+export class PendingCommand {
+    @PrimaryGeneratedColumn()
+    id: number;
+
+    // Готовая к выполнению команда, например "lp user Steve parent set vip"
+    @Column({ type: 'varchar', length: 255 })
+    command: string;
+
+    @CreateDateColumn({ name: 'created_at' })
+    created_at: Date;
+}
+--- END FILE: backend/src/shop/entities/pending-command.entity.ts ---
 
 
 
 --- START FILE: backend/src/shop/entities/shop-item.entity.ts ---
 
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  OneToMany,
-} from 'typeorm';
-import { Purchase } from '../../purchases/entities/purchase.entity';
+// backend/src/shop/entities/shop-item.entity.ts
+import { Purchase } from 'src/purchases/entities/purchase.entity';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 
 @Entity('shop_items')
 export class ShopItem {
@@ -3792,33 +3775,33 @@ export class ShopItem {
   item_id: number;
 
   @Column({ type: 'varchar', length: 100 })
-  name: string;
+  name: string; // Название товара, например "VIP Статус на 30 дней" 
 
   @Column({ type: 'text', nullable: true })
-  description: string | null;
+  description: string | null; // Описание для сайта 
 
-  @Column({ type: 'integer', default: 0 })
-  price: number;
-
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  category: string | null;
+  @Column({ type: 'integer' })
+  price: number; // Цена в донатной валюте (баланс пользователя) 
 
   @Column({ type: 'varchar', length: 255, nullable: true, name: 'image_url' })
-  image_url: string | null;
+  image_url: string | null; // Ссылка на картинку товара 
 
-  @Column({ type: 'varchar', length: 255, nullable: true, name: 'ingame_command' })
-  ingame_command: string | null;
+  @Column({ type: 'varchar', length: 255 })
+  ingame_command: string; // Команда для выполнения. Пример: "lp user {username} parent set vip" 
 
   @Column({ type: 'boolean', default: true, name: 'is_active' })
-  is_active: boolean;
+  is_active: boolean; // Можно ли купить этот товар сейчас 
+  
+  @Column({ type: 'varchar', length: 50, default: 'items' })
+  category: string; // Категория для фильтрации на сайте 
 
-  @CreateDateColumn({ type: 'timestamp', name: 'created_at', default: () => 'CURRENT_TIMESTAMP' })
-  created_at: Date;
+  @CreateDateColumn({ name: 'created_at' })
+  created_at: Date; // 
 
-  @UpdateDateColumn({ type: 'timestamp', name: 'updated_at', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
-  updated_at: Date;
+  @UpdateDateColumn({ name: 'updated_at' })
+  updated_at: Date; // 
 
-  @OneToMany(() => Purchase, (purchase) => purchase.item)
+    @OneToMany(() => Purchase, (purchase) => purchase.item)
   purchases: Purchase[];
 }
 --- END FILE: backend/src/shop/entities/shop-item.entity.ts ---
@@ -3827,90 +3810,194 @@ export class ShopItem {
 
 --- START FILE: backend/src/shop/shop.controller.ts ---
 
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+// backend/src/shop/shop.controller.ts
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
 import { ShopService } from './shop.service';
-import { CreateShopDto } from './dto/create-shop.dto';
-import { UpdateShopDto } from './dto/update-shop.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { SystemRanks } from '../ranks/ranks.service';
+import { PluginApiKeyGuard } from '../auth/guards/plugin-api-key.guard';
+import { PurchaseDto } from './dto/purchase.dto';
+import { CreateShopDto, UpdateShopDto } from './dto/admin-shop.dto';
 
 @Controller('shop')
 export class ShopController {
   constructor(private readonly shopService: ShopService) {}
 
-  @Post()
-  create(@Body() createShopDto: CreateShopDto) {
-    return this.shopService.create(createShopDto);
-  }
-
+  // --- Роуты для фронтенда ---
+  
   @Get()
-  findAll() {
-    return this.shopService.findAll();
+  findAllActive() {
+    return this.shopService.findAllActive();
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.shopService.findOne(+id);
+  @Post('purchase')
+  @UseGuards(JwtAuthGuard)
+  purchaseItem(@Body() purchaseDto: PurchaseDto, @Request() req) {
+    return this.shopService.purchase(purchaseDto, req.user.userId);
   }
+
+  // --- Роуты для плагина (защищены API ключом) ---
+
+  @Get('pending-commands')
+  @UseGuards(PluginApiKeyGuard)
+  getPendingCommands() {
+    return this.shopService.getPendingCommands();
+  }
+
+  @Post('clear-pending-commands')
+  @UseGuards(PluginApiKeyGuard)
+  clearPendingCommands(@Body('commandIds') commandIds: number[]) {
+    return this.shopService.clearPendingCommands(commandIds);
+  }
+
+  // --- Роуты для админ-панели (защищены по рангу) ---
+
+  @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  create(@Body() createDto: CreateShopDto) { // <-- Вот здесь
+    return this.shopService.create(createDto);
+  }
+
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateShopDto: UpdateShopDto) {
-    return this.shopService.update(+id, updateShopDto);
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateDto: UpdateShopDto) {
+    return this.shopService.update(id, updateDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.shopService.remove(+id);
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.shopService.remove(id);
   }
 }
-
 --- END FILE: backend/src/shop/shop.controller.ts ---
 
 
 
 --- START FILE: backend/src/shop/shop.module.ts ---
 
+// backend/src/shop/shop.module.ts
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ShopService } from './shop.service';
 import { ShopController } from './shop.controller';
+import { ShopItem } from './entities/shop-item.entity';
+import { PendingCommand } from './entities/pending-command.entity';
+import { User } from '../users/entities/user.entity';
+import { PluginApiKeyGuard } from '../auth/guards/plugin-api-key.guard';
+import { ChatModule } from '../chat/chat.module'; // <-- 1. ИМПОРТИРУЕМ ChatModule
 
 @Module({
+  imports: [
+    TypeOrmModule.forFeature([ShopItem, PendingCommand, User]),
+    ChatModule, // <-- 2. ДОБАВЛЯЕМ ChatModule в импорты
+  ],
   controllers: [ShopController],
-  providers: [ShopService],
+  providers: [ShopService, PluginApiKeyGuard], // <-- 3. УБИРАЕМ ChatGateway отсюда
 })
 export class ShopModule {}
-
 --- END FILE: backend/src/shop/shop.module.ts ---
 
 
 
 --- START FILE: backend/src/shop/shop.service.ts ---
 
-import { Injectable } from '@nestjs/common';
-import { CreateShopDto } from './dto/create-shop.dto';
-import { UpdateShopDto } from './dto/update-shop.dto';
+// backend/src/shop/shop.service.ts
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ShopItem } from './entities/shop-item.entity';
+import { PendingCommand } from './entities/pending-command.entity';
+import { User } from '../users/entities/user.entity';
+import { ChatGateway } from '../chat/chat.gateway';
+import { PurchaseDto } from './dto/purchase.dto'; // Создадим этот DTO в следующем шаге
+import { CreateShopDto, UpdateShopDto } from './dto/admin-shop.dto'; // И эти тоже
 
 @Injectable()
 export class ShopService {
-  create(createShopDto: CreateShopDto) {
-    return 'This action adds a new shop';
+  constructor(
+    @InjectRepository(ShopItem) private shopItemsRepository: Repository<ShopItem>,
+    @InjectRepository(PendingCommand) private pendingCommandsRepository: Repository<PendingCommand>,
+    @InjectRepository(User) private usersRepository: Repository<User>,
+    private readonly chatGateway: ChatGateway,
+  ) {}
+
+  // --- Методы для всех пользователей ---
+
+  async findAllActive(): Promise<ShopItem[]> {
+    return this.shopItemsRepository.findBy({ is_active: true });
   }
 
-  findAll() {
-    return `This action returns all shop`;
+  async purchase(purchaseDto: PurchaseDto, buyerId: number): Promise<{ message: string }> {
+    const { itemId, targetUsername } = purchaseDto;
+
+    const item = await this.shopItemsRepository.findOneBy({ item_id: itemId, is_active: true });
+    if (!item) throw new NotFoundException('Item not found or is not available for purchase.');
+
+    const buyer = await this.usersRepository.findOneBy({ id: buyerId });
+    if (!buyer) throw new NotFoundException('Buyer account not found.');
+
+    if (buyer.balance < item.price) throw new ForbiddenException('Insufficient funds.');
+
+    let finalCommand: string;
+    let recipientName: string;
+
+    if (targetUsername) { // Покупка в подарок
+      recipientName = targetUsername;
+      finalCommand = item.ingame_command.replace('{username}', recipientName);
+    } else { // Покупка для себя
+      if (!buyer.minecraft_username) throw new ForbiddenException('To buy for yourself, you must link your Minecraft account first.');
+      recipientName = buyer.minecraft_username;
+      finalCommand = item.ingame_command.replace('{username}', recipientName);
+    }
+
+    buyer.balance -= item.price;
+    await this.usersRepository.save(buyer);
+
+    const pendingCommand = this.pendingCommandsRepository.create({ command: finalCommand });
+    await this.pendingCommandsRepository.save(pendingCommand);
+
+    const message = `Successfully purchased "${item.name}" for ${recipientName}! The item will be delivered in-game shortly.`;
+    return { message };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} shop`;
+  // --- Методы для плагина ---
+
+  async getPendingCommands(): Promise<PendingCommand[]> {
+    return this.pendingCommandsRepository.find();
   }
 
-  update(id: number, updateShopDto: UpdateShopDto) {
-    return `This action updates a #${id} shop`;
+  async clearPendingCommands(commandIds: number[]): Promise<void> {
+    if (commandIds.length > 0) {
+      await this.pendingCommandsRepository.delete(commandIds);
+    }
+  }
+  
+  // --- Методы для админов ---
+  
+  async create(createDto: CreateShopDto): Promise<ShopItem> {
+      const newItem = this.shopItemsRepository.create(createDto);
+      return this.shopItemsRepository.save(newItem);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} shop`;
+  async update(id: number, updateDto: UpdateShopDto): Promise<ShopItem> {
+      await this.shopItemsRepository.update(id, updateDto);
+      const updatedItem = await this.shopItemsRepository.findOneBy({ item_id: id });
+      if (!updatedItem) throw new NotFoundException('Item not found');
+      return updatedItem;
+  }
+
+  async remove(id: number): Promise<void> {
+      const result = await this.shopItemsRepository.delete(id);
+      if (result.affected === 0) throw new NotFoundException('Item not found');
   }
 }
-
 --- END FILE: backend/src/shop/shop.service.ts ---
 
 
@@ -4212,7 +4299,6 @@ export class User {
 
   @Column({ name: 'rank_id', nullable: true })
   rank_id: number | null;
-
 
   async validatePassword(passwordToValidate: string): Promise<boolean> {
     if (!this.password_hash) return false;
@@ -5015,8 +5101,11 @@ import AdminPostsPage from './pages/AdminPostsPage'; // <-- ДОБАВЬТЕ Э�
 import CreateNewsPage from './pages/CreateNewsPage'; // <-- ДОБАВЬТЕ ЭТО
 import LinkMinecraftPage from './pages/LinkMinecraftPage'; // <-- ДОБАВЬТЕ ЭТО
 import AdminRanksPage from './pages/AdminRanksPage';
+import ShopPage from './pages/ShopPage'; // <-- ДОБАВЬ ЭТУ СТРОКУ
+import { Box, Typography } from '@mui/joy'; // <-- ДОБАВЛЕНО
 import { ThemeProvider as MuiThemeProvider, createTheme as createMuiTheme } from '@mui/material/styles';
-
+import AdminShopPage from './pages/AdminShopPage'; // <-- ДОБАВЬ ЭТУ СТРОКУ
+import AdminCreateItemPage from './pages/AdminCreateItemPage'; // <-- ДОБАВЬ ЭТУ СТРОКУ
 
 import axios from 'axios'; // <-- Убедитесь, что axios импортирован
 
@@ -5059,6 +5148,15 @@ function App() {
                     <Route path="profile/me" element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} />
                     <Route path="/profile/link-minecraft" element={<ProtectedRoute><LinkMinecraftPage /></ProtectedRoute>} />
                     <Route path="/admin/ranks" element={<ProtectedRoute><AdminRanksPage /></ProtectedRoute>} />
+                    <Route path="/shop" element={<ShopPage />} />
+                    <Route path="/admin/shop" element={<ProtectedRoute><AdminShopPage /></ProtectedRoute>} /> {/* <-- ВОТ ЭТА СТРОКА */}
+                    <Route path="/admin/shop/new" element={<ProtectedRoute><AdminCreateItemPage /></ProtectedRoute>} /> {/* <-- ВОТ ЭТА СТРОКА */}
+                    <Route path="/store/ranks" element={
+                      <Box>
+                        <Typography level="h1">Ranks Store</Typography>
+                        <Typography>This page is under construction.</Typography>
+                      </Box>
+                    } />
                   </Route>
 
                   <Route path="/login" element={<LoginPage />} />
@@ -5202,7 +5300,7 @@ const navItems = [
     {
         name: 'Store', icon: <StorefrontIcon />, subItems: [
             { name: 'Ranks', icon: <AdbIcon />, path: '/store/ranks' },
-            { name: 'Items', icon: <DiamondIcon />, path: '/store/items' },
+            { name: 'Items', icon: <DiamondIcon />, path: '/shop' }, 
         ],
     },
     { name: 'Support', icon: <SupportAgentIcon />, path: '/support' },
@@ -5221,7 +5319,8 @@ const adminNavItem = {
     name: 'Admin Panel', icon: <AdminPanelSettingsIcon />, subItems: [
         { name: 'User Management', icon: <SupervisedUserCircleIcon />, path: '/admin/users' },
         { name: 'Post Management', icon: <DynamicFeedIcon />, path: '/admin/posts' },
-        { name: 'Rank Management', icon: <ShieldIcon />, path: '/admin/ranks' }
+        { name: 'Rank Management', icon: <ShieldIcon />, path: '/admin/ranks' },
+                { name: 'Shop Management', icon: <StorefrontIcon />, path: '/admin/shop' }
     ],
 };
 
@@ -5634,6 +5733,145 @@ const ProtectedRoute = ({ children }) => {
 
 export default ProtectedRoute;
 --- END FILE: frontend/src/components/ProtectedRoute.js ---
+
+
+
+--- START FILE: frontend/src/components/PurchaseModal.js ---
+
+// frontend/src/components/PurchaseModal.js
+import React, { useState } from 'react';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import {
+    Modal,
+    ModalDialog,
+    ModalClose,
+    Typography,
+    Box,
+    Button,
+    FormControl,
+    FormLabel,
+    Input,
+    Switch,
+    Alert,
+    Stack,
+    Divider,
+} from '@mui/joy';
+import toast from 'react-hot-toast';
+
+function PurchaseModal({ open, onClose, item }) {
+    const { user, isLoggedIn, updateAuthToken } = useAuth();
+    const navigate = useNavigate();
+
+    const [isGifting, setIsGifting] = useState(false);
+    const [targetUsername, setTargetUsername] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleConfirmPurchase = async () => {
+        if (!isLoggedIn) {
+            navigate('/login');
+            return;
+        }
+        setLoading(true);
+        setError('');
+
+        try {
+            const payload = {
+                itemId: item.item_id,
+                // Если это подарок, отправляем ник. Иначе - не отправляем поле.
+                targetUsername: isGifting ? targetUsername : undefined,
+            };
+
+            const response = await axios.post('/api/shop/purchase', payload);
+            toast.success(response.data.message || "Purchase successful!");
+            
+            // Запрашиваем новый токен, чтобы обновить баланс в AuthContext
+            const profileResponse = await axios.get('/api/auth/profile');
+            if (profileResponse.data.access_token) {
+                 updateAuthToken(profileResponse.data.access_token);
+            } else {
+                 // Если токен не пришел, можно просто обновить юзера
+                 // setUser(profileResponse.data) - это потребует добавить setUser в AuthContext
+                 // Проще всего перезагрузить страницу для обновления баланса, но это не лучший UX
+                 // Оставим пока так, это уже продвинутая оптимизация
+            }
+
+            onClose(); // Закрываем модальное окно
+        } catch (err) {
+            setError(err.response?.data?.message || 'An unknown error occurred.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!item) return null; // Не рендерим ничего, если товар не выбран
+
+    return (
+        <Modal open={open} onClose={onClose}>
+            <ModalDialog sx={{ minWidth: 350 }}>
+                <ModalClose />
+                <Typography level="h4" component="h2">Confirm Purchase</Typography>
+                <Divider sx={{ my: 2 }} />
+                <Stack spacing={2}>
+                    <Box>
+                        <Typography level="title-md">{item.name}</Typography>
+                        <Typography level="body-sm">{item.description}</Typography>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography fontWeight="lg">Price:</Typography>
+                        <Typography fontWeight="lg">{item.price} coins</Typography>
+                    </Box>
+
+                    {isLoggedIn && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <Typography>Your Balance:</Typography>
+                            <Typography>{user.balance} coins</Typography>
+                        </Box>
+                    )}
+
+                    <FormControl sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <FormLabel>Gift to another player?</FormLabel>
+                        <Switch
+                            checked={isGifting}
+                            onChange={(e) => setIsGifting(e.target.checked)}
+                            disabled={!isLoggedIn}
+                        />
+                    </FormControl>
+
+                    {isGifting && (
+                        <FormControl>
+                            <FormLabel>Player's Minecraft Username</FormLabel>
+                            <Input
+                                placeholder="Enter exact username"
+                                value={targetUsername}
+                                onChange={(e) => setTargetUsername(e.target.value)}
+                                required
+                            />
+                        </FormControl>
+                    )}
+                    
+                    {error && <Alert color="danger">{error}</Alert>}
+
+                    <Button
+                        variant="solid"
+                        color="primary"
+                        loading={loading}
+                        onClick={handleConfirmPurchase}
+                        disabled={isGifting && !targetUsername.trim()}
+                    >
+                        {isLoggedIn ? 'Confirm and Buy' : 'Log In to Purchase'}
+                    </Button>
+                </Stack>
+            </ModalDialog>
+        </Modal>
+    );
+}
+
+export default PurchaseModal;
+--- END FILE: frontend/src/components/PurchaseModal.js ---
 
 
 
@@ -6155,6 +6393,145 @@ const MainLayout = () => {
 
 export default MainLayout;
 --- END FILE: frontend/src/layouts/MainLayout.js ---
+
+
+
+--- START FILE: frontend/src/pages/AdminCreateItemPage.js ---
+
+// frontend/src/pages/AdminCreateItemPage.js
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import {
+    Box,
+    Typography,
+    FormControl,
+    FormLabel,
+    Input,
+    Textarea,
+    Button,
+    Alert,
+    Breadcrumbs,
+    Link as JoyLink,
+    Switch,
+    Stack
+} from '@mui/joy';
+import HomeIcon from '@mui/icons-material/Home';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import toast from 'react-hot-toast';
+
+function AdminCreateItemPage() {
+    const navigate = useNavigate();
+    const { authToken } = useAuth();
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const [formData, setFormData] = useState({
+        name: '',
+        description: '',
+        price: 0,
+        image_url: '',
+        ingame_command: '',
+        category: 'items',
+        is_active: true,
+    });
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSwitchChange = (e) => {
+        const { name, checked } = e.target;
+        setFormData(prev => ({ ...prev, [name]: checked }));
+    };
+
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        setLoading(true);
+        setError('');
+
+        try {
+            // Убедимся, что цена это число
+            const payload = {
+                ...formData,
+                price: Number(formData.price)
+            };
+
+            await axios.post('/api/shop', payload, {
+                headers: { Authorization: `Bearer ${authToken}` },
+            });
+            
+            toast.success('Item created successfully!');
+            navigate('/admin/shop'); // Возвращаемся на страницу управления магазином
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to create item.');
+            console.error('Error creating item:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Box component="form" onSubmit={handleSubmit}>
+            <Breadcrumbs separator={<ChevronRightIcon />} sx={{ mb: 2 }}>
+                <JoyLink href="/admin/users"><HomeIcon /></JoyLink>
+                <JoyLink href="/admin/shop">Shop Management</JoyLink>
+                <Typography>Create New Item</Typography>
+            </Breadcrumbs>
+            
+            <Typography level="h2" component="h1" sx={{ mb: 2 }}>Create New Shop Item</Typography>
+            
+            {error && <Alert color="danger" sx={{ mb: 2 }}>{Array.isArray(error) ? error.join(', ') : error}</Alert>}
+
+            <Stack spacing={2}>
+                <FormControl required>
+                    <FormLabel>Item Name</FormLabel>
+                    <Input name="name" value={formData.name} onChange={handleChange} placeholder="e.g., VIP Rank (30 days)" />
+                </FormControl>
+                
+                <FormControl required>
+                    <FormLabel>Description</FormLabel>
+                    <Textarea name="description" value={formData.description} onChange={handleChange} minRows={3} placeholder="A short description of the item for the shop page." />
+                </FormControl>
+
+                <Stack direction="row" spacing={2}>
+                    <FormControl required sx={{ flex: 1 }}>
+                        <FormLabel>Price (in coins)</FormLabel>
+                        <Input name="price" type="number" value={formData.price} onChange={handleChange} />
+                    </FormControl>
+                    <FormControl required sx={{ flex: 1 }}>
+                        <FormLabel>Category</FormLabel>
+                        <Input name="category" value={formData.category} onChange={handleChange} placeholder="e.g., ranks, items, keys" />
+                    </FormControl>
+                </Stack>
+                
+                <FormControl>
+                    <FormLabel>Image URL</FormLabel>
+                    <Input name="image_url" value={formData.image_url} onChange={handleChange} placeholder="https://example.com/image.png" />
+                </FormControl>
+                
+                <FormControl required>
+                    <FormLabel>In-game Command</FormLabel>
+                    <Input name="ingame_command" value={formData.ingame_command} onChange={handleChange} placeholder="lp user {username} parent set vip" />
+                </FormControl>
+
+                <FormControl sx={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <FormLabel>Item is Active</FormLabel>
+                    <Switch name="is_active" checked={formData.is_active} onChange={handleSwitchChange} />
+                </FormControl>
+
+                <Button type="submit" loading={loading} sx={{ mt: 2 }}>
+                    Create Item
+                </Button>
+            </Stack>
+        </Box>
+    );
+}
+
+export default AdminCreateItemPage;
+--- END FILE: frontend/src/pages/AdminCreateItemPage.js ---
 
 
 
@@ -7060,6 +7437,127 @@ function AdminRanksPage() {
 
 export default AdminRanksPage;
 --- END FILE: frontend/src/pages/AdminRanksPage.js ---
+
+
+
+--- START FILE: frontend/src/pages/AdminShopPage.js ---
+
+// frontend/src/pages/AdminShopPage.js
+import React, { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import { Box, Typography, Button, CircularProgress, Alert, Sheet, Table, Chip, IconButton, Tooltip } from '@mui/joy';
+import { Link as RouterLink } from 'react-router-dom';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+
+// Нам понадобится метод для получения ВСЕХ товаров, а не только активных.
+// Для этого нужно будет создать соответствующий эндпоинт на бэкенде,
+// но пока будем использовать существующий.
+// В идеале: GET /api/shop/all (защищенный для админов).
+
+function AdminShopPage() {
+    const { authToken } = useAuth();
+    const [items, setItems] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    const fetchAllItems = useCallback(async () => {
+        setLoading(true);
+        try {
+            // Примечание: Этот эндпоинт отдает только активные товары.
+            // В идеале нужен отдельный эндпоинт для админов, отдающий все.
+            const response = await axios.get('/api/shop', {
+                headers: { Authorization: `Bearer ${authToken}` },
+            });
+            setItems(response.data);
+        } catch (err) {
+            setError('Failed to load shop items.');
+        } finally {
+            setLoading(false);
+        }
+    }, [authToken]);
+
+    useEffect(() => {
+        fetchAllItems();
+    }, [fetchAllItems]);
+    
+    // TODO: Логика для удаления товара
+    const handleDelete = async (itemId) => {
+        if (!window.confirm('Are you sure you want to delete this item?')) return;
+        try {
+            await axios.delete(`/api/shop/${itemId}`, {
+                headers: { Authorization: `Bearer ${authToken}` },
+            });
+            // Обновляем список после удаления
+            fetchAllItems();
+        } catch (err) {
+            alert('Failed to delete item.');
+        }
+    };
+
+    if (loading) return <CircularProgress />;
+    if (error) return <Alert color="danger">{error}</Alert>;
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography level="h2">Shop Management</Typography>
+                <Button
+                    component={RouterLink}
+                    to="/admin/shop/new" // Ссылка на будущую страницу создания товара
+                    startDecorator={<AddIcon />}
+                >
+                    Create Item
+                </Button>
+            </Box>
+            <Sheet variant="outlined" sx={{ borderRadius: 'sm', overflow: 'auto' }}>
+                <Table hoverRow>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Price</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {items.map((item) => (
+                            <tr key={item.item_id}>
+                                <td>{item.item_id}</td>
+                                <td>{item.name}</td>
+                                <td>{item.price} coins</td>
+                                <td>
+                                    {item.is_active ? 
+                                        <Chip color="success" size="sm">Active</Chip> : 
+                                        <Chip color="danger" size="sm">Inactive</Chip>
+                                    }
+                                </td>
+                                <td>
+                                    <Tooltip title="Edit">
+                                        <IconButton size="sm" variant="outlined" color="neutral">
+                                            <EditIcon />
+                                        </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Delete">
+                                        <IconButton size="sm" variant="soft" color="danger" onClick={() => handleDelete(item.item_id)}>
+                                            <DeleteForeverIcon />
+                                        </IconButton>
+                                    </Tooltip>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </Table>
+            </Sheet>
+        </Box>
+    );
+}
+
+export default AdminShopPage;
+--- END FILE: frontend/src/pages/AdminShopPage.js ---
 
 
 
@@ -9955,6 +10453,102 @@ export default SettingsPage;
 
 
 
+--- START FILE: frontend/src/pages/ShopPage.js ---
+
+// frontend/src/pages/ShopPage.js
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { Box, Typography, CircularProgress, Alert, Grid, Card, CardContent, Button, AspectRatio } from '@mui/joy';
+import { constructImageUrl } from '../utils/url';
+import PurchaseModal from '../components/PurchaseModal'; // <-- 1. ИМПОРТИРУЕМ
+
+function ShopPage() {
+    const [items, setItems] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    // --- 2. ДОБАВЛЯЕМ СОСТОЯНИЯ ДЛЯ МОДАЛЬНОГО ОКНА ---
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedItem, setSelectedItem] = useState(null);
+
+    const handlePurchaseClick = (item) => {
+        // --- 3. ОБНОВЛЯЕМ ЛОГИКУ КЛИКА ---
+        setSelectedItem(item);
+        setIsModalOpen(true);
+    };
+
+    useEffect(() => {
+        const fetchItems = async () => {
+            try {
+                setLoading(true);
+                const response = await axios.get('/api/shop');
+                setItems(response.data);
+            } catch (err) {
+                setError('Failed to load items. The shop might be temporarily unavailable.');
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchItems();
+    }, []);
+
+    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>;
+    if (error) return <Alert color="danger">{error}</Alert>;
+
+    return (
+        <Box>
+            <Typography level="h1" component="h1" sx={{ mb: 3 }}>
+                Shop
+            </Typography>
+            <Grid container spacing={3}>
+                {items.length > 0 ? items.map((item) => (
+                    <Grid xs={12} sm={6} md={4} key={item.item_id}>
+                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                            <AspectRatio sx={{ minHeight: '120px', minWidth: '160px' }}>
+                                <img
+                                    src={constructImageUrl(item.image_url) || 'https://via.placeholder.com/300x150'}
+                                    alt={item.name}
+                                    loading="lazy"
+                                />
+                            </AspectRatio>
+                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+                                <Typography level="title-lg">{item.name}</Typography>
+                                <Typography level="body-sm" sx={{ mb: 1, flexGrow: 1 }}>{item.description}</Typography>
+                                <Typography level="h4" sx={{ mb: 2 }}>
+                                    Price: {item.price} coins
+                                </Typography>
+                                <Button
+                                    variant="solid"
+                                    size="md"
+                                    color="primary"
+                                    onClick={() => handlePurchaseClick(item)}
+                                >
+                                    Purchase
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                )) : (
+                    <Typography sx={{ p: 2 }}>There are no items in the shop yet.</Typography>
+                )}
+            </Grid>
+            
+            {/* --- 4. ДОБАВЛЯЕМ КОМПОНЕНТ МОДАЛЬНОГО ОКНА --- */}
+            <PurchaseModal
+                open={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                item={selectedItem}
+            />
+        </Box>
+    );
+}
+
+export default ShopPage;
+--- END FILE: frontend/src/pages/ShopPage.js ---
+
+
+
 --- START FILE: frontend/src/pages/SinglePostPage.js ---
 
 // frontend/src/pages/SinglePostPage.js
@@ -10651,6 +11245,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ApiClient {
 
@@ -10665,6 +11261,8 @@ public class ApiClient {
         this.baseUrl = plugin.getConfig().getString("api-base-url", "http://localhost:3000");
         this.apiKey = plugin.getConfig().getString("plugin-secret-key");
     }
+
+    // --- МЕТОДЫ ДЛЯ СИСТЕМЫ ДРУЗЕЙ ---
 
     public void sendFriendRequest(Player sender, String receiverName) {
         try {
@@ -10706,7 +11304,6 @@ public class ApiClient {
                 .header("x-api-key", apiKey)
                 .get()
                 .build();
-
         httpClient.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(@NotNull Call call, @NotNull IOException e) {
@@ -10728,7 +11325,6 @@ public class ApiClient {
                             sender.sendMessage(ChatColor.GRAY + "Your friends list is empty. Use /flame friend add <player>");
                         } else {
                             for (int i = 0; i < friendsArray.length(); i++) {
-                                // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: Оборачиваем getString в try-catch ---
                                 try {
                                     sender.sendMessage(ChatColor.AQUA + "- " + friendsArray.getString(i));
                                 } catch (JSONException e) {
@@ -10746,6 +11342,96 @@ public class ApiClient {
             }
         });
     }
+
+    // --- МЕТОДЫ ДЛЯ МАГАЗИНА ---
+
+    public void fetchAndExecutePendingCommands() {
+        if (apiKey == null || apiKey.isEmpty()) {
+            plugin.getLogger().warning("Cannot fetch pending commands: plugin-secret-key is not set.");
+            return;
+        }
+
+        Request request = new Request.Builder()
+                .url(baseUrl + "/api/shop/pending-commands")
+                .header("x-api-key", apiKey)
+                .get()
+                .build();
+
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                plugin.getLogger().warning("Could not fetch pending commands from website: " + e.getMessage());
+            }
+
+            @Override
+            public void onResponse(@NotNull Call call, @NotNull Response response) {
+                if (!response.isSuccessful()) {
+                    plugin.getLogger().warning("Failed to fetch pending commands, API response code: " + response.code());
+                    response.close();
+                    return;
+                }
+                try (ResponseBody responseBody = response.body()) {
+                    String responseString = responseBody.string();
+                    JSONArray commands = new JSONArray(responseString);
+                    if (commands.length() == 0) return;
+
+                    plugin.getLogger().info("Found " + commands.length() + " pending command(s) from website. Executing...");
+                    List<Integer> executedIds = new ArrayList<>();
+
+                    for (int i = 0; i < commands.length(); i++) {
+                        JSONObject cmdObj = commands.getJSONObject(i);
+                        final String commandStr = cmdObj.getString("command");
+                        final int commandId = cmdObj.getInt("id");
+
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            plugin.getLogger().info("Executing command ID " + commandId + ": " + commandStr);
+                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), commandStr);
+                        });
+                        executedIds.add(commandId);
+                    }
+
+                    if (!executedIds.isEmpty()) {
+                        clearExecutedCommands(executedIds);
+                    }
+                } catch (Exception e) {
+                    plugin.getLogger().severe("Failed to process pending commands: " + e.getMessage());
+                } finally {
+                    response.close();
+                }
+            }
+        });
+    }
+
+    private void clearExecutedCommands(List<Integer> ids) {
+        try {
+            JSONObject jsonBody = new JSONObject();
+            jsonBody.put("commandIds", new JSONArray(ids));
+            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
+
+            Request request = new Request.Builder()
+                    .url(baseUrl + "/api/shop/clear-pending-commands")
+                    .header("x-api-key", apiKey)
+                    .post(body)
+                    .build();
+
+            httpClient.newCall(request).enqueue(new Callback() {
+                @Override public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                    plugin.getLogger().warning("Failed to confirm executed commands to website: " + e.getMessage());
+                }
+                @Override public void onResponse(@NotNull Call call, @NotNull Response response) {
+                    if (response.isSuccessful()) {
+                        plugin.getLogger().info("Successfully confirmed execution of " + ids.size() + " command(s).");
+                    }
+                    response.close();
+                }
+            });
+        } catch (Exception e) {
+            plugin.getLogger().severe("Failed to build request for clearing executed commands: " + e.getMessage());
+        }
+    }
+
+
+    // --- ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ---
 
     private void runOnMainThread(Runnable task) {
         Bukkit.getScheduler().runTask(plugin, task);
@@ -10809,10 +11495,15 @@ package com.flamewall.bridge;
 
 import io.socket.client.IO;
 import io.socket.client.Socket;
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.HoverEvent;
+import net.md_5.bungee.api.chat.TextComponent;
+import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -10823,18 +11514,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import net.md_5.bungee.api.chat.ClickEvent;
-import net.md_5.bungee.api.chat.HoverEvent;
-import net.md_5.bungee.api.chat.TextComponent;
-import net.md_5.bungee.api.chat.hover.content.Text;
-
 public final class BridgePlugin extends JavaPlugin {
 
     private Socket socket;
+    private ApiClient apiClient;
     private PrivateMessageManager messageManager;
-    // Теперь храним полный список правил
-    private List<Map<?, ?>> interceptRules;
-    private ApiClient apiClient; // <-- ДОБАВЛЕНО
+    private List<String> commandPatterns;
+    private PlayerConnectionListener playerListener; // Храним экземпляр слушателя
 
     @Override
     public void onEnable() {
@@ -10842,159 +11528,176 @@ public final class BridgePlugin extends JavaPlugin {
         this.saveDefaultConfig();
         this.reloadConfig();
 
+        // Инициализация компонентов
         this.messageManager = new PrivateMessageManager();
-        this.apiClient = new ApiClient(this); // <-- ДОБАВЛЕНО
+        this.apiClient = new ApiClient(this);
+        this.commandPatterns = getConfig().getStringList("intercept-commands");
+        this.playerListener = new PlayerConnectionListener(this); // Создаем слушатель один раз
 
-        // --- РЕГИСТРИРУЕМ НАШ НОВЫЙ ЕДИНЫЙ ОБРАБОТЧИК ---
+        getLogger().info("Loaded " + commandPatterns.size() + " command patterns to intercept.");
+
+        // Регистрация команд
         FlameCommand flameCommand = new FlameCommand(this);
         getCommand("flame").setExecutor(flameCommand);
-        getCommand("flame").setTabCompleter(flameCommand); // Регистрируем автодополнение
-
-        // Регистрируем остальные команды и слушатели
+        getCommand("flame").setTabCompleter(flameCommand);
         getCommand("link").setExecutor(new LinkCommand(this));
-        // ... (если есть fwb_syncfriends, он остается здесь) ...
 
-        Bukkit.getPluginManager().registerEvents(new PlayerConnectionListener(this), this);
+        // Регистрация слушателя событий
+        Bukkit.getPluginManager().registerEvents(this.playerListener, this);
+
+        // Подключение к веб-серверу и запуск планировщика
         connectToWebSocket();
+        startPendingCommandScheduler();
     }
-
-    public ApiClient getApiClient() { return apiClient; } // <-- ДОБАВЛЕНО
-    public PrivateMessageManager getMessageManager() { return messageManager; }
-    public List<Map<?, ?>> getInterceptRules() { return interceptRules; }
 
     @Override
     public void onDisable() {
-        if (socket != null) {
+        if (socket != null && socket.connected()) {
             socket.disconnect();
         }
         getLogger().info("FlameWallBridge has been disabled.");
     }
 
-    public void sendJsonPayload(String eventName, JSONObject payload) {
-        if (socket != null && socket.connected()) {
-            socket.emit(eventName, payload);
-        } else {
-            getLogger().warning("WebSocket is not connected. Cannot send data.");
-        }
+    /**
+     * Запускает повторяющуюся задачу для проверки отложенных покупок в магазине.
+     */
+    private void startPendingCommandScheduler() {
+        long interval = getConfig().getLong("shop.check-interval-seconds", 300) * 20L;
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (socket != null && socket.connected()) {
+                    apiClient.fetchAndExecutePendingCommands();
+                }
+            }
+        }.runTaskTimerAsynchronously(this, 200L, interval); // Начать через 10 сек, повторять каждые 5 мин
     }
 
+    /**
+     * Устанавливает и настраивает соединение с WebSocket-сервером.
+     */
     private void connectToWebSocket() {
         try {
-            URI serverUri = URI.create("http://localhost:3000");
+            String url = getConfig().getString("api-base-url", "http://localhost:3000");
+            URI serverUri = URI.create(url);
 
-            // --- ИСПРАВЛЕНИЕ: Создаем заголовки правильного типа Map<String, List<String>> ---
             Map<String, List<String>> headers = new HashMap<>();
-            headers.put("x-api-key", Collections.singletonList("your_super_secret_and_long_string_12345"));
+            String apiKey = getConfig().getString("plugin-secret-key");
+            if (apiKey == null || apiKey.isEmpty()) {
+                getLogger().severe("CRITICAL: plugin-secret-key is not set in config.yml! Plugin will not work correctly.");
+                return;
+            }
+            headers.put("x-api-key", Collections.singletonList(apiKey));
 
-            IO.Options options = IO.Options.builder()
-                    .setExtraHeaders(headers)
-                    .build();
-
+            IO.Options options = IO.Options.builder().setExtraHeaders(headers).build();
             socket = IO.socket(serverUri, options);
 
             socket.on(Socket.EVENT_CONNECT, args -> {
                 getLogger().info("Successfully connected to the website backend!");
+                // Сразу после подключения проверяем, нет ли ожидающих покупок
+                apiClient.fetchAndExecutePendingCommands();
             });
 
-            socket.on(Socket.EVENT_DISCONNECT, args -> {
-                String reason = args.length > 0 ? args[0].toString() : "No reason given";
-                getLogger().warning("Disconnected from website backend. Reason: " + reason);
-            });
+            socket.on(Socket.EVENT_DISCONNECT, args -> getLogger().warning("Disconnected from website backend. Reason: " + (args.length > 0 ? args[0] : "N/A")));
+            socket.on(Socket.EVENT_CONNECT_ERROR, args -> getLogger().severe("Connection error: " + (args.length > 0 ? args[0] : "Unknown error")));
 
-            socket.on(Socket.EVENT_CONNECT_ERROR, args -> {
-                String error = args.length > 0 ? args[0].toString() : "Unknown error";
-                getLogger().severe("Connection error: " + error);
-            });
-
-            socket.on("linkStatus", args -> {
-                if (args.length > 0 && args[0] instanceof JSONObject) {
-                    handleBackendMessage((JSONObject) args[0]);
-                }
-            });
-
-            socket.on("webPrivateMessage", args -> {
-                if (args.length > 0 && args[0] instanceof JSONObject) {
-                    handleWebMessage((JSONObject) args[0]);
-                }
-            });
+            socket.on("linkStatus", args -> handleEvent("linkStatus", args, this::handleBackendMessage));
+            socket.on("webPrivateMessage", args -> handleEvent("webPrivateMessage", args, this::handleWebMessage));
+            socket.on("executeShopCommand", args -> handleEvent("executeShopCommand", args, this::handleShopCommand));
 
             socket.connect();
-
-            socket.connect();
-            getLogger().info("Attempting to connect to website backend...");
-
+            getLogger().info("Attempting to connect to website backend at " + url + "...");
         } catch (Exception e) {
-            getLogger().severe("Failed to initialize WebSocket connection!");
+            getLogger().severe("Failed to initialize WebSocket connection: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
+    /**
+     * Безопасный обработчик событий от сокета.
+     */
+    private void handleEvent(String eventName, Object[] args, java.util.function.Consumer<JSONObject> handler) {
+        if (args.length > 0 && args[0] instanceof JSONObject) {
+            handler.accept((JSONObject) args[0]);
+        } else {
+            getLogger().warning("Received malformed '" + eventName + "' event from backend.");
+        }
+    }
+
+    /**
+     * Обрабатывает личные сообщения, пришедшие с сайта.
+     */
     private void handleWebMessage(JSONObject data) {
         Bukkit.getScheduler().runTask(this, () -> {
-            // Проверяем настройку в конфиге перед отправкой сообщения
-            if (!getConfig().getBoolean("display-web-messages-in-game", true)) {
-                return;
-            }
-
+            if (!getConfig().getBoolean("display-web-messages-in-game", true)) return;
             try {
-                String recipientUuid = data.getString("recipientUuid");
-                String senderUsername = data.getString("senderUsername");
-                String content = data.getString("content");
-
-                Player recipientPlayer = Bukkit.getPlayer(UUID.fromString(recipientUuid));
+                Player recipientPlayer = Bukkit.getPlayer(UUID.fromString(data.getString("recipientUuid")));
                 if (recipientPlayer != null && recipientPlayer.isOnline()) {
+                    String senderUsername = data.getString("senderUsername");
+                    String content = data.getString("content");
 
-                    // --- НАЧАЛО НОВОЙ ЛОГИКИ ---
-
-                    // 1. Создаем основной текст сообщения
-                    TextComponent messageComponent = new TextComponent(
-                            ChatColor.GRAY + "[WEB] " + senderUsername + " » " + content
-                    );
-
-                    // 2. Создаем действие при клике: подставить команду в чат
-                    messageComponent.setClickEvent(new ClickEvent(
-                            ClickEvent.Action.SUGGEST_COMMAND,
-                            "/flame msg " + senderUsername + " " // Используем /flame msg
-                    ));
-
-                    // 3. Создаем подсказку при наведении
-                    messageComponent.setHoverEvent(new HoverEvent(
-                            HoverEvent.Action.SHOW_TEXT,
-                            new Text(ChatColor.AQUA + "Нажмите, чтобы ответить игроку " + senderUsername)
-                    ));
-
-                    // 4. Отправляем интерактивное сообщение игроку
+                    TextComponent messageComponent = new TextComponent(ChatColor.GRAY + "[WEB] " + senderUsername + " » " + content);
+                    messageComponent.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/flame msg " + senderUsername + " "));
+                    messageComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(ChatColor.AQUA + "Click to reply to " + senderUsername)));
                     recipientPlayer.spigot().sendMessage(messageComponent);
-
-                    // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
                 }
             } catch (Exception e) {
-                getLogger().warning("Could not parse webPrivateMessage from backend: " + data.toString());
+                getLogger().warning("Could not parse webPrivateMessage: " + e.getMessage());
             }
         });
     }
 
+    /**
+     * Обрабатывает ответ от сайта о статусе привязки аккаунта.
+     */
     private void handleBackendMessage(JSONObject data) {
         Bukkit.getScheduler().runTask(this, () -> {
             try {
-                boolean success = data.getBoolean("success");
-                String minecraftUuid = data.getString("minecraftUuid");
-
-                Player player = Bukkit.getPlayer(UUID.fromString(minecraftUuid));
+                Player player = Bukkit.getPlayer(UUID.fromString(data.getString("minecraftUuid")));
                 if (player != null && player.isOnline()) {
-                    if (success) {
-                        String websiteUsername = data.getString("websiteUsername");
-                        player.sendMessage(ChatColor.GREEN + "Success! Your account is now linked to the website profile: " + websiteUsername);
+                    if (data.getBoolean("success")) {
+                        player.sendMessage(ChatColor.GREEN + "Success! Your account is now linked to the website profile: " + data.getString("websiteUsername"));
+                        // Сразу после привязки синхронизируем ранг
+                        playerListener.syncSinglePlayer(player);
                     } else {
-                        String error = data.getString("error");
-                        player.sendMessage(ChatColor.RED + "Linking failed: " + error);
+                        player.sendMessage(ChatColor.RED + "Linking failed: " + data.getString("error"));
                     }
                 }
             } catch (JSONException e) {
-                getLogger().warning("Could not parse linkStatus message from backend: " + data.toString());
+                getLogger().warning("Could not parse linkStatus message: " + e.getMessage());
             }
         });
     }
+
+    /**
+     * Обрабатывает команду на выдачу товара из магазина (мгновенная покупка).
+     */
+    private void handleShopCommand(JSONObject data) {
+        try {
+            String command = data.getString("command");
+            getLogger().info("Executing immediate shop command from website: " + command);
+            Bukkit.getScheduler().runTask(this, () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command));
+        } catch (Exception e) {
+            getLogger().warning("Could not parse executeShopCommand: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Отправляет данные на бэкенд через WebSocket.
+     */
+    public void sendJsonPayload(String eventName, JSONObject payload) {
+        if (socket != null && socket.connected()) {
+            socket.emit(eventName, payload);
+        } else {
+            getLogger().warning("WebSocket is not connected. Cannot send data for event: " + eventName);
+        }
+    }
+
+    // Геттеры для доступа из других классов
+    public ApiClient getApiClient() { return apiClient; }
+    public PrivateMessageManager getMessageManager() { return messageManager; }
+    public List<String> getCommandPatterns() { return commandPatterns; }
+    public PlayerConnectionListener getPlayerListener() { return playerListener; }
 }
 --- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/BridgePlugin.java ---
 
@@ -11004,8 +11707,10 @@ public final class BridgePlugin extends JavaPlugin {
 
 package com.flamewall.bridge;
 
+import me.clip.placeholderapi.PlaceholderAPI;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -11014,7 +11719,9 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.json.JSONObject;
+import org.bukkit.scheduler.BukkitRunnable; // <-- ИСПРАВЛЕНИЕ
 
+import java.util.*; // <-- ИСПРАВЛЕНИЕ
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -11045,6 +11752,16 @@ public class FlameCommand implements CommandExecutor, TabCompleter {
         String subCommand = args[0].toLowerCase();
         String[] subArgs = Arrays.copyOfRange(args, 1, args.length);
 
+        if (subCommand.equals("sync-ranks")) {
+            handleSyncRanksCommand(sender, subArgs);
+            return true;
+        }
+
+        if (!(sender instanceof Player)) {
+            sender.sendMessage("This command can only be used by a player.");
+            return true;
+        }
+
         switch (subCommand) {
             case "msg":
                 handleMessageCommand(player, subArgs);
@@ -11061,6 +11778,86 @@ public class FlameCommand implements CommandExecutor, TabCompleter {
                 break;
         }
         return true;
+    }
+
+    private void handleSyncRanksCommand(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("flamewall.admin.sync")) {
+            sender.sendMessage(ChatColor.RED + "You do not have permission to use this command.");
+            return;
+        }
+        if (args.length == 0) {
+            sender.sendMessage(ChatColor.RED + "Usage: /flame sync-ranks <online|all>");
+            return;
+        }
+        String mode = args[0].toLowerCase();
+        if ("online".equals(mode)) {
+            syncOnlinePlayers(sender);
+        } else if ("all".equals(mode)) {
+            syncAllPlayers(sender);
+        } else {
+            sender.sendMessage(ChatColor.RED + "Unknown mode. Use 'online' or 'all'.");
+        }
+    }
+
+    private void syncOnlinePlayers(CommandSender sender) {
+        sender.sendMessage(ChatColor.YELLOW + "Starting rank synchronization for all ONLINE players...");
+        int syncedCount = 0;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            syncSinglePlayer(player);
+            syncedCount++;
+        }
+        sender.sendMessage(ChatColor.GREEN + "Synchronization complete! Sent data for " + syncedCount + " players.");
+    }
+
+    private void syncAllPlayers(CommandSender sender) {
+        sender.sendMessage(ChatColor.GOLD + "Starting FULL rank synchronization. This may take a while. Check the console for progress...");
+
+        final Queue<OfflinePlayer> playerQueue = new LinkedList<>(Arrays.asList(Bukkit.getOfflinePlayers()));
+        final int totalPlayers = playerQueue.size();
+        final int batchSize = plugin.getConfig().getInt("sync-settings.batch-size", 50);
+        final long delayTicks = plugin.getConfig().getLong("sync-settings.delay-ticks", 10);
+
+        new BukkitRunnable() {
+            private int processedCount = 0;
+            @Override
+            public void run() {
+                if (playerQueue.isEmpty()) {
+                    sender.sendMessage(ChatColor.GREEN + "Full synchronization complete! Processed " + totalPlayers + " players.");
+                    plugin.getLogger().info("Full rank synchronization finished.");
+                    this.cancel();
+                    return;
+                }
+
+                if (processedCount > 0 && processedCount % 500 == 0) { // Лог каждые 500 игроков
+                    plugin.getLogger().info("Sync progress: " + processedCount + " / " + totalPlayers);
+                }
+
+                for (int i = 0; i < batchSize && !playerQueue.isEmpty(); i++) {
+                    OfflinePlayer offlinePlayer = playerQueue.poll();
+                    if (offlinePlayer != null) {
+                        syncSinglePlayer(offlinePlayer);
+                        processedCount++;
+                    }
+                }
+            }
+        }.runTaskTimerAsynchronously(plugin, 0L, delayTicks);
+    }
+
+    public void syncSinglePlayer(OfflinePlayer player) {
+        if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            String rankPlaceholder = plugin.getConfig().getString("rank-sync.placeholder");
+            if (rankPlaceholder == null || rankPlaceholder.isEmpty()) return;
+
+            String rankName = PlaceholderAPI.setPlaceholders(player, rankPlaceholder);
+            try {
+                JSONObject payload = new JSONObject();
+                payload.put("minecraftUuid", player.getUniqueId().toString());
+                payload.put("rankName", rankName);
+                plugin.sendJsonPayload("player:sync-rank", payload);
+            } catch (Exception e) {
+                plugin.getLogger().warning("Error syncing rank for " + player.getName() + ": " + e.getMessage());
+            }
+        }
     }
 
     private void handleMessageCommand(Player sender, String[] args) {
@@ -11158,20 +11955,26 @@ public class FlameCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void sendHelpMessage(Player player) {
-        player.sendMessage(ChatColor.GOLD + "--- FlameWall Bridge Help ---");
-        player.sendMessage(ChatColor.AQUA + "/flame msg <player> <message>" + ChatColor.WHITE + " - Send a private message");
-        player.sendMessage(ChatColor.AQUA + "/flame reply <message>" + ChatColor.WHITE + " - Reply to the last message");
-        player.sendMessage(ChatColor.AQUA + "/flame friend <add|remove|list>" + ChatColor.WHITE + " - Manage your friends");
+
+    private void sendHelpMessage(CommandSender sender) {
+        sender.sendMessage(ChatColor.GOLD + "--- FlameWall Bridge Help ---");
+        sender.sendMessage(ChatColor.AQUA + "/flame msg <player> <message>" + ChatColor.WHITE + " - Send a private message");
+        sender.sendMessage(ChatColor.AQUA + "/flame reply <message>" + ChatColor.WHITE + " - Reply to the last message");
+        sender.sendMessage(ChatColor.AQUA + "/flame friend <add|remove|list>" + ChatColor.WHITE + " - Manage your friends");
+        sender.sendMessage(ChatColor.AQUA + "/flame sync-ranks <online|all>" + ChatColor.WHITE + " - Force sync ranks with the website");
     }
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (args.length == 1) {
-            return List.of("msg", "reply", "friend").stream()
-                    .filter(s -> s.startsWith(args[0].toLowerCase()))
-                    .collect(Collectors.toList());
+            return Arrays.asList("msg", "reply", "friend", "sync-ranks").stream()
+                    .filter(a -> a.startsWith(args[0].toLowerCase())).collect(Collectors.toList());
         }
+        if (args.length == 2 && args[0].equalsIgnoreCase("sync-ranks")) {
+            return Arrays.asList("online", "all").stream()
+                    .filter(a -> a.startsWith(args[1].toLowerCase())).collect(Collectors.toList());
+        }
+
         if (args.length == 2) {
             String subCommand = args[0].toLowerCase();
             if (subCommand.equals("msg")) {
@@ -11256,11 +12059,12 @@ public class LinkCommand implements CommandExecutor {
 
 --- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/PlayerConnectionListener.java ---
 
-// src/main/java/com/flamewall/bridge/PlayerConnectionListener.java
-
+// FlameWallBridge/src/main/java/com/flamewall/bridge/PlayerConnectionListener.java
 package com.flamewall.bridge;
 
+import me.clip.placeholderapi.PlaceholderAPI;
 import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -11268,36 +12072,78 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.server.ServerCommandEvent;
 import org.json.JSONObject;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class PlayerConnectionListener implements Listener {
 
     private final BridgePlugin plugin;
+    private final boolean papiEnabled;
 
     public PlayerConnectionListener(BridgePlugin plugin) {
         this.plugin = plugin;
+        this.papiEnabled = Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
+        if (papiEnabled) {
+            plugin.getLogger().info("PlaceholderAPI found! Rank synchronization will be used.");
+        } else {
+            plugin.getLogger().warning("PlaceholderAPI not found. Rank synchronization will be disabled.");
+        }
     }
+
+    // --- ОБРАБОТЧИКИ СОБЫТИЙ ---
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        plugin.getLogger().info("Player " + player.getName() + " has joined. Sending status update.");
         sendStatusUpdate(player, true);
+        if (papiEnabled && plugin.getConfig().getBoolean("rank-sync.enabled", true)) {
+            syncSinglePlayer(player);
+        }
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        Player player = event.getPlayer();
-        plugin.getLogger().info("Player " + player.getName() + " has quit. Sending status update.");
-        sendStatusUpdate(player, false);
+        sendStatusUpdate(event.getPlayer(), false);
     }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
+        String command = event.getMessage().startsWith("/") ? event.getMessage().substring(1) : event.getMessage();
+        checkCommandAndSync(command);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onServerCommand(ServerCommandEvent event) {
+        checkCommandAndSync(event.getCommand());
+    }
+
+
+    // --- ПУБЛИЧНЫЙ МЕТОД СИНХРОНИЗАЦИИ ---
+
+    public void syncSinglePlayer(OfflinePlayer player) {
+        if (player == null) return;
+        if (!papiEnabled) return;
+
+        String rankPlaceholder = plugin.getConfig().getString("rank-sync.placeholder");
+        if (rankPlaceholder == null || rankPlaceholder.isEmpty()) return;
+
+        String rankName = PlaceholderAPI.setPlaceholders(player, rankPlaceholder);
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("minecraftUuid", player.getUniqueId().toString());
+            payload.put("rankName", rankName);
+            plugin.sendJsonPayload("player:sync-rank", payload);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error syncing rank for " + player.getName() + ": " + e.getMessage());
+        }
+    }
+
+    // --- ПРИВАТНЫЕ МЕТОДЫ ---
 
     private void sendStatusUpdate(Player player, boolean isOnline) {
         try {
@@ -11307,28 +12153,29 @@ public class PlayerConnectionListener implements Listener {
             plugin.sendJsonPayload("minecraftPlayerStatus", payload);
         } catch (Exception e) {
             plugin.getLogger().severe("Could not send player status update for " + player.getName());
-            e.printStackTrace();
         }
     }
 
-    // --- ИЗМЕНЕНИЕ: Метод теперь принимает имя получателя (String), а не объект Player ---
-    private void sendMessageToBackend(Player sender, String recipientName, String content, String commandLabel) {
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("senderUuid", sender.getUniqueId().toString());
-            payload.put("recipientUsername", recipientName); // Используем имя как строку
-            payload.put("content", content);
-            plugin.sendJsonPayload("inGamePrivateMessage", payload);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+    private void checkCommandAndSync(String command) {
+        List<String> patterns = plugin.getCommandPatterns();
+        if (patterns.isEmpty()) return;
 
-    private String getMatcherGroup(Matcher matcher, String groupName) {
-        try {
-            return matcher.group(groupName);
-        } catch (IllegalArgumentException e) {
-            return null;
+        for (String patternString : patterns) {
+            String regex = patternString
+                    .replace("{player}", "(?<player>\\S+)")
+                    .replace("{rank}", "(?<rank>\\S+)");
+            Pattern pattern = Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
+            Matcher matcher = pattern.matcher(command);
+
+            if (matcher.find()) {
+                final String playerName = matcher.group("player");
+                OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(playerName);
+                if (targetPlayer.hasPlayedBefore() || targetPlayer.isOnline()) {
+                    plugin.getLogger().info("Intercepted a rank change command for player: " + playerName);
+                    syncSinglePlayer(targetPlayer);
+                }
+                return;
+            }
         }
     }
 }
@@ -11368,13 +12215,28 @@ public class PrivateMessageManager {
 
 # FlameWallBridge Configuration
 
-websocket-url: "http://localhost:3000"
-plugin-secret-key: "your_super_secret_and_long_string_12345"
-api-base-url: "http://localhost:3000"
+# URL и ключ для подключения к API бэкенда
+api-base-url: "http://localhost:3001"
+plugin-secret-key: "your_super_long_and_random_plugin_secret_key"
 
-# Should the bridge send its own in-game notification for private messages received from the website?
-# This is useful on servers without other chat formatting plugins.
-display-web-messages-in-game: true
+# --- Shop Settings ---
+shop:
+  # How often (in seconds) should the plugin check for pending purchases?
+  check-interval-seconds: 300 # 5 minutes
+
+# --- Rank Synchronization Settings ---
+rank-sync:
+  enabled: true
+  placeholder: "%luckperms_primary_group_name%"
+
+# --- Command Interception ---
+intercept-commands:
+  - "lp user {player} parent set {rank}"
+
+# --- Full Synchronization Settings ---
+sync-settings:
+  batch-size: 50
+  delay-ticks: 10
 --- END FILE: FlameWallBridge/src/main/resources/config.yml ---
 
 
@@ -11397,6 +12259,11 @@ commands:
     description: Main command for FlameWall website integration.
     usage: /flame <msg|reply|friend|...>
     aliases: [fw]
+
+permissions:
+  flamewall.admin.sync:
+    description: Allows usage of the /flame sync-ranks command.
+    default: op
 --- END FILE: FlameWallBridge/src/main/resources/plugin.yml ---
 
 
