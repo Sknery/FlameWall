@@ -5,9 +5,11 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile.prod
-    image: maximceahur/flamewall-backend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+    image: flamewall-backend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_backend_prod
     restart: unless-stopped
+    environment:
+      - FORCE_COLOR=1 # Значение может быть 1, 2 или 3. 1 - базовые цвета.
     env_file: ./.env
     volumes:
       - ./uploads:/usr/src/app/uploads
@@ -22,7 +24,7 @@ services:
       dockerfile: frontend/Dockerfile.prod
       args:
         - REACT_APP_FULL_API_URL=${REACT_APP_FULL_API_URL}
-    image: maximceahur/flamewall-frontend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+    image: flamewall-frontend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_frontend_prod
     restart: unless-stopped
     networks:

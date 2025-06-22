@@ -1,5 +1,5 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Sat Jun 21 22:07:58 EEST 2025
+PROJECT SNAPSHOT CREATED ON: Sun Jun 22 15:30:41 EEST 2025
 ===============================================
 
 
@@ -189,7 +189,7 @@ import { Rank } from './ranks/entities/rank.entity';
         entities: [
           User, ShopItem, Post, Friendship, Message, News, Notification, Comment, Purchase, LinkCode, Rank// <-- ДОБАВЛЯЕМ СЮДА
         ],
-        synchronize: true,
+        synchronize: false,
         autoLoadEntities: true,
       }),
     }),
@@ -268,7 +268,6 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   async getProfile(@Request() req): Promise<PublicUser> {
-    console.log('AUTH CONTROLLER - getProfile called. req.user:', req.user);
     const userId = req.user.userId; 
     return this.usersService.findOne(userId);
   }
@@ -559,7 +558,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService, PublicUser } from '../users/users.service'; 
-import { Rank } from 'src/ranks/entities/rank.entity';
+import { Rank } from '../ranks/entities/rank.entity';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -580,14 +579,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
  async validate(payload: any): Promise<{ userId: number; username: string; rank: Rank | null }> {
-    console.log('JWT Strategy - validate method called with payload:', payload);
     const user: PublicUser | null = await this.usersService.findOne(payload.sub); 
-    console.log('User found by strategy:', user);
     if (!user) {
-        console.error('JWT Strategy - User not found for id:', payload.sub);
         throw new UnauthorizedException('User not found or token invalid');
     }
-    // Возвращаем объект, который теперь соответствует новому типу
     return { userId: user.id, username: user.username, rank: user.rank };
   }
 }
@@ -637,9 +632,9 @@ class PlayerStatusDto {
 }
 
 class InGameMessageDto {
-    senderUuid: string;
-    recipientUsername: string;
-    content: string;
+  senderUuid: string;
+  recipientUsername: string;
+  content: string;
 }
 
 @WebSocketGateway({ cors: { origin: '*' } })
@@ -668,11 +663,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   async handleConnection(client: Socket) {
-    this.logger.debug(`New connection headers: ${JSON.stringify(client.handshake.headers)}`);
-
     const apiKey = client.handshake.headers['x-api-key'];
     if (apiKey && apiKey === this.pluginSecretKey) {
-      this.logger.log('Minecraft Plugin connected successfully!');
       client['isPlugin'] = true;
       client.join('minecraft-plugins');
       return;
@@ -688,7 +680,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client['user'] = user;
       client.join(`user-${user.id}`);
       this.onlineUsers.set(user.id, client.id);
-      this.logger.log(`Client Authenticated & Connected: SID ${client.id}, User ID ${user.id}`);
     } catch (e) {
       return client.disconnect();
     }
@@ -699,7 +690,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (user) {
       if (this.onlineUsers.get(user.id) === client.id) {
         this.onlineUsers.delete(user.id);
-        this.logger.log(`Client disconnected: User ID ${user.id}`);
       }
       this.currentlyViewing.delete(user.id);
     }
@@ -719,18 +709,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const areFriends = await this.friendshipsService.areTheyFriends(sender.id, recipient.id);
     if (!areFriends) {
-      this.logger.warn(`BLOCKED: User ${sender.id} attempted to message non-friend ${recipient.id}.`);
       return;
     }
 
     const savedMessage = await this.messagesService.createMessage(sender, recipient, data.content, data.parentMessageId);
     if (!savedMessage) return;
-    
+
     // --- НАЧАЛО: ВОЗВРАЩАЕМ ЛОГИКУ УВЕДОМЛЕНИЙ ---
     const recipientIsViewing = this.currentlyViewing.get(recipient.id) === sender.id;
 
     if (recipientIsViewing) {
-      this.logger.log(`Recipient ${recipient.id} is viewing chat with ${sender.id}. Notification suppressed.`);
     } else if (sender.id !== recipient.id) {
       this.eventEmitter.emit('message.sent', { sender, recipient });
     }
@@ -743,14 +731,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     // Отправляем в игру
- if (recipient.is_minecraft_online && recipient.minecraft_uuid) {
-        this.logger.log(`Forwarding message from ${sender.username} to Minecraft player ${recipient.username}`);
-        this.server.to('minecraft-plugins').emit('webPrivateMessage', {
-            recipientUuid: recipient.minecraft_uuid,
-            // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-            senderUsername: sender.minecraft_username || sender.username,
-            content: data.content,
-        });
+    if (recipient.is_minecraft_online && recipient.minecraft_uuid) {
+      this.server.to('minecraft-plugins').emit('webPrivateMessage', {
+        recipientUuid: recipient.minecraft_uuid,
+        // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+        senderUsername: sender.minecraft_username || sender.username,
+        content: data.content,
+      });
     }
   }
 
@@ -761,13 +748,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ): Promise<void> {
     if (!client['isPlugin']) return;
 
-    this.logger.log(`Received in-game message from UUID ${data.senderUuid} to MC username ${data.recipientUsername}`);
-    
+
     const sender = await this.usersService.findUserByMinecraftUuid(data.senderUuid);
     const recipient = await this.usersService.findOneByMinecraftUsername(data.recipientUsername);
 
     if (!sender || !recipient) {
-      this.logger.warn(`Could not find sender or recipient for in-game message. Sender UUID: ${data.senderUuid}, Recipient MC Username: ${data.recipientUsername}`);
       return;
     }
 
@@ -778,7 +763,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const recipientIsViewing = this.currentlyViewing.get(recipient.id) === sender.id;
 
       if (recipientIsViewing) {
-        this.logger.log(`Recipient ${recipient.id} is viewing chat with ${sender.id}. Notification suppressed.`);
       } else if (sender.id !== recipient.id) {
         this.eventEmitter.emit('message.sent', { sender, recipient });
       }
@@ -789,8 +773,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(`user-${recipient.id}`).emit('newMessage', savedMessage);
 
       // 2. Проверяем, онлайн ли получатель в игре, чтобы переслать ему сообщение
-    if (recipient.is_minecraft_online && recipient.minecraft_uuid) {
-        this.logger.log(`Forwarding in-game message from ${sender.username} to Minecraft player ${recipient.username}`);
+      if (recipient.is_minecraft_online && recipient.minecraft_uuid) {
         this.server.to('minecraft-plugins').emit('webPrivateMessage', {
           recipientUuid: recipient.minecraft_uuid,
           // --- И ИЗМЕНЕНИЕ ЗДЕСЬ ---
@@ -815,7 +798,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(`user-${updatedMessage.sender_id}`).emit('messageEdited', updatedMessage);
       this.server.to(`user-${updatedMessage.receiver_id}`).emit('messageEdited', updatedMessage);
     } catch (error) {
-      this.logger.error(`Failed to edit message for user ${sender.id}: ${error.message}`);
       client.emit('error', { message: 'Failed to edit message.' });
     }
   }
@@ -833,18 +815,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(`user-${deletedMessage.sender_id}`).emit('messageDeleted', payload);
       this.server.to(`user-${deletedMessage.receiver_id}`).emit('messageDeleted', payload);
     } catch (error) {
-      this.logger.error(`Failed to delete message for user ${sender.id}: ${error.message}`);
       client.emit('error', { message: 'Failed to delete message.' });
     }
   }
-  
+
   @UseGuards(WsGuard)
   @SubscribeMessage('startViewingChat')
   handleStartViewingChat(@MessageBody() data: { otherUserId: number }, @ConnectedSocket() client: Socket): void {
     const currentUser: User = client['user'];
     if (currentUser && data.otherUserId) {
       this.currentlyViewing.set(currentUser.id, data.otherUserId);
-      this.logger.log(`User ${currentUser.id} started viewing chat with ${data.otherUserId}`);
     }
   }
 
@@ -854,36 +834,32 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const currentUser: User = client['user'];
     if (currentUser && this.currentlyViewing.has(currentUser.id)) {
       this.currentlyViewing.delete(currentUser.id);
-      this.logger.log(`User ${currentUser.id} stopped viewing chat.`);
     }
   }
 
-  @SubscribeMessage('minecraftPlayerStatus')
-  async handlePlayerStatusUpdate(
-    @MessageBody() data: PlayerStatusDto,
+   @SubscribeMessage('minecraftPlayerStatus')
+  async handlePlayerStatus(
+    @MessageBody() data: { minecraftUuid: string; isOnline: boolean },
     @ConnectedSocket() client: Socket
   ): Promise<void> {
     if (!client['isPlugin']) {
-      this.logger.warn(`Received 'minecraftPlayerStatus' from non-plugin client. SID: ${client.id}`);
       return;
     }
+    
+    // --- УБЕДИСЬ, ЧТО ЭТА СТРОКА ЕСТЬ И ОНА НЕ ЗАКОММЕНТИРОВАНА ---
+    // Эта строка сохраняет статус в базу данных надолго
+    await this.usersService.updateOnlineStatus(data.minecraftUuid, data.isOnline);
+    // -------------------------------------------------------------
 
-    this.logger.log(`Received status update for UUID ${data.minecraftUuid}: isOnline=${data.isOnline}`);
-    
-    const updatedUser = await this.usersService.setMinecraftOnlineStatus(data.minecraftUuid, data.isOnline);
-    
-    if (updatedUser) {
-      this.logger.log(`Successfully updated online status for user ${updatedUser.username}.`);
-      this.server.to(`user-${updatedUser.id}`).emit('userStatusUpdate', {
-        userId: updatedUser.id,
-        is_minecraft_online: updatedUser.is_minecraft_online,
-      });
-    }
+    // Эта строка отвечает за мгновенное обновление на фронтенде
+    this.server.emit('playerStatusUpdate', {
+      uuid: data.minecraftUuid,
+      isOnline: data.isOnline,
+    });
   }
 
   @SubscribeMessage('linkAccount')
   async handleLinkAccount(@MessageBody() data: LinkAccountDto, @ConnectedSocket() client: Socket): Promise<void> {
-    this.logger.log(`Received link attempt for code ${data.code}`);
     try {
       const linkedUser = await this.linkingService.verifyCodeAndLinkAccount(
         data.code,
@@ -897,7 +873,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
       this.server.to(`user-${linkedUser.id}`).emit('linkStatus', { success: true, minecraftUsername: linkedUser.minecraft_username });
     } catch (error) {
-      this.logger.error(`Failed to link account: ${error.message}`);
       client.emit('linkStatus', {
         success: false,
         minecraftUuid: data.minecraftUuid,
@@ -910,12 +885,41 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleNotificationCreated(payload: Notification) {
     if (payload && payload.user && payload.user.id) {
       const room = `user-${payload.user.id}`;
-      this.logger.log(`Event 'notification.created' caught. Emitting 'newNotification' to room ${room}`);
       this.server.to(room).emit('newNotification', payload);
     } else {
-      this.logger.warn('Caught notification.created event with invalid payload', payload);
     }
   }
+
+  @SubscribeMessage('player:sync-rank')
+  async handleRankSync(
+    @MessageBody() data: { minecraftUuid: string; rankName: string },
+    @ConnectedSocket() client: Socket,
+  ): Promise<void> {
+    if (!client['isPlugin']) {
+      return;
+    }
+    await this.usersService.syncRankFromPlugin(data.minecraftUuid, data.rankName);
+  }
+
+ @OnEvent('friendship.requested.ingame')
+async handleFriendRequestIngame(payload: { requester: User, receiver: User, requestId: number }) {
+    const { requester, receiver, requestId } = payload;
+    const freshReceiver = await this.usersService.findById(receiver.id);
+
+    if (!freshReceiver) {
+        console.error(`[DEBUG] Friend Request FATAL: User with ID ${receiver.id} NOT FOUND.`);
+        return;
+    }
+    if (freshReceiver && freshReceiver.is_minecraft_online && freshReceiver.minecraft_uuid) {
+        this.server.to('minecraft-plugins').emit('incomingFriendRequest', {
+            requesterName: requester.username,
+            receiverUuid: freshReceiver.minecraft_uuid,
+            requestId: requestId,
+        });
+    } else {
+      
+    }
+}
 }
 --- END FILE: backend/src/chat/chat.gateway.ts ---
 
@@ -1301,6 +1305,46 @@ export enum Ranks {
 
 
 
+--- START FILE: backend/src/data-source.ts ---
+
+import 'reflect-metadata';
+import { DataSource } from 'typeorm';
+import * as dotenv from 'dotenv';
+import { User } from './users/entities/user.entity';
+import { ShopItem } from './shop/entities/shop-item.entity';
+import { Post } from './posts/entities/post.entity';
+import { Friendship } from './friendships/entities/friendship.entity';
+import { Message } from './messages/entities/message.entity';
+import { News } from './news/entities/news.entity';
+import { Notification } from './notifications/entities/notification.entity';
+import { Comment } from './comments/entities/comment.entity';
+import { Purchase } from './purchases/entities/purchase.entity';
+import { LinkCode } from './linking/entities/link-code.entity';
+import { Rank } from './ranks/entities/rank.entity';
+import { Vote } from './votes/entities/vote.entity';
+import { PendingCommand } from './shop/entities/pending-command.entity';
+
+dotenv.config({ path: '.env' });
+
+export const AppDataSource = new DataSource({
+    type: 'postgres',
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    username: process.env.DB_USERNAME,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DATABASE,
+    synchronize: false,
+    logging: true,
+    entities: [
+        User, ShopItem, Post, Friendship, Message, News, Notification, Comment, Purchase, LinkCode, Rank, Vote, PendingCommand
+    ],
+    migrations: [__dirname + '/migrations/*{.ts,.js}'],
+    subscribers: [],
+});
+--- END FILE: backend/src/data-source.ts ---
+
+
+
 --- START FILE: backend/src/friendships/dto/create-friend-request.dto.ts ---
 
 import { IsInt, IsNotEmpty, IsPositive } from 'class-validator';
@@ -1347,6 +1391,23 @@ export class FromPluginRemoveFriendDto {
   friendToRemoveName: string;
 }
 --- END FILE: backend/src/friendships/dto/from-plugin-remove-friend.dto.ts ---
+
+
+
+--- START FILE: backend/src/friendships/dto/from-plugin-respond-request.dto.ts ---
+
+import { IsInt, IsNotEmpty, IsUUID } from 'class-validator';
+
+export class FromPluginRespondRequestDto {
+  @IsUUID()
+  @IsNotEmpty()
+  responderUuid: string; // UUID того, кто отвечает на запрос
+
+  @IsInt()
+  @IsNotEmpty()
+  requestId: number; // ID самого запроса на дружбу
+}
+--- END FILE: backend/src/friendships/dto/from-plugin-respond-request.dto.ts ---
 
 
 
@@ -1522,9 +1583,10 @@ import { FriendshipsService } from './friendships.service';
 import { PluginApiKeyGuard } from '../auth/guards/plugin-api-key.guard';
 import { FromPluginAddFriendDto } from './dto/from-plugin-add-friend.dto';
 import { FromPluginRemoveFriendDto } from './dto/from-plugin-remove-friend.dto';
+import { FromPluginRespondRequestDto } from './dto/from-plugin-respond-request.dto';
 
 @ApiTags('Plugin Bridge')
-@Controller('api/friendships/from-plugin')
+@Controller('friendships/from-plugin')
 @UseGuards(PluginApiKeyGuard)
 @ApiHeader({
   name: 'x-api-key',
@@ -1547,6 +1609,17 @@ export class FriendshipsPluginController {
   @Get('list/:uuid')
   listFriendsForPlugin(@Param('uuid') uuid: string): Promise<string[]> {
     return this.friendshipsService.listFriendsForPlugin(uuid);
+  }
+
+  @Post('accept')
+  acceptRequestFromPlugin(@Body(new ValidationPipe()) dto: FromPluginRespondRequestDto) {
+    return this.friendshipsService.acceptRequestFromPlugin(dto.responderUuid, dto.requestId);
+  }
+
+  // --- НОВЫЙ МЕТОД ДЛЯ ОТКЛОНЕНИЯ ЗАПРОСА ---
+  @Post('deny')
+  denyRequestFromPlugin(@Body(new ValidationPipe()) dto: FromPluginRespondRequestDto) {
+    return this.friendshipsService.rejectRequestFromPlugin(dto.responderUuid, dto.requestId);
   }
 }
 --- END FILE: backend/src/friendships/friendships.plugin.controller.ts ---
@@ -1617,9 +1690,9 @@ export class FriendshipsService {
     const savedRequest = await this.friendshipsRepository.save(newRequest);
 
     // "Кричим" о событии, что был отправлен новый запрос
-    this.eventEmitter.emit(
-      'friendship.requested',
-      { requester: requester, receiver: receiver }
+ this.eventEmitter.emit(
+      'friendship.requested.ingame',
+      { requester: requester, receiver: receiver, requestId: savedRequest.id }
     );
 
     return savedRequest;
@@ -1643,16 +1716,10 @@ export class FriendshipsService {
 
     request.status = FriendStatuses.ACCEPTED;
 
-    // "Кричим" о событии, что дружба принята
     this.eventEmitter.emit(
       'friendship.accepted',
       { requester: request.requester, receiver: request.receiver }
     );
-
-    // --- ДОБАВЬТЕ ЭТУ СТРОКУ ---
-    console.log('[DEBUG] Event friendship.accepted EMITTED');
-    // -------------------------
-
     return this.friendshipsRepository.save(request);
   }
 
@@ -1788,6 +1855,24 @@ export class FriendshipsService {
     const friendsWithData = await this.listFriends(user.id);
     // Возвращаем только массив никнеймов, как и ожидает плагин
     return friendsWithData.map(f => f.user.minecraft_username || f.user.username);
+  }
+
+ async acceptRequestFromPlugin(responderUuid: string, requestId: number): Promise<Friendship> {
+    const responder = await this.usersRepository.findOneBy({ minecraft_uuid: responderUuid });
+    if (!responder) {
+      throw new NotFoundException('Responding player is not linked to a website account.');
+    }
+    // Используем уже существующий метод, но с ID пользователя, найденного по UUID
+    return this.acceptRequest(requestId, responder.id);
+  }
+
+  async rejectRequestFromPlugin(responderUuid: string, requestId: number): Promise<void> {
+    const responder = await this.usersRepository.findOneBy({ minecraft_uuid: responderUuid });
+    if (!responder) {
+      throw new NotFoundException('Responding player is not linked to a website account.');
+    }
+    // Используем уже существующий метод
+    return this.rejectOrCancelRequest(requestId, responder.id);
   }
 }
 --- END FILE: backend/src/friendships/friendships.service.ts ---
@@ -2216,7 +2301,6 @@ export class MessagesService {
   async createMessage(sender: User, receiver: User, content: string, parentMessageId?: number): Promise<Message | null> {
     const signature = `${sender.id}-${receiver.id}-${content}`;
     if (recentMessageSignatures.has(signature)) {
-      this.logger.warn(`Duplicate message signature detected, ignoring: ${signature}`);
       return null;
     }
     recentMessageSignatures.add(signature);
@@ -2235,7 +2319,6 @@ export class MessagesService {
       const savedMessage = await this.messagesRepository.save(message);
       return this.findMessageById(savedMessage.id);
     } catch (error) {
-      this.logger.error(`Failed to save message.`, error.stack);
       recentMessageSignatures.delete(signature);
       return null;
     }
@@ -2293,6 +2376,107 @@ export class MessagesService {
   }
 }
 --- END FILE: backend/src/messages/messages.service.ts ---
+
+
+
+--- START FILE: backend/src/migrations/1750536828010-InitialSchema.ts ---
+
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+export class InitialSchema1750536828010 implements MigrationInterface {
+    name = 'InitialSchema1750536828010'
+
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`CREATE TABLE "votes" ("id" SERIAL NOT NULL, "value" integer NOT NULL, "voter_id" integer NOT NULL, "post_id" integer, "comment_id" integer, CONSTRAINT "CHK_9531a3f9e2c935050189b1bdae" CHECK (("post_id" IS NOT NULL AND "comment_id" IS NULL) OR ("post_id" IS NULL AND "comment_id" IS NOT NULL)), CONSTRAINT "PK_f3d9fd4a0af865152c3f59db8ff" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_cebd183f3909b522b32784acf2" ON "votes" ("voter_id", "comment_id") WHERE "comment_id" IS NOT NULL`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_c6f5e47300a8016ff8abdb67c9" ON "votes" ("voter_id", "post_id") WHERE "post_id" IS NOT NULL`);
+        await queryRunner.query(`CREATE TABLE "comments" ("id" SERIAL NOT NULL, "content" character varying(1000) NOT NULL, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), "author_id" integer, "post_id" integer NOT NULL, CONSTRAINT "PK_8bf68bc960f2b69e818bdb90dcb" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TABLE "posts" ("id" SERIAL NOT NULL, "author_id" integer, "title" character varying(100) NOT NULL, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "content" text NOT NULL, "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_2829ac61eff60fcec60d7274b9e" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TABLE "news" ("id" SERIAL NOT NULL, "author_id" integer NOT NULL, "name" character varying(50) NOT NULL, "desc" text NOT NULL, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_39a43dfcb6007180f04aff2357e" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TYPE "public"."friendships_status_enum" AS ENUM('PENDING', 'ACCEPTED', 'BLOCKED')`);
+        await queryRunner.query(`CREATE TABLE "friendships" ("id" SERIAL NOT NULL, "requester_id" integer NOT NULL, "receiver_id" integer NOT NULL, "status" "public"."friendships_status_enum" NOT NULL DEFAULT 'PENDING', "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_08af97d0be72942681757f07bc8" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_9a08c92f69d812b680e938a078" ON "friendships" ("requester_id", "receiver_id") `);
+        await queryRunner.query(`CREATE TABLE "messages" ("id" SERIAL NOT NULL, "content" text NOT NULL, "sent_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), "viewed_at" TIMESTAMP, "is_deleted" boolean NOT NULL DEFAULT false, "sender_id" integer NOT NULL, "receiver_id" integer NOT NULL, "parent_message_id" integer, CONSTRAINT "PK_18325f38ae6de43878487eff986" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TABLE "notifications" ("notification_id" SERIAL NOT NULL, "user_id" integer NOT NULL, "title" character varying(100) NOT NULL, "message" character varying(255) NOT NULL, "type" character varying(50), "link" character varying(255), "read" boolean NOT NULL DEFAULT false, "created_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_eaedfe19f0f765d26afafa85956" PRIMARY KEY ("notification_id"))`);
+        await queryRunner.query(`CREATE TABLE "shop_items" ("item_id" SERIAL NOT NULL, "name" character varying(100) NOT NULL, "description" text, "price" integer NOT NULL, "image_url" character varying(255), "ingame_command" character varying(255) NOT NULL, "is_active" boolean NOT NULL DEFAULT true, "category" character varying(50) NOT NULL DEFAULT 'items', "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_bebbea41754288ba74c82d5c4f4" PRIMARY KEY ("item_id"))`);
+        await queryRunner.query(`CREATE TABLE "purchases" ("purchase_id" SERIAL NOT NULL, "user_id" integer NOT NULL, "item_id" integer NOT NULL, "purchase_price" integer NOT NULL, "purchased_at" TIMESTAMP NOT NULL DEFAULT now(), "status" character varying(20) NOT NULL DEFAULT 'COMPLETED', CONSTRAINT "PK_b2ebfeff06ca4de4b541e52cf70" PRIMARY KEY ("purchase_id"))`);
+        await queryRunner.query(`CREATE TABLE "ranks" ("id" SERIAL NOT NULL, "name" character varying(50) NOT NULL, "system_name" character varying(50) NOT NULL, "power_level" integer NOT NULL, "display_color" character varying(7) NOT NULL DEFAULT '#808080', "is_removable" boolean NOT NULL DEFAULT true, CONSTRAINT "PK_7620a297228c6e9ed28e9fd07e4" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_1e525c9bb1a236277376344d89" ON "ranks" ("name") `);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_9394a51fa9aa1405b05f9f8be8" ON "ranks" ("system_name") `);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_764d04403bcecc31ac112f679d" ON "ranks" ("power_level") `);
+        await queryRunner.query(`CREATE TABLE "users" ("id" SERIAL NOT NULL, "username" character varying(50) NOT NULL, "minecraft_username" character varying(16), "profile_slug" character varying(50), "minecraft_uuid" character varying(36), "first_login" TIMESTAMP NOT NULL DEFAULT now(), "description" character varying(70), "pfp_url" character varying(100), "banner_url" character varying(100), "is_banned" boolean NOT NULL DEFAULT false, "balance" integer NOT NULL DEFAULT '0', "password_hash" character varying(255) NOT NULL, "email" character varying(255) NOT NULL, "email_verified_at" TIMESTAMP, "last_login" TIMESTAMP, "reputation_count" integer NOT NULL DEFAULT '0', "is_minecraft_online" boolean NOT NULL DEFAULT false, "updated_at" TIMESTAMP NOT NULL DEFAULT now(), "deleted_at" TIMESTAMP, "rank_id" integer, CONSTRAINT "UQ_7166d1a63d45160e5e73b692543" UNIQUE ("profile_slug"), CONSTRAINT "UQ_427ce47b56e04782619404f41cb" UNIQUE ("minecraft_uuid"), CONSTRAINT "UQ_97672ac88f789774dd47f7c8be3" UNIQUE ("email"), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_303a4166462928f0f3b0a444e7" ON "users" ("profile_slug") WHERE "profile_slug" IS NOT NULL`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_4f825c33d570c3fc72458ca21f" ON "users" ("minecraft_uuid") WHERE "minecraft_uuid" IS NOT NULL`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_97672ac88f789774dd47f7c8be" ON "users" ("email") `);
+        await queryRunner.query(`CREATE TABLE "link_codes" ("id" SERIAL NOT NULL, "code" character varying(10) NOT NULL, "user_id" integer NOT NULL, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "expires_at" TIMESTAMP NOT NULL, CONSTRAINT "PK_8ffedf36354a3f1445282b48ac2" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_6e5743f84fbf9e5e34ea56170f" ON "link_codes" ("code") `);
+        await queryRunner.query(`CREATE TABLE "pending_commands" ("id" SERIAL NOT NULL, "command" character varying(255) NOT NULL, "created_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_100b81018a3c8b328d6bca5e8f9" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`ALTER TABLE "votes" ADD CONSTRAINT "FK_907ed58b724f8debe4200e51af3" FOREIGN KEY ("voter_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "votes" ADD CONSTRAINT "FK_18499a5b9b4cf71093f7b7f79f8" FOREIGN KEY ("post_id") REFERENCES "posts"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "votes" ADD CONSTRAINT "FK_edd21a11cce9afc9a6b990a1be1" FOREIGN KEY ("comment_id") REFERENCES "comments"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "comments" ADD CONSTRAINT "FK_e6d38899c31997c45d128a8973b" FOREIGN KEY ("author_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "comments" ADD CONSTRAINT "FK_259bf9825d9d198608d1b46b0b5" FOREIGN KEY ("post_id") REFERENCES "posts"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "posts" ADD CONSTRAINT "FK_312c63be865c81b922e39c2475e" FOREIGN KEY ("author_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "news" ADD CONSTRAINT "FK_173d93468ebf142bb3424c2fd63" FOREIGN KEY ("author_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "friendships" ADD CONSTRAINT "FK_4cf3c68ed4a5a9fde8d4c2b7319" FOREIGN KEY ("requester_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "friendships" ADD CONSTRAINT "FK_e6f5aea2073c03cb60231b0b4e8" FOREIGN KEY ("receiver_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "messages" ADD CONSTRAINT "FK_22133395bd13b970ccd0c34ab22" FOREIGN KEY ("sender_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "messages" ADD CONSTRAINT "FK_b561864743d235f44e70addc1f5" FOREIGN KEY ("receiver_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "messages" ADD CONSTRAINT "FK_72ffa22d68b72a09d5700e4463f" FOREIGN KEY ("parent_message_id") REFERENCES "messages"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "notifications" ADD CONSTRAINT "FK_9a8a82462cab47c73d25f49261f" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "purchases" ADD CONSTRAINT "FK_024ddf7e04177a07fcb9806a90a" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "purchases" ADD CONSTRAINT "FK_1064c04bd5a56289865700b2403" FOREIGN KEY ("item_id") REFERENCES "shop_items"("item_id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "users" ADD CONSTRAINT "FK_5488721c37882b6107fe23f10be" FOREIGN KEY ("rank_id") REFERENCES "ranks"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "link_codes" ADD CONSTRAINT "FK_466de43d0ca94349972dc8657d5" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+    }
+
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "link_codes" DROP CONSTRAINT "FK_466de43d0ca94349972dc8657d5"`);
+        await queryRunner.query(`ALTER TABLE "users" DROP CONSTRAINT "FK_5488721c37882b6107fe23f10be"`);
+        await queryRunner.query(`ALTER TABLE "purchases" DROP CONSTRAINT "FK_1064c04bd5a56289865700b2403"`);
+        await queryRunner.query(`ALTER TABLE "purchases" DROP CONSTRAINT "FK_024ddf7e04177a07fcb9806a90a"`);
+        await queryRunner.query(`ALTER TABLE "notifications" DROP CONSTRAINT "FK_9a8a82462cab47c73d25f49261f"`);
+        await queryRunner.query(`ALTER TABLE "messages" DROP CONSTRAINT "FK_72ffa22d68b72a09d5700e4463f"`);
+        await queryRunner.query(`ALTER TABLE "messages" DROP CONSTRAINT "FK_b561864743d235f44e70addc1f5"`);
+        await queryRunner.query(`ALTER TABLE "messages" DROP CONSTRAINT "FK_22133395bd13b970ccd0c34ab22"`);
+        await queryRunner.query(`ALTER TABLE "friendships" DROP CONSTRAINT "FK_e6f5aea2073c03cb60231b0b4e8"`);
+        await queryRunner.query(`ALTER TABLE "friendships" DROP CONSTRAINT "FK_4cf3c68ed4a5a9fde8d4c2b7319"`);
+        await queryRunner.query(`ALTER TABLE "news" DROP CONSTRAINT "FK_173d93468ebf142bb3424c2fd63"`);
+        await queryRunner.query(`ALTER TABLE "posts" DROP CONSTRAINT "FK_312c63be865c81b922e39c2475e"`);
+        await queryRunner.query(`ALTER TABLE "comments" DROP CONSTRAINT "FK_259bf9825d9d198608d1b46b0b5"`);
+        await queryRunner.query(`ALTER TABLE "comments" DROP CONSTRAINT "FK_e6d38899c31997c45d128a8973b"`);
+        await queryRunner.query(`ALTER TABLE "votes" DROP CONSTRAINT "FK_edd21a11cce9afc9a6b990a1be1"`);
+        await queryRunner.query(`ALTER TABLE "votes" DROP CONSTRAINT "FK_18499a5b9b4cf71093f7b7f79f8"`);
+        await queryRunner.query(`ALTER TABLE "votes" DROP CONSTRAINT "FK_907ed58b724f8debe4200e51af3"`);
+        await queryRunner.query(`DROP TABLE "pending_commands"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_6e5743f84fbf9e5e34ea56170f"`);
+        await queryRunner.query(`DROP TABLE "link_codes"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_97672ac88f789774dd47f7c8be"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_4f825c33d570c3fc72458ca21f"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_303a4166462928f0f3b0a444e7"`);
+        await queryRunner.query(`DROP TABLE "users"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_764d04403bcecc31ac112f679d"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_9394a51fa9aa1405b05f9f8be8"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_1e525c9bb1a236277376344d89"`);
+        await queryRunner.query(`DROP TABLE "ranks"`);
+        await queryRunner.query(`DROP TABLE "purchases"`);
+        await queryRunner.query(`DROP TABLE "shop_items"`);
+        await queryRunner.query(`DROP TABLE "notifications"`);
+        await queryRunner.query(`DROP TABLE "messages"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_9a08c92f69d812b680e938a078"`);
+        await queryRunner.query(`DROP TABLE "friendships"`);
+        await queryRunner.query(`DROP TYPE "public"."friendships_status_enum"`);
+        await queryRunner.query(`DROP TABLE "news"`);
+        await queryRunner.query(`DROP TABLE "posts"`);
+        await queryRunner.query(`DROP TABLE "comments"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_c6f5e47300a8016ff8abdb67c9"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_cebd183f3909b522b32784acf2"`);
+        await queryRunner.query(`DROP TABLE "votes"`);
+    }
+
+}
+
+--- END FILE: backend/src/migrations/1750536828010-InitialSchema.ts ---
 
 
 
@@ -2425,7 +2609,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { News as NewsEntity } from './entities/news.entity';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { UpdateNewsDto } from './dto/update-news.dto';
-import { SystemRanks } from 'src/ranks/ranks.service';
+import { SystemRanks } from '../ranks/ranks.service';
 
 @ApiTags('News')
 @Controller('news')
@@ -2758,9 +2942,7 @@ export class NotificationsService {
 
       this.eventEmitter.emit('notification.created', populatedNotification);
       
-      this.logger.log(`Notification created for user ${user.id} of type [${type}]`);
     } catch (error) {
-      this.logger.error(`Failed to create notification for user ${user.id}`, error.stack);
     }
   }
 
@@ -2816,13 +2998,11 @@ export class NotificationsService {
     return this.notificationsRepository.save(notification);
   }
 
-  // --- НОВЫЙ МЕТОД: Пометить все как прочитанные ---
   async markAllAsRead(userId: number): Promise<{ affected?: number }> {
     const result = await this.notificationsRepository.update(
       { user_id: userId, read: false },
       { read: true },
     );
-    this.logger.log(`Marked all as read for user ${userId}. Affected: ${result.affected}`);
     return { affected: result.affected };
   }
 
@@ -2832,7 +3012,6 @@ export class NotificationsService {
           { user_id: userId, link: link, read: false },
           { read: true },
       );
-      this.logger.log(`Marked as read for user ${userId} by link ${link}. Affected: ${result.affected}`);
       return { affected: result.affected };
   }
 }
@@ -3129,7 +3308,7 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { User } from '../users/entities/user.entity';
 import { Ranks } from '../common/enums/ranks.enum';
 import { FindAllPostsDto } from './dto/find-all-posts';
-import { SystemRanks } from 'src/ranks/ranks.service';
+import { SystemRanks } from '../ranks/ranks.service';
 
 @Injectable()
 export class PostsService {
@@ -3371,22 +3550,34 @@ export class Purchase {
 
 --- START FILE: backend/src/ranks/dto/create-rank.dto.ts ---
 
+// backend/src/ranks/dto/create-rank.dto.ts
+
 import { IsString, IsNotEmpty, MaxLength, Matches, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateRankDto {
-  @ApiProperty({ example: 'Super VIP', description: 'The name of the rank' })
+  @ApiProperty({ example: 'Super VIP', description: 'The display name of the rank' }) // Описание изменено
   @IsString()
   @IsNotEmpty()
   @MaxLength(50)
   name: string;
 
+  // --- НОВОЕ ПОЛЕ ---
+  @ApiProperty({ example: 'supervip', description: 'The system name for in-game matching (no spaces, lowercase)' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  @Matches(/^[a-z0-9_-]+$/, { message: 'System name can only contain lowercase letters, numbers, hyphens, and underscores.' })
+  system_name: string;
+  // --- КОНЕЦ НОВОГО ПОЛЯ ---
+
   @ApiProperty({ example: 100, description: 'Power level (1-799 for custom ranks)' })
   @IsInt()
   @Min(1)
-  @Max(799) // Защита от создания рангов сильнее модератора
+  @Max(799)
   power_level: number;
-
+  
+  // ... остальная часть файла без изменений ...
   @ApiProperty({ example: '#FFD700', description: 'Hex color code for display' })
   @IsString()
   @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'Color must be a valid hex code (e.g., #RRGGBB)' })
@@ -3420,24 +3611,24 @@ export class Rank {
 
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 50 })
-  name: string;
+  name: string; // Это теперь отображаемое имя
 
-  // Уровень "силы" ранга. Уникальный. Чем выше, тем больше прав.
-  // OWNER = 999, ADMIN = 900, MODERATOR = 800. Кастомные ранги будут иметь меньшие значения.
+  // --- НОВОЕ ПОЛЕ ---
+  @Index({ unique: true })
+  @Column({ type: 'varchar', length: 50, name: 'system_name' })
+  system_name: string; // А это имя для связи с игрой
+  // --- КОНЕЦ НОВОГО ПОЛЯ ---
+
   @Index({ unique: true })
   @Column({ type: 'int' })
   power_level: number;
 
-  // Цвет для отображения на фронтенде (в формате HEX)
-  @Column({ type: 'varchar', length: 7, default: '#808080' }) // Серый по умолчанию
+  @Column({ type: 'varchar', length: 7, default: '#808080' })
   display_color: string;
 
-  // Флаг, указывающий, можно ли удалить этот ранг.
-  // Для OWNER, ADMIN, MODERATOR будет false.
   @Column({ type: 'boolean', default: true })
   is_removable: boolean;
   
-  // Связь с пользователями, имеющими этот ранг
   @OneToMany(() => User, (user) => user.rank)
   users: User[];
 }
@@ -3529,7 +3720,7 @@ export class RanksModule {}
 
 import { Injectable, OnModuleInit, NotFoundException, ConflictException, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, ILike, Repository } from 'typeorm';
 import { Rank } from './entities/rank.entity';
 import { CreateRankDto } from './dto/create-rank.dto';
 import { UpdateRankDto } from './dto/update-rank.dto';
@@ -3538,10 +3729,10 @@ import { User } from 'src/users/entities/user.entity';
 // Определяем наши "цементированные" ранги
 const a = 1;
 export const SystemRanks = {
-  OWNER: { id: 1, name: 'Owner', power_level: 999, display_color: '#AA0000', is_removable: false },
-  ADMIN: { id: 2, name: 'Admin', power_level: 900, display_color: '#FF5555', is_removable: false },
-  MODERATOR: { id: 3, name: 'Moderator', power_level: 800, display_color: '#5555FF', is_removable: false },
-  DEFAULT: { id: 4, name: 'Default', power_level: 1, display_color: '#AAAAAA', is_removable: false },
+  OWNER: { id: 1, name: 'Owner', system_name: 'owner', power_level: 999, display_color: '#AA0000', is_removable: false },
+  ADMIN: { id: 2, name: 'Admin', system_name: 'admin', power_level: 900, display_color: '#FF5555', is_removable: false },
+  MODERATOR: { id: 3, name: 'Moderator', system_name: 'moderator', power_level: 800, display_color: '#5555FF', is_removable: false },
+  DEFAULT: { id: 4, name: 'Default', system_name: 'default', power_level: 1, display_color: '#AAAAAA', is_removable: false },
 };
 
 @Injectable()
@@ -3668,6 +3859,19 @@ export class RanksService implements OnModuleInit {
       await manager.remove(Rank, rankToRemove);
     });
   }
+  async findRankBySystemName(systemName: string): Promise<Rank | null> {
+    return this.ranksRepository.findOne({
+      where: { system_name: ILike(systemName) }
+    });
+  }
+
+   async findOwnerRank(): Promise<Rank> {
+    const rank = await this.ranksRepository.findOneBy({ id: SystemRanks.OWNER.id });
+    if (!rank) {
+      throw new InternalServerErrorException('Owner rank not found in database. Seeding may have failed.');
+    }
+    return rank;
+  }
 }
 --- END FILE: backend/src/ranks/ranks.service.ts ---
 
@@ -3766,7 +3970,7 @@ export class PendingCommand {
 --- START FILE: backend/src/shop/entities/shop-item.entity.ts ---
 
 // backend/src/shop/entities/shop-item.entity.ts
-import { Purchase } from 'src/purchases/entities/purchase.entity';
+import { Purchase } from '../../purchases/entities/purchase.entity';
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 
 @Entity('shop_items')
@@ -3997,7 +4201,7 @@ export class ShopService {
       const result = await this.shopItemsRepository.delete(id);
       if (result.affected === 0) throw new NotFoundException('Item not found');
   }
-}
+}  
 --- END FILE: backend/src/shop/shop.service.ts ---
 
 
@@ -4189,7 +4393,7 @@ import { Comment } from '../../comments/entities/comment.entity';
 import { Purchase } from '../../purchases/entities/purchase.entity';
 import { Exclude } from 'class-transformer';
 import { Vote } from '../../votes/entities/vote.entity';
-import { Rank } from 'src/ranks/entities/rank.entity';
+import { Rank } from '../../ranks/entities/rank.entity';
 
 @Entity('users')
 export class User {
@@ -4425,14 +4629,9 @@ export class UsersController {
       }),
     ) file: Express.Multer.File,
   ) {
-    this.logger.log(`Attempting to upload avatar for user: ${req.user.userId}`);
-    // --- ДОБАВЛЕНО: Логируем полученный файл, чтобы увидеть его свойства ---
-    this.logger.debug(`File metadata: ${JSON.stringify(file)}`);
 
-    // --- ДОБАВЛЕНО: Ручная, надежная проверка MIME-типа ---
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
-      this.logger.error(`Invalid file type uploaded: ${file.mimetype}`);
       throw new BadRequestException(`Invalid file type. Only JPEG, PNG, and GIF are allowed.`);
     }
 
@@ -4462,19 +4661,28 @@ export class UsersController {
       }),
     ) file: Express.Multer.File,
   ) {
-    this.logger.log(`Attempting to upload banner for user: ${req.user.userId}`);
-    this.logger.debug(`File metadata: ${JSON.stringify(file)}`);
 
     // --- ДОБАВЛЕНО: Ручная, надежная проверка MIME-типа ---
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
-      this.logger.error(`Invalid file type uploaded: ${file.mimetype}`);
       throw new BadRequestException(`Invalid file type. Only JPEG, PNG, and GIF are allowed.`);
     }
 
     const userId = req.user.userId;
     const bannerUrl = `/uploads/banners/${file.filename}`;
     return this.usersService.updateBanner(userId, bannerUrl);
+  }
+
+   @Post('me/unlink-minecraft')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Unlink Minecraft account from my profile' })
+  @ApiResponse({ status: 200, description: 'Minecraft account unlinked successfully.', type: UpdateProfileResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  unlinkMinecraftAccount(@Request() req) {
+    const userId = req.user.userId;
+    return this.usersService.unlinkMinecraftAccount(userId);
   }
 }
 --- END FILE: backend/src/users/users.controller.ts ---
@@ -4488,7 +4696,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
-import { RanksModule } from 'src/ranks/ranks.module';
+import { RanksModule } from '../ranks/ranks.module';
 
 
 @Global() // <-- ДЕЛАЕМ МОДУЛЬ ГЛОБАЛЬНЫМ
@@ -4509,7 +4717,7 @@ export class UsersModule { }
 
 --- START FILE: backend/src/users/users.service.ts ---
 
-import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not, ILike, FindManyOptions } from 'typeorm';
 import { User } from './entities/user.entity';
@@ -4522,6 +4730,7 @@ import { FindAllUsersDto } from './dto/find-all-users.dto';
 import { JwtService } from '@nestjs/jwt';
 import { AdminUpdateUserDto } from 'src/admin/dto/admin-update-user.dto';
 import { RanksService, SystemRanks } from '../ranks/ranks.service'; // <-- ДОБАВЛЕНО
+import { Rank } from 'src/ranks/entities/rank.entity';
 
 
 export type PublicUser = Omit<User, 'password_hash' | 'validatePassword' | 'deleted_at'>;
@@ -4537,6 +4746,24 @@ export class UsersService {
 
   async create(createUserDto: CreateUserDto): Promise<PublicUser> {
     const { email, username, password } = createUserDto;
+
+    // Считаем, сколько всего пользователей в базе
+    const totalUsers = await this.usersRepository.count();
+
+    // Если этот пользователь первый, он должен стать Владельцем (Owner)
+    let rankToAssign: Rank;
+    if (totalUsers === 0) {
+      rankToAssign = await this.ranksService.findOwnerRank();
+    } else {
+      // Если пользователи уже есть, выдаем ранг по умолчанию
+      rankToAssign = await this.ranksService.findDefaultRank();
+    }
+
+    if (!rankToAssign) {
+      // Эта проверка на случай, если что-то пошло не так с поиском рангов
+      throw new InternalServerErrorException('Could not determine rank for new user.');
+    }
+
     const existingUserByEmail = await this.usersRepository.findOne({ where: { email } });
     if (existingUserByEmail) {
       throw new ConflictException('User with this email already exists');
@@ -4544,18 +4771,12 @@ export class UsersService {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const defaultRank = await this.ranksService.findDefaultRank();
-    if (!defaultRank) {
-      throw new Error('Default rank not found. Seeding might have failed.');
-    }
-
     const userToCreate = this.usersRepository.create({
       username: username,
       email: email,
       password_hash: hashedPassword,
-      rank: defaultRank, // <-- ИЗМЕНЕНО
+      rank: rankToAssign, // <-- Присваиваем нужный ранг
     });
-
     const savedUser = await this.usersRepository.save(userToCreate);
 
     const { password_hash, validatePassword, deleted_at, ...result } = savedUser;
@@ -4620,7 +4841,7 @@ export class UsersService {
   }
 
   async adminUpdateUser(targetUserId: number, dto: AdminUpdateUserDto, actorId: number): Promise<PublicUser> {
-    
+
     // 1. Находим и пользователя, которого меняют, и того, кто меняет (актора)
     const [targetUser, actor] = await Promise.all([
       this.usersRepository.findOne({ where: { id: targetUserId }, relations: ['rank'] }),
@@ -4637,24 +4858,24 @@ export class UsersService {
     // 2. Проверяем, не пытается ли актор изменить кого-то равного или выше по рангу
     // Владелец может редактировать всех, кроме самого себя.
     if (actor.id !== targetUser.id && actor.rank.power_level <= targetUser.rank.power_level) {
-        throw new ForbiddenException('You cannot modify a user with an equal or higher rank.');
+      throw new ForbiddenException('You cannot modify a user with an equal or higher rank.');
     }
 
     // 3. Если в запросе есть изменение ранга, применяем его с доп. проверками
     if (dto.rank_id) {
-        const newRank = await this.ranksService.findOne(dto.rank_id);
+      const newRank = await this.ranksService.findOne(dto.rank_id);
 
-        // 4. Проверяем, имеет ли актор право назначать этот ранг
-        // Можно назначать только ранги с power_level строго меньше, чем у себя
-        if (actor.rank.power_level <= newRank.power_level) {
-            throw new ForbiddenException(`You do not have permission to assign the rank "${newRank.name}".`);
-        }
-        targetUser.rank = newRank;
+      // 4. Проверяем, имеет ли актор право назначать этот ранг
+      // Можно назначать только ранги с power_level строго меньше, чем у себя
+      if (actor.rank.power_level <= newRank.power_level) {
+        throw new ForbiddenException(`You do not have permission to assign the rank "${newRank.name}".`);
+      }
+      targetUser.rank = newRank;
     }
 
     // 5. Применяем другие возможные изменения (например, репутацию)
     if (dto.reputation_count !== undefined) {
-        targetUser.reputation_count = dto.reputation_count;
+      targetUser.reputation_count = dto.reputation_count;
     }
 
     // Сохраняем все изменения
@@ -4664,7 +4885,7 @@ export class UsersService {
     return result as PublicUser;
   }
 
-    async findAll(queryDto: FindAllUsersDto): Promise<{ data: PublicUser[], total: number }> {
+  async findAll(queryDto: FindAllUsersDto): Promise<{ data: PublicUser[], total: number }> {
     const { search, order = 'DESC', sortBy: requestedSortBy = 'first_login', page = 1, limit = 10 } = queryDto;
 
     const allowedSortFields: (keyof User)[] = ['username', 'reputation_count', 'first_login'];
@@ -4697,7 +4918,7 @@ export class UsersService {
       total: total,
     };
   }
-  
+
   async findOne(identifier: string | number): Promise<PublicUser> {
     // Проверяем, является ли идентификатор числом или строкой, состоящей только из цифр
     const isNumeric = typeof identifier === 'number' || /^\d+$/.test(String(identifier));
@@ -4776,6 +4997,76 @@ export class UsersService {
 
   async findOneByMinecraftUsername(mcUsername: string): Promise<User | null> {
     return this.usersRepository.findOne({ where: { minecraft_username: mcUsername } });
+  }
+
+  async syncRankFromPlugin(minecraftUuid: string, rankName: string): Promise<void> {
+    if (!minecraftUuid || !rankName) {
+      // Игнорируем, если не пришли нужные данные
+      return;
+    }
+
+    // 1. Находим пользователя в нашей базе данных по его UUID из Minecraft
+    const user = await this.usersRepository.findOneBy({ minecraft_uuid: minecraftUuid });
+
+    if (!user) {
+      // Это нормальная ситуация: ранг мог поменяться у игрока,
+      // который не привязал свой аккаунт к сайту. Просто логируем и выходим.
+      return;
+    }
+
+    // 2. Находим ранг в таблице ranks по имени, которое прислал плагин.
+    // Используем ILike для регистронезависимого поиска (например, "vip" и "VIP" будут считаться одинаковыми).
+    const rank = await this.ranksService.findRankBySystemName(rankName);
+
+    if (!rank) {
+      // Это ошибка конфигурации: ранг в LuckPerms не совпадает с рангом в базе данных сайта.
+      // Это важно залогировать, чтобы администратор мог исправить.
+      console.warn(`[Rank Sync] Could not find a rank named "${rankName}" in the database for user ${user.username} (ID: ${user.id}).`);
+      return;
+    }
+
+    // 3. Если пользователь и ранг найдены, и ранг нужно обновить
+    if (user.rank_id !== rank.id) {
+      user.rank = rank; // Присваиваем новую сущность ранга
+      await this.usersRepository.save(user);
+    }
+  }
+
+  async unlinkMinecraftAccount(userId: number): Promise<{ user: PublicUser, access_token: string }> {
+    const user = await this.usersRepository.findOneBy({ id: userId });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found.`);
+    }
+
+    // Очищаем поля, связанные с Minecraft
+    user.minecraft_uuid = null;
+    user.minecraft_username = null;
+    user.is_minecraft_online = false;
+
+    const updatedUser = await this.usersRepository.save(user);
+
+    // Генерируем новый токен, чтобы фронтенд сразу обновил данные пользователя
+    const jwtTokenPayload = { username: updatedUser.username, sub: updatedUser.id, rank: updatedUser.rank };
+    const newAccessToken = this.jwtService.sign(jwtTokenPayload);
+
+    const { password_hash, validatePassword, deleted_at, ...publicData } = updatedUser;
+    return { user: publicData as PublicUser, access_token: newAccessToken };
+  }
+
+  async findById(id: number): Promise<User | null> {
+    return this.usersRepository.findOne({
+      where: { id },
+      relations: ['rank'], // Загружаем связанный ранг, это может понадобиться
+    });
+  }
+
+  async updateOnlineStatus(minecraftUuid: string, isOnline: boolean): Promise<void> {
+    const user = await this.usersRepository.findOne({ where: { minecraft_uuid: minecraftUuid } });
+    if (user) {
+      user.is_minecraft_online = isOnline;
+      await this.usersRepository.save(user);
+    }
   }
 }
 --- END FILE: backend/src/users/users.service.ts ---
@@ -6453,7 +6744,6 @@ function AdminCreateItemPage() {
         setError('');
 
         try {
-            // Убедимся, что цена это число
             const payload = {
                 ...formData,
                 price: Number(formData.price)
@@ -6462,9 +6752,8 @@ function AdminCreateItemPage() {
             await axios.post('/api/shop', payload, {
                 headers: { Authorization: `Bearer ${authToken}` },
             });
-            
             toast.success('Item created successfully!');
-            navigate('/admin/shop'); // Возвращаемся на страницу управления магазином
+            navigate('/admin/shop');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to create item.');
             console.error('Error creating item:', err);
@@ -6480,9 +6769,9 @@ function AdminCreateItemPage() {
                 <JoyLink href="/admin/shop">Shop Management</JoyLink>
                 <Typography>Create New Item</Typography>
             </Breadcrumbs>
-            
+
             <Typography level="h2" component="h1" sx={{ mb: 2 }}>Create New Shop Item</Typography>
-            
+
             {error && <Alert color="danger" sx={{ mb: 2 }}>{Array.isArray(error) ? error.join(', ') : error}</Alert>}
 
             <Stack spacing={2}>
@@ -6490,7 +6779,7 @@ function AdminCreateItemPage() {
                     <FormLabel>Item Name</FormLabel>
                     <Input name="name" value={formData.name} onChange={handleChange} placeholder="e.g., VIP Rank (30 days)" />
                 </FormControl>
-                
+
                 <FormControl required>
                     <FormLabel>Description</FormLabel>
                     <Textarea name="description" value={formData.description} onChange={handleChange} minRows={3} placeholder="A short description of the item for the shop page." />
@@ -6506,12 +6795,12 @@ function AdminCreateItemPage() {
                         <Input name="category" value={formData.category} onChange={handleChange} placeholder="e.g., ranks, items, keys" />
                     </FormControl>
                 </Stack>
-                
+
                 <FormControl>
                     <FormLabel>Image URL</FormLabel>
                     <Input name="image_url" value={formData.image_url} onChange={handleChange} placeholder="https://example.com/image.png" />
                 </FormControl>
-                
+
                 <FormControl required>
                     <FormLabel>In-game Command</FormLabel>
                     <Input name="ingame_command" value={formData.ingame_command} onChange={handleChange} placeholder="lp user {username} parent set vip" />
@@ -7181,7 +7470,7 @@ function AdminRanksPage() {
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingRank, setEditingRank] = useState(null);
-    const [formData, setFormData] = useState({ name: '', power_level: 10, display_color: '#808080' });
+    const [formData, setFormData] = useState({ name: '', system_name: '', power_level: 10, display_color: '#808080' });
     const [modalError, setModalError] = useState('');
 
     const fetchRanks = useCallback(async () => {
@@ -7205,14 +7494,16 @@ function AdminRanksPage() {
         setModalError('');
         if (rank) {
             setEditingRank(rank);
-            setFormData({ name: rank.name, power_level: rank.power_level, display_color: rank.display_color });
+            // Добавляем system_name сюда
+            setFormData({ name: rank.name, system_name: rank.system_name, power_level: rank.power_level, display_color: rank.display_color });
         } else {
             setEditingRank(null);
-            setFormData({ name: '', power_level: 10, display_color: '#808080' });
+            // И сюда
+            setFormData({ name: '', system_name: '', power_level: 10, display_color: '#808080' });
         }
         setIsModalOpen(true);
     };
-
+     
     const handleCloseModal = () => {
         setIsModalOpen(false);
     };
@@ -7323,7 +7614,8 @@ function AdminRanksPage() {
                         <tr>
                             <th style={{ width: '80px' }}>ID</th>
                             <th>Color</th>
-                            <th>Name</th>
+                            <th>Display Name</th>
+                            <th>System Name</th>
                             <th>Power Level</th>
                             <th style={{ width: '120px' }}>Actions</th>
                         </tr>
@@ -7340,6 +7632,7 @@ function AdminRanksPage() {
                                     />
                                 </td>
                                 <td>{rank.name}</td>
+                                <td>{rank.system_name}</td>
                                 <td>{rank.power_level}</td>
                                 <td>
                                     <Stack direction="row" spacing={1}>
@@ -7376,8 +7669,15 @@ function AdminRanksPage() {
                     <form onSubmit={handleSaveRank}>
                         <Stack spacing={2} sx={{ mt: 2 }}>
                             <FormControl>
-                                <FormLabel>Rank Name</FormLabel>
+                                <FormLabel>Display Name</FormLabel>
                                 <Input name="name" value={formData.name} onChange={handleFormChange} autoFocus required />
+                            </FormControl>
+                            <FormControl required disabled={editingRank && !editingRank.is_removable}>
+                                <FormLabel>System Name</FormLabel>
+                                <Input name="system_name" value={formData.system_name} onChange={handleFormChange} required />
+                                <FormHelperText>
+                                    Имя для связи с игрой (например, 'vip'). Маленькие буквы, без пробелов.
+                                </FormHelperText>
                             </FormControl>
                             <FormControl disabled={editingRank && !editingRank.is_removable}>
                                 <FormLabel>Power Level</FormLabel>
@@ -8710,34 +9010,38 @@ export default LandingPage;
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
+import toast from 'react-hot-toast'; // <-- Убедись, что импортирован
 import {
     Box, Typography, Sheet, Button, CircularProgress, Alert, Input, Link as JoyLink, Breadcrumbs,
-    // --- ИЗМЕНЕНО: Добавляем хуки и IconButton ---
     useTheme, IconButton,
+    // --- Новые компоненты для модального окна ---
+    Modal, ModalDialog, ModalClose, Divider, Stack
 } from '@mui/joy';
 import { useMediaQuery } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import LinkIcon from '@mui/icons-material/Link';
+import LinkOffIcon from '@mui/icons-material/LinkOff'; // <-- Иконка для отвязки
 import HomeIcon from '@mui/icons-material/Home';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 function LinkMinecraftPage() {
-    const { user } = useAuth();
+    const { user, authToken, updateAuthToken } = useAuth(); // <-- Достаем authToken и updateAuthToken
     const [code, setCode] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [copied, setCopied] = useState(false);
-
-    // --- ИЗМЕНЕНО: Определяем тип устройства ---
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    
+    // --- Состояния для модального окна ---
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isUnlinking, setIsUnlinking] = useState(false);
 
     const handleGenerateCode = async () => {
         setLoading(true);
         setError('');
         try {
-            // --- ИЗМЕНЕНО: Стандартизируем путь к API ---
             const response = await axios.post('/api/linking/generate-code');
             setCode(response.data.code);
         } catch (err) {
@@ -8754,7 +9058,25 @@ function LinkMinecraftPage() {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    // Эта часть уже адаптивна, оставляем как есть
+    // --- Логика для кнопки отвязки ---
+    const handleUnlink = async () => {
+        setIsUnlinking(true);
+        try {
+            const response = await axios.post(
+                '/api/users/me/unlink-minecraft',
+                {}, // Пустое тело запроса
+                { headers: { Authorization: `Bearer ${authToken}` } }
+            );
+            updateAuthToken(response.data.access_token);
+            toast.success('Minecraft account unlinked successfully!');
+            setIsModalOpen(false); // Закрываем модальное окно
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to unlink account.');
+        } finally {
+            setIsUnlinking(false);
+        }
+    };
+
     if (user && user.minecraft_username) {
         return (
             <Box>
@@ -8763,12 +9085,41 @@ function LinkMinecraftPage() {
                     <CheckCircleIcon color="success" sx={{ fontSize: 'xl4', mb: 1 }}/>
                     <Typography level="title-lg">Account Linked!</Typography>
                     <Typography>Your website account is linked to the Minecraft account: <strong>{user.minecraft_username}</strong></Typography>
-                    <Typography level="body-xs" sx={{mt: 1}}>(To unlink your account, please contact support)</Typography>
+                    
+                    {/* --- Кнопка для отвязки --- */}
+                    <Button 
+                        variant="outlined" 
+                        color="danger" 
+                        startDecorator={<LinkOffIcon />} 
+                        onClick={() => setIsModalOpen(true)}
+                        sx={{ mt: 2 }}
+                    >
+                        Unlink Account
+                    </Button>
                 </Sheet>
+
+                {/* --- Модальное окно подтверждения --- */}
+                <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)}>
+                    <ModalDialog variant="outlined" role="alertdialog">
+                        <ModalClose />
+                        <Typography level="h4" component="h2">Confirm Unlink</Typography>
+                        <Divider sx={{ my: 2 }} />
+                        <Typography>Are you sure you want to unlink your Minecraft account? You will need to generate a new code to link it again.</Typography>
+                        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 3 }}>
+                            <Button variant="plain" color="neutral" onClick={() => setIsModalOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button variant="solid" color="danger" loading={isUnlinking} onClick={handleUnlink}>
+                                Unlink
+                            </Button>
+                        </Box>
+                    </ModalDialog>
+                </Modal>
             </Box>
         );
     }
 
+    // ... (остальная часть JSX для привязки остается без изменений)
     return (
         <Box>
             <Breadcrumbs separator={<ChevronRightIcon />} sx={{ mb: 2 }}>
@@ -8776,39 +9127,33 @@ function LinkMinecraftPage() {
                 <JoyLink href="/profile/settings">Settings</JoyLink>
                 <Typography>Link Minecraft Account</Typography>
             </Breadcrumbs>
-
-            {/* --- ИЗМЕНЕНО: Адаптивный заголовок --- */}
             <Typography level={{ xs: 'h2', sm: 'h1' }} component="h1" sx={{ mb: 1 }}>Link your Minecraft Account</Typography>
             <Typography sx={{ mb: 3 }}>
                 Link your website profile to your in-game account to sync your status, friends, and more.
             </Typography>
-
             {error && <Alert color="danger" sx={{ mb: 2 }}>{error}</Alert>}
-
-            {/* --- ИЗМЕНЕНО: Адаптивные отступы --- */}
             <Sheet variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 'md', display: 'flex', justifyContent: 'center' }}>
                 {code ? (
-                    <Box sx={{ textAlign: 'center', width: '100%', maxWidth: '500px' }}>
+                     <Box sx={{ textAlign: 'center', width: '100%', maxWidth: '500px' }}>
                         <Typography level="body-md">1. Log in to our Minecraft server.</Typography>
                         <Typography level="body-md" sx={{mb: 2}}>2. Type this command in the in-game chat:</Typography>
                         <Input
                             readOnly
                             value={`/link ${code}`}
                             endDecorator={
-                                // --- ИЗМЕНЕНО: Адаптивная кнопка копирования ---
                                 isMobile ? (
                                     <IconButton onClick={handleCopy} variant="soft" color="primary">
                                         {copied ? <CheckCircleIcon /> : <ContentCopyIcon />}
-                                    </IconButton>
+                                     </IconButton>
                                 ) : (
                                     <Button onClick={handleCopy} variant="soft" startDecorator={copied ? <CheckCircleIcon /> : <ContentCopyIcon />}>
                                         {copied ? 'Copied!' : 'Copy'}
                                     </Button>
-                                )
+                             )
                             }
                             sx={{ '--Input-decoratorChildHeight': '32px', fontSize: 'lg', fontFamily: 'monospace' }}
                         />
-                        <Typography level="body-xs" sx={{mt: 1}}>This code will expire in 5 minutes.</Typography>
+                         <Typography level="body-xs" sx={{mt: 1}}>This code will expire in 5 minutes.</Typography>
                     </Box>
                 ) : (
                     <Button
@@ -11145,80 +11490,70 @@ http {
 
 --- START FILE: nginx/nginx.prod.conf ---
 
-# root Flamewall/nginx/nginx.prod.conf
-# Задает параметры обработки соединений. Обязательный блок для Nginx.
 events {
     worker_connections 1024;
 }
 
-# Обертка для всех HTTP-серверов.
 http {
-    # Cервер для перенаправления с HTTP на HTTPS
     server {
         listen 80;
         listen [::]:80;
-        # Указываем доменные имена, для которых работает этот сервер
         server_name flamewall.xyz www.flamewall.xyz;
 
-        # Этот location нужен для Certbot, чтобы он мог автоматически обновлять сертификаты.
-        # Он проверяет наличие файла в этой директории.
         location ~ /.well-known/acme-challenge/ {
             allow all;
             root /var/www/certbot;
         }
 
-        # Все остальные запросы (кроме проверки Certbot) перенаправляем с HTTP на HTTPS
         location / {
             return 301 https://$host$request_uri;
         }
     }
 
-
-    # Основной сервер, который работает по HTTPS и обрабатывает все запросы к приложению
     server {
         listen 443 ssl http2;
         listen [::]:443 ssl http2;
         server_name flamewall.xyz www.flamewall.xyz;
 
-        # Пути к SSL сертификатам, сгенерированным Certbot
+        # --- ИЗМЕНЕНИЕ №1: Явно указываем DNS-сервер Докера ---
+        resolver 127.0.0.11 valid=10s;
+
         ssl_certificate /etc/letsencrypt/live/flamewall.xyz/fullchain.pem;
         ssl_certificate_key /etc/letsencrypt/live/flamewall.xyz/privkey.pem;
 
-        # Проксирование всех корневых запросов (например, главная страница) на фронтенд
+        # --- ИЗМЕНЕНИЕ №2: Используем переменные, чтобы заставить Nginx переопределять адрес ---
         location / {
-            proxy_pass http://frontend:80;
+            set $frontend_upstream http://frontend:80;
+            proxy_pass $frontend_upstream;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
-
-            # --- ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ: ПРИКАЗЫВАЕМ ГЛАВНОМУ ПРОКСИ НЕ КЕШИРОВАТЬ ---
-            proxy_buffering off; # Отключаем буферизацию ответа
-            proxy_cache_bypass $http_upgrade; # Не использовать кеш для WebSocket
+            proxy_buffering off;
+            proxy_cache_bypass $http_upgrade;
             add_header 'Cache-Control' 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0';
             expires 0;
             add_header Pragma 'no-cache';
         }
 
-        # Проксирование запросов к API на бэкенд
         location /api/ {
-            proxy_pass http://backend:3000;
+            set $backend_upstream http://backend:3000;
+            proxy_pass $backend_upstream;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # Проксирование запросов для WebSocket-чата на бэкенд
         location /socket.io/ {
-            proxy_pass http://backend:3000;
+            set $backend_upstream http://backend:3000;
+            proxy_pass $backend_upstream;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
             proxy_set_header Host $host;
         }
 
-        # Проксирование запросов к загруженным файлам (например, аватарам) на бэкенд
         location /uploads/ {
             alias /usr/share/nginx/html/uploads/;
             access_log off;
@@ -11484,6 +11819,45 @@ public class ApiClient {
             }
         }
     }
+
+    public void acceptFriendRequest(Player player, int requestId) {
+        try {
+            JSONObject jsonBody = new JSONObject();
+            jsonBody.put("responderUuid", player.getUniqueId().toString());
+            jsonBody.put("requestId", requestId);
+            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
+
+            Request request = new Request.Builder()
+                    .url(baseUrl + "/api/friendships/from-plugin/accept")
+                    .header("x-api-key", apiKey)
+                    .post(body)
+                    .build();
+
+            httpClient.newCall(request).enqueue(new HttpCallback(player, "Friend request accepted!"));
+        } catch (JSONException e) {
+            handlePluginError(player, "Could not create JSON for accepting friend request", e);
+        }
+    }
+
+    // --- НОВЫЙ МЕТОД ---
+    public void denyFriendRequest(Player player, int requestId) {
+        try {
+            JSONObject jsonBody = new JSONObject();
+            jsonBody.put("responderUuid", player.getUniqueId().toString());
+            jsonBody.put("requestId", requestId);
+            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
+
+            Request request = new Request.Builder()
+                    .url(baseUrl + "/api/friendships/from-plugin/deny")
+                    .header("x-api-key", apiKey)
+                    .post(body)
+                    .build();
+
+            httpClient.newCall(request).enqueue(new HttpCallback(player, "Friend request denied."));
+        } catch (JSONException e) {
+            handlePluginError(player, "Could not create JSON for denying friend request", e);
+        }
+    }
 }
 --- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/ApiClient.java ---
 
@@ -11513,14 +11887,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
+import java.util.Map; // <-- ДОБАВЛЕНО
+import java.util.concurrent.ConcurrentHashMap; // <-- ДОБАВЛЕНО
 public final class BridgePlugin extends JavaPlugin {
 
     private Socket socket;
     private ApiClient apiClient;
     private PrivateMessageManager messageManager;
-    private List<String> commandPatterns;
+    private List<String> commandPatterns; // <-- Используем простой List<String>
     private PlayerConnectionListener playerListener; // Храним экземпляр слушателя
+    private final Map<UUID, Map<String, Integer>> pendingRequests = new ConcurrentHashMap<>();
 
     @Override
     public void onEnable() {
@@ -11531,10 +11907,11 @@ public final class BridgePlugin extends JavaPlugin {
         // Инициализация компонентов
         this.messageManager = new PrivateMessageManager();
         this.apiClient = new ApiClient(this);
-        this.commandPatterns = getConfig().getStringList("intercept-commands");
-        this.playerListener = new PlayerConnectionListener(this); // Создаем слушатель один раз
+        this.playerListener = new PlayerConnectionListener(this);
 
-        getLogger().info("Loaded " + commandPatterns.size() + " command patterns to intercept.");
+        // --- ИСПРАВЛЕНИЕ: Правильно загружаем паттерны в поле класса ---
+        this.commandPatterns = getConfig().getStringList("intercept-commands");
+        getLogger().info("Loaded " + this.commandPatterns.size() + " command patterns to intercept.");
 
         // Регистрация команд
         FlameCommand flameCommand = new FlameCommand(this);
@@ -11549,6 +11926,7 @@ public final class BridgePlugin extends JavaPlugin {
         connectToWebSocket();
         startPendingCommandScheduler();
     }
+
 
     @Override
     public void onDisable() {
@@ -11578,20 +11956,27 @@ public final class BridgePlugin extends JavaPlugin {
      */
     private void connectToWebSocket() {
         try {
-            String url = getConfig().getString("api-base-url", "http://localhost:3000");
+            // --- ШАГ 1: Подготовка адреса и ключа ---
+            String url = getConfig().getString("api-base-url", "http://localhost:3001");
             URI serverUri = URI.create(url);
 
-            Map<String, List<String>> headers = new HashMap<>();
             String apiKey = getConfig().getString("plugin-secret-key");
             if (apiKey == null || apiKey.isEmpty()) {
                 getLogger().severe("CRITICAL: plugin-secret-key is not set in config.yml! Plugin will not work correctly.");
                 return;
             }
-            headers.put("x-api-key", Collections.singletonList(apiKey));
 
-            IO.Options options = IO.Options.builder().setExtraHeaders(headers).build();
+            // --- ШАГ 2: Создание опций подключения с заголовками ---
+            Map<String, List<String>> headers = new HashMap<>();
+            headers.put("x-api-key", Collections.singletonList(apiKey));
+            IO.Options options = IO.Options.builder()
+                    .setExtraHeaders(headers)
+                    .build();
+
+            // --- ШАG 3: Создание сокета с готовыми опциями ---
             socket = IO.socket(serverUri, options);
 
+            // --- ШАГ 4: Навешиваем все обработчики событий ---
             socket.on(Socket.EVENT_CONNECT, args -> {
                 getLogger().info("Successfully connected to the website backend!");
                 // Сразу после подключения проверяем, нет ли ожидающих покупок
@@ -11601,12 +11986,15 @@ public final class BridgePlugin extends JavaPlugin {
             socket.on(Socket.EVENT_DISCONNECT, args -> getLogger().warning("Disconnected from website backend. Reason: " + (args.length > 0 ? args[0] : "N/A")));
             socket.on(Socket.EVENT_CONNECT_ERROR, args -> getLogger().severe("Connection error: " + (args.length > 0 ? args[0] : "Unknown error")));
 
+            socket.on("incomingFriendRequest", args -> handleEvent("incomingFriendRequest", args, this::handleIncomingFriendRequest));
             socket.on("linkStatus", args -> handleEvent("linkStatus", args, this::handleBackendMessage));
             socket.on("webPrivateMessage", args -> handleEvent("webPrivateMessage", args, this::handleWebMessage));
             socket.on("executeShopCommand", args -> handleEvent("executeShopCommand", args, this::handleShopCommand));
 
+            // --- ШАГ 5: Подключаемся ---
             socket.connect();
             getLogger().info("Attempting to connect to website backend at " + url + "...");
+
         } catch (Exception e) {
             getLogger().severe("Failed to initialize WebSocket connection: " + e.getMessage());
             e.printStackTrace();
@@ -11693,10 +12081,53 @@ public final class BridgePlugin extends JavaPlugin {
         }
     }
 
+    private void handleIncomingFriendRequest(JSONObject data) {
+        Bukkit.getScheduler().runTask(this, () -> {
+            try {
+                String requesterName = data.getString("requesterName");
+                UUID receiverUuid = UUID.fromString(data.getString("receiverUuid"));
+                int requestId = data.getInt("requestId"); // <-- Получаем ID запроса
+
+                Player receiverPlayer = Bukkit.getPlayer(receiverUuid);
+                if (receiverPlayer != null && receiverPlayer.isOnline()) {
+
+                    // --- ПЕРЕВЕДЕНО НА АНГЛИЙСКИЙ ---
+                    pendingRequests.computeIfAbsent(receiverUuid, k -> new HashMap<>()).put(requesterName.toLowerCase(), requestId);
+
+                    receiverPlayer.sendMessage("§e------------------------------------------");
+                    receiverPlayer.sendMessage("§6[!] §ePlayer §f" + requesterName + "§e wants to add you as a friend!");
+
+                    // Создаем кликабельные кнопки
+                    TextComponent acceptButton = new TextComponent("§a[ACCEPT]");
+                    acceptButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/flame friend accept " + requesterName));
+                    acceptButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text("§aClick to accept the friend request")));
+
+                    TextComponent denyButton = new TextComponent("§c[DENY]");
+                    denyButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/flame friend deny " + requesterName));
+                    denyButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text("§cClick to deny the friend request")));
+
+                    TextComponent message = new TextComponent("    ");
+                    message.addExtra(acceptButton);
+                    message.addExtra("    "); // Пробел между кнопками
+                    message.addExtra(denyButton);
+
+                    receiverPlayer.spigot().sendMessage(message);
+                    receiverPlayer.sendMessage("§e------------------------------------------");
+                }
+
+            } catch(Exception e) {
+                getLogger().warning("Could not parse incomingFriendRequest: " + e.getMessage());
+            }
+        });
+    }
+
     // Геттеры для доступа из других классов
     public ApiClient getApiClient() { return apiClient; }
     public PrivateMessageManager getMessageManager() { return messageManager; }
     public List<String> getCommandPatterns() { return commandPatterns; }
+    public Map<UUID, Map<String, Integer>> getPendingRequests() {
+        return pendingRequests;
+    }
     public PlayerConnectionListener getPlayerListener() { return playerListener; }
 }
 --- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/BridgePlugin.java ---
@@ -11928,6 +12359,39 @@ public class FlameCommand implements CommandExecutor, TabCompleter {
                 plugin.getApiClient().getFriendsList(player);
                 break;
 
+            case "accept": {
+                if (actionArgs.length < 1) {
+                    player.sendMessage(ChatColor.RED + "Usage: /flame friend accept <player>");
+                    return;
+                }
+                String requesterName = actionArgs[0].toLowerCase();
+                Map<String, Integer> playerRequests = plugin.getPendingRequests().get(player.getUniqueId());
+
+                if (playerRequests == null || !playerRequests.containsKey(requesterName)) {
+                    player.sendMessage(ChatColor.RED + "You don't have a friend request from " + actionArgs[0] + ".");
+                    return;
+                }
+                int requestId = playerRequests.remove(requesterName);
+                plugin.getApiClient().acceptFriendRequest(player, requestId);
+                break;
+            }
+            case "deny": {
+                if (actionArgs.length < 1) {
+                    player.sendMessage(ChatColor.RED + "Usage: /flame friend deny <player>");
+                    return;
+                }
+                String requesterName = actionArgs[0].toLowerCase();
+                Map<String, Integer> playerRequests = plugin.getPendingRequests().get(player.getUniqueId());
+
+                if (playerRequests == null || !playerRequests.containsKey(requesterName)) {
+                    player.sendMessage(ChatColor.RED + "You don't have a friend request from " + actionArgs[0] + ".");
+                    return;
+                }
+                int requestId = playerRequests.remove(requesterName);
+                plugin.getApiClient().denyFriendRequest(player, requestId);
+                break;
+            }
+
             // TODO: В будущем добавить accept, deny
             default:
                 player.sendMessage(ChatColor.RED + "Unknown friend command. Use: add, remove, list.");
@@ -12073,6 +12537,7 @@ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.ServerCommandEvent;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.json.JSONObject;
 
 import java.util.List;
@@ -12169,14 +12634,25 @@ public class PlayerConnectionListener implements Listener {
 
             if (matcher.find()) {
                 final String playerName = matcher.group("player");
-                OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(playerName);
+                final OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(playerName);
+
                 if (targetPlayer.hasPlayedBefore() || targetPlayer.isOnline()) {
-                    plugin.getLogger().info("Intercepted a rank change command for player: " + playerName);
-                    syncSinglePlayer(targetPlayer);
+                    plugin.getLogger().info("Intercepted a rank change command for player: " + playerName + ". Scheduling sync...");
+
+                    // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ ---
+                    // Вместо мгновенного вызова, мы создаем задачу с задержкой в 1 тик
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            syncSinglePlayer(targetPlayer);
+                        }
+                    }.runTaskLater(plugin, 1L); // 1L = задержка в 1 тик
+                    // ---------------------------
                 }
-                return;
+                return; // Нашли совпадение, выходим
             }
         }
+
     }
 }
 --- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/PlayerConnectionListener.java ---
@@ -12365,6 +12841,8 @@ services:
     image: dpage/pgadmin4
     container_name: flamewall_pgadmin
     restart: unless-stopped
+    logging: # <-- ДОБАВИТЬ
+      driver: "none" # <-- ДОБАВИТЬ
     env_file:
       - ./.env
     ports:
@@ -12515,7 +12993,6 @@ COPY --from=builder /usr/src/app/dist ./dist
 COPY --from=builder /usr/src/app/node_modules ./node_modules
 COPY --from=builder /usr/src/app/package.json .
 
-# Запускаем скомпилированное приложение Node.js
 CMD ["node", "dist/main"]
 --- END FILE: backend/Dockerfile.prod ---
 
