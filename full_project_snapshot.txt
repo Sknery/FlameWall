@@ -1,45 +1,60 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Sun Jun 22 15:30:41 EEST 2025
+PROJECT SNAPSHOT CREATED ON: Sun Jun 22 19:18:01 EEST 2025
 ===============================================
 
 
 --- START FILE: backend/src/admin/admin.controller.ts ---
 
-import { Controller, Post, Param, ParseIntPipe, UseGuards, HttpCode, HttpStatus, Body, Patch, Request } from '@nestjs/common';
+// backend/src/admin/admin.controller.ts
+
+import { Controller, Post, Param, ParseIntPipe, UseGuards, HttpCode, HttpStatus, Body, Patch, Request, Logger } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { UsersService, PublicUser } from '../users/users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { Ranks } from '../common/enums/ranks.enum';
 import { User } from '../users/entities/user.entity';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
-import { SystemRanks } from '../ranks/ranks.service'; // <-- ДОБАВЛЕНО
+import { SystemRanks } from '../ranks/ranks.service';
 
 @ApiTags('Admin')
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class AdminController {
+    private readonly logger = new Logger(AdminController.name);
+
     constructor(private readonly usersService: UsersService) { }
 
     @Post('/users/:id/ban')
-    @Roles(SystemRanks.MODERATOR.power_level) // <-- ИЗМЕНЕНО
+    @Roles(SystemRanks.MODERATOR.power_level)
     @ApiOperation({ summary: 'Ban a user' })
     @ApiResponse({ status: 200, description: 'User has been banned successfully.', type: User })
     @ApiResponse({ status: 403, description: 'Forbidden.' })
     @ApiResponse({ status: 404, description: 'User not found.' })
-    banUser(@Param('id', ParseIntPipe) id: number): Promise<PublicUser> {
+    banUser(
+        @Param('id', ParseIntPipe) id: number,
+        @Request() req,
+    ): Promise<PublicUser> {
+        const actorId = req.user.userId;
+        // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+        this.logger.warn(`[BAN] 🚫 Actor ID: ${actorId} is banning User ID: ${id}`);
         return this.usersService.banUser(id);
     }
 
     @Post('/users/:id/unban')
-    @Roles(SystemRanks.ADMIN.power_level) // <-- ИЗМЕНЕНО
+    @Roles(SystemRanks.ADMIN.power_level)
     @ApiOperation({ summary: 'Unban a user' })
     @ApiResponse({ status: 200, description: 'User has been unbanned successfully.', type: User })
     @ApiResponse({ status: 403, description: 'Forbidden.' })
     @ApiResponse({ status: 404, description: 'User not found.' })
-    unbanUser(@Param('id', ParseIntPipe) id: number): Promise<PublicUser> {
+    unbanUser(
+        @Param('id', ParseIntPipe) id: number,
+        @Request() req,
+    ): Promise<PublicUser> {
+        const actorId = req.user.userId;
+        // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+        this.logger.log(`[UNBAN] ✅ Actor ID: ${actorId} is unbanning User ID: ${id}`);
         return this.usersService.unbanUser(id);
     }
 
@@ -52,10 +67,11 @@ export class AdminController {
     updateUser(
         @Param('id', ParseIntPipe) id: number,
         @Body() adminUpdateUserDto: AdminUpdateUserDto,
-        @Request() req, // Добавляем Request, чтобы получить текущего пользователя
+        @Request() req,
     ): Promise<PublicUser> {
-        const actorId = req.user.userId; // ID того, кто выполняет действие
-        // --- ИЗМЕНЕНИЕ: Передаем ID актора в сервис ---
+        const actorId = req.user.userId;
+        // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+        this.logger.log(`[UPDATE] 📝 Actor ID: ${actorId} is updating User ID: ${id}. Data: ${JSON.stringify(adminUpdateUserDto)}`);
         return this.usersService.adminUpdateUser(id, adminUpdateUserDto, actorId);
     }
 }
@@ -235,18 +251,23 @@ export class AppService {
 
 --- START FILE: backend/src/auth/auth.controller.ts ---
 
-import { Controller, Post, Body, UsePipes, ValidationPipe, Request, UseGuards, Get, HttpCode, HttpStatus } from '@nestjs/common';
+// backend/src/auth/auth.controller.ts
+
+import { Controller, Post, Body, UsePipes, ValidationPipe, Request, UseGuards, Get, HttpCode, HttpStatus, Logger } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UsersService, PublicUser } from '../users/users.service';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { ChangePasswordDto } from './dto/change-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto'; // 
 
 @ApiTags('Authentication & Profiles')
 @Controller('auth')
 export class AuthController {
+  // --- НОВОЕ: Добавляем Logger ---
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
       private authService: AuthService,
       private usersService: UsersService, 
@@ -255,29 +276,36 @@ export class AuthController {
   @Post('register')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
   async register(@Body() createUserDto: CreateUserDto) {
-    return this.authService.register(createUserDto);
+    // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+    this.logger.log(`[REGISTER] 📝 New registration attempt for email: ${createUserDto.email}`);
+    return this.authService.register(createUserDto); // 
   }
 
   @Post('login')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
   async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+    // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+    this.logger.log(`[LOGIN] ➡️ Login attempt for email: ${loginDto.email}`);
+    return this.authService.login(loginDto); // 
   }
 
   @Get('profile') 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard) // 
   @ApiBearerAuth()
   async getProfile(@Request() req): Promise<PublicUser> {
-    const userId = req.user.userId; 
-    return this.usersService.findOne(userId);
+    const userId = req.user.userId;
+    return this.usersService.findOne(userId); // 
   }
 
-    @Post('change-password')
-  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard) // 
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   async changePassword(@Request() req, @Body() changePasswordDto: ChangePasswordDto) {
-    return this.authService.changePassword(req.user.userId, changePasswordDto);
+    const userId = req.user.userId;
+    // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+    this.logger.log(`[PWD-CHANGE] 🔑 User ID: ${userId} is attempting to change password.`);
+    return this.authService.changePassword(req.user.userId, changePasswordDto); // 
   }
 }
 --- END FILE: backend/src/auth/auth.controller.ts ---
@@ -322,75 +350,94 @@ export class AuthModule {}
 
 --- START FILE: backend/src/auth/auth.service.ts ---
 
-import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
+// backend/src/auth/auth.service.ts
+
+import { Injectable, UnauthorizedException, ForbiddenException, Logger } from '@nestjs/common';
 import { UsersService, PublicUser } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { LoginDto } from './dto/login.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto'; 
 import { User } from '../users/entities/user.entity';
-// --- ДОБАВЛЕНО: Импорт DTO и bcrypt ---
 import { ChangePasswordDto } from './dto/change-password.dto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
+  // --- НОВОЕ: Добавляем Logger ---
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
   ) {}
 
   async validateUser(email: string, pass: string): Promise<PublicUser | null> {
-    const user: User | null = await this.usersService.findOneWithPasswordByEmail(email);
+    const user: User | null = await this.usersService.findOneWithPasswordByEmail(email); // 
     
     if (!user) return null;
 
-    if (user.is_banned) {
-      throw new ForbiddenException('This account has been banned.');
+    if (user.is_banned) { // 
+      // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+      this.logger.warn(`[LOGIN-BANNED] 🚫 Banned User ID: ${user.id} (${email}) attempted to log in.`);
+      throw new ForbiddenException('This account has been banned.'); // 
     }
     
-    if (await user.validatePassword(pass)) {
+    if (await user.validatePassword(pass)) { // 
       const { password_hash, validatePassword, ...publicData } = user;
-      return publicData as PublicUser; 
+      return publicData as PublicUser; // 
     }
     return null;
   }
 
   async login(loginDto: LoginDto) {
-    const userPayload: PublicUser | null = await this.validateUser(loginDto.email, loginDto.password);
+    const userPayload: PublicUser | null = await this.validateUser(loginDto.email, loginDto.password); // 
+    
     if (!userPayload) {
-      throw new UnauthorizedException('Invalid credentials');
+      // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+      this.logger.warn(`[LOGIN-FAIL] ❌ Failed login attempt for email: ${loginDto.email}. Invalid credentials.`);
+      throw new UnauthorizedException('Invalid credentials'); // 
     }
     
-    const jwtTokenPayload = { username: userPayload.username, sub: userPayload.id, rank: userPayload.rank };
+    // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+    this.logger.log(`[LOGIN-SUCCESS] ✅ User ${userPayload.username} (ID: ${userPayload.id}) logged in successfully.`);
+    
+    const jwtTokenPayload = { username: userPayload.username, sub: userPayload.id, rank: userPayload.rank }; // 
     return {
-      access_token: this.jwtService.sign(jwtTokenPayload),
+      access_token: this.jwtService.sign(jwtTokenPayload), // 
       user: userPayload 
     };
   }
 
   async register(createUserDto: CreateUserDto): Promise<PublicUser> {
-    return this.usersService.create(createUserDto);
+    const newUser = await this.usersService.create(createUserDto); // 
+    // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+    this.logger.log(`[REGISTER-SUCCESS] ✅ User ${newUser.username} successfully registered with ID: ${newUser.id}`);
+    return newUser;
   }
 
-  // --- НОВЫЙ МЕТОД: Смена пароля ---
   async changePassword(userId: number, changePasswordDto: ChangePasswordDto): Promise<void> {
-    const user = await this.usersService.findOneWithPasswordById(userId);
+    const user = await this.usersService.findOneWithPasswordById(userId); // 
     if (!user) {
-        throw new ForbiddenException('User not found.');
+        this.logger.error(`[PWD-CHANGE-FAIL] ❌ Attempted to change password for non-existent User ID: ${userId}`);
+        throw new ForbiddenException('User not found.'); // 
     }
 
     const isPasswordMatching = await bcrypt.compare(
         changePasswordDto.currentPassword,
         user.password_hash,
-    );
+    ); // 
 
     if (!isPasswordMatching) {
-        throw new UnauthorizedException('Wrong current password.');
+        // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+        this.logger.warn(`[PWD-CHANGE-FAIL] ❌ User ID: ${userId} failed to change password due to incorrect current password.`);
+        throw new UnauthorizedException('Wrong current password.'); // 
     }
 
-    const newHashedPassword = await bcrypt.hash(changePasswordDto.newPassword, 10);
+    const newHashedPassword = await bcrypt.hash(changePasswordDto.newPassword, 10); // 
     
-    await this.usersService.updatePassword(userId, newHashedPassword);
+    await this.usersService.updatePassword(userId, newHashedPassword); // 
+    // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+    this.logger.log(`[PWD-CHANGE-SUCCESS] ✅ User ID: ${userId} successfully updated their password.`);
   }
 }
 --- END FILE: backend/src/auth/auth.service.ts ---
@@ -481,12 +528,17 @@ export class OptionalJwtAuthGuard extends AuthGuard('jwt') {
 
 --- START FILE: backend/src/auth/guards/plugin-api-key.guard.ts ---
 
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+// backend/src/auth/guards/plugin-api-key.guard.ts
+
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Observable } from 'rxjs';
 
 @Injectable()
 export class PluginApiKeyGuard implements CanActivate {
+  // --- НОВОЕ: Инициализируем Logger ---
+  private readonly logger = new Logger(PluginApiKeyGuard.name);
+
   constructor(private readonly configService: ConfigService) {}
 
   canActivate(
@@ -497,8 +549,13 @@ export class PluginApiKeyGuard implements CanActivate {
     const validKey = this.configService.get<string>('PLUGIN_SECRET_KEY');
 
     if (!providedKey || providedKey !== validKey) {
+      // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+      this.logger.warn(`[DENIED] 🚫 Plugin access denied from IP: ${request.ip}. Reason: Invalid or missing API key.`);
       throw new UnauthorizedException('Invalid or missing API key for plugin');
     }
+
+    // --- ИЗМЕНЕНО: Добавлен эмодзи (на уровне verbose, чтобы не спамить в консоли) ---
+    this.logger.verbose(`[GRANTED] 🔌 Plugin access granted to IP: ${request.ip}.`);
     return true;
   }
 }
@@ -510,12 +567,15 @@ export class PluginApiKeyGuard implements CanActivate {
 
 // backend/src/auth/guards/roles.guard.ts
 
-import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, Logger } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
+  // --- НОВОЕ: Инициализируем Logger ---
+  private readonly logger = new Logger(RolesGuard.name);
+
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
@@ -527,7 +587,14 @@ export class RolesGuard implements CanActivate {
       return true;
     }
     const { user } = context.switchToHttp().getRequest();
-    return user && user.rank && user.rank.power_level >= requiredPowerLevel;
+    const hasPermission = user && user.rank && user.rank.power_level >= requiredPowerLevel;
+
+    if (!hasPermission) {
+      // --- НОВОЕ: Логируем отказ в доступе по уровню прав ---
+      this.logger.warn(`[ROLES-DENIED] 🚫 User ID: ${user?.userId} (Power: ${user?.rank?.power_level}) denied access to a resource requiring Power Level: ${requiredPowerLevel}.`);
+    }
+
+    return hasPermission;
   }
 }
 --- END FILE: backend/src/auth/guards/roles.guard.ts ---
@@ -553,7 +620,9 @@ export class WsGuard implements CanActivate {
 
 --- START FILE: backend/src/auth/jwt.strategy.ts ---
 
-import { Injectable, UnauthorizedException, InternalServerErrorException } from '@nestjs/common';
+// backend/src/auth/jwt.strategy.ts
+
+import { Injectable, UnauthorizedException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
@@ -562,6 +631,9 @@ import { Rank } from '../ranks/entities/rank.entity';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
+  // --- НОВОЕ: Инициализируем Logger ---
+  private readonly logger = new Logger(JwtStrategy.name);
+
   constructor(
     private configService: ConfigService,
     private usersService: UsersService,
@@ -578,11 +650,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
- async validate(payload: any): Promise<{ userId: number; username: string; rank: Rank | null }> {
-    const user: PublicUser | null = await this.usersService.findOne(payload.sub); 
+  async validate(payload: any): Promise<{ userId: number; username: string; rank: Rank | null }> {
+    this.logger.verbose(`[VALIDATE] 🕵️‍♂️ Validating JWT for user sub: ${payload.sub}`);
+    const user: PublicUser | null = await this.usersService.findOne(payload.sub);
+    
     if (!user) {
+        // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+        this.logger.warn(`[VALIDATE-FAIL] ❌ JWT validation failed for user sub: ${payload.sub}. User not found in database.`);
         throw new UnauthorizedException('User not found or token invalid');
     }
+    
+    // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+    this.logger.verbose(`[VALIDATE-SUCCESS] ✅ JWT validation successful for User ID: ${user.id} (${user.username}).`);
     return { userId: user.id, username: user.username, rank: user.rank };
   }
 }
@@ -667,31 +746,53 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (apiKey && apiKey === this.pluginSecretKey) {
       client['isPlugin'] = true;
       client.join('minecraft-plugins');
+      this.logger.log(`[CONNECT-PLUGIN] 🔌 Minecraft Plugin connected. Socket ID: ${client.id}`);
       return;
     }
 
     const token = client.handshake.auth.token;
-    if (!token) return client.disconnect();
+    if (!token) {
+        this.logger.warn(`[CONNECT-FAIL] 🔴 Client ${client.id} disconnected. Reason: No auth token provided.`);
+        return client.disconnect();
+    }
     try {
       const payload = this.jwtService.verify(token);
       const user = await this.usersService.findUserEntityById(payload.sub);
-      if (!user || user.is_banned) return client.disconnect();
+      
+      if (!user) {
+          this.logger.warn(`[CONNECT-FAIL] 🔴 Client ${client.id} disconnected. Reason: User not found for token sub ${payload.sub}.`);
+          return client.disconnect();
+      }
+      if (user.is_banned) {
+          this.logger.warn(`[CONNECT-FAIL] 🚫 Banned User ID: ${user.id} (${user.username}) attempted to connect. Disconnecting.`);
+          return client.disconnect();
+      }
 
       client['user'] = user;
       client.join(`user-${user.id}`);
       this.onlineUsers.set(user.id, client.id);
+      this.logger.log(`[CONNECT-USER] 🟢 User connected: ${user.username} (ID: ${user.id}). Socket ID: ${client.id}`);
+
     } catch (e) {
+      this.logger.warn(`[CONNECT-FAIL] 🔴 Client ${client.id} disconnected. Reason: Invalid auth token. Error: ${e.message}`);
       return client.disconnect();
     }
   }
 
   handleDisconnect(client: Socket) {
+    if (client['isPlugin']) {
+        this.logger.log(`[DISCONNECT-PLUGIN] 🔌 Minecraft Plugin disconnected. Socket ID: ${client.id}`);
+        return;
+    }
     const user: User = client['user'];
     if (user) {
       if (this.onlineUsers.get(user.id) === client.id) {
         this.onlineUsers.delete(user.id);
       }
       this.currentlyViewing.delete(user.id);
+      this.logger.log(`[DISCONNECT-USER] 🔴 User disconnected: ${user.username} (ID: ${user.id}). Socket ID: ${client.id}`);
+    } else {
+        this.logger.verbose(`[DISCONNECT] ❓ An unknown client disconnected. Socket ID: ${client.id}`);
     }
   }
 
@@ -705,36 +806,37 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!sender) return;
 
     const recipient = await this.usersService.findUserEntityById(data.recipientId);
-    if (!recipient) return;
-
+    if (!recipient) {
+      this.logger.warn(`[MSG-FAIL] ❌ User ID ${sender.id} tried to message non-existent User ID ${data.recipientId}`);
+      return;
+    }
+    
+    this.logger.verbose(`[MSG-WEB] 💬 Message attempt from web: User ID ${sender.id} -> User ID ${recipient.id}`);
     const areFriends = await this.friendshipsService.areTheyFriends(sender.id, recipient.id);
     if (!areFriends) {
+      this.logger.warn(`[MSG-DENIED] 🚫 Message denied between non-friends: ${sender.id} and ${recipient.id}.`);
       return;
     }
 
     const savedMessage = await this.messagesService.createMessage(sender, recipient, data.content, data.parentMessageId);
     if (!savedMessage) return;
 
-    // --- НАЧАЛО: ВОЗВРАЩАЕМ ЛОГИКУ УВЕДОМЛЕНИЙ ---
     const recipientIsViewing = this.currentlyViewing.get(recipient.id) === sender.id;
-
     if (recipientIsViewing) {
+        this.logger.verbose(`Recipient ${recipient.id} is viewing chat with ${sender.id}, skipping notification.`);
     } else if (sender.id !== recipient.id) {
-      this.eventEmitter.emit('message.sent', { sender, recipient });
+        this.eventEmitter.emit('message.sent', { sender, recipient });
     }
-    // --- КОНЕЦ ЛОГИКИ УВЕДОМЛЕНИЙ ---
 
-    // Отправляем на сайт
     this.server.to(`user-${recipient.id}`).emit('newMessage', savedMessage);
     if (sender.id !== recipient.id) {
       this.server.to(`user-${sender.id}`).emit('newMessage', savedMessage);
     }
 
-    // Отправляем в игру
     if (recipient.is_minecraft_online && recipient.minecraft_uuid) {
+      this.logger.verbose(`[MSG-FORWARD-GAME] 🎮 Forwarding message from web to in-game player ${recipient.minecraft_username}`);
       this.server.to('minecraft-plugins').emit('webPrivateMessage', {
         recipientUuid: recipient.minecraft_uuid,
-        // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
         senderUsername: sender.minecraft_username || sender.username,
         content: data.content,
       });
@@ -747,44 +849,36 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket
   ): Promise<void> {
     if (!client['isPlugin']) return;
-
-
+    this.logger.verbose(`[MSG-GAME] 🎮 Received in-game message: ${data.senderUuid} -> ${data.recipientUsername}`);
+    
     const sender = await this.usersService.findUserByMinecraftUuid(data.senderUuid);
     const recipient = await this.usersService.findOneByMinecraftUsername(data.recipientUsername);
 
     if (!sender || !recipient) {
+      this.logger.warn(`[MSG-GAME-FAIL] ❌ Could not deliver message from MC UUID ${data.senderUuid}. Sender or recipient not found.`);
       return;
     }
 
     const savedMessage = await this.messagesService.createMessage(sender, recipient, data.content);
-
     if (savedMessage) {
-      // --- НАЧАЛО: ВОЗВРАЩАЕМ ЛОГИКУ УВЕДОМЛЕНИЙ ---
       const recipientIsViewing = this.currentlyViewing.get(recipient.id) === sender.id;
-
-      if (recipientIsViewing) {
-      } else if (sender.id !== recipient.id) {
+      if (!recipientIsViewing && sender.id !== recipient.id) {
         this.eventEmitter.emit('message.sent', { sender, recipient });
       }
-      // --- КОНЕЦ ЛОГИКИ УВЕДОМЛЕНИЙ ---
 
-      // 1. Отправляем сообщение на сайт обоим пользователям
       this.server.to(`user-${sender.id}`).emit('newMessage', savedMessage);
       this.server.to(`user-${recipient.id}`).emit('newMessage', savedMessage);
 
-      // 2. Проверяем, онлайн ли получатель в игре, чтобы переслать ему сообщение
       if (recipient.is_minecraft_online && recipient.minecraft_uuid) {
+        this.logger.verbose(`[MSG-FORWARD-GAME] 🎮 Forwarding message from ${sender.username} back to in-game player ${recipient.minecraft_username}`);
         this.server.to('minecraft-plugins').emit('webPrivateMessage', {
           recipientUuid: recipient.minecraft_uuid,
-          // --- И ИЗМЕНЕНИЕ ЗДЕСЬ ---
           senderUsername: sender.minecraft_username || sender.username,
           content: data.content,
         });
       }
     }
   }
-
-  // --- Остальные методы (edit, delete, link, status update и т.д.) остаются без изменений ---
 
   @UseGuards(WsGuard)
   @SubscribeMessage('editMessage')
@@ -793,11 +887,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
     const sender: User = client['user'];
+    this.logger.verbose(`[MSG-EDIT] 📝 User ID: ${sender.id} is editing message ID: ${data.messageId}`);
     try {
       const updatedMessage = await this.messagesService.updateMessage(sender.id, data.messageId, data.content);
       this.server.to(`user-${updatedMessage.sender_id}`).emit('messageEdited', updatedMessage);
       this.server.to(`user-${updatedMessage.receiver_id}`).emit('messageEdited', updatedMessage);
     } catch (error) {
+      this.logger.error(`[MSG-EDIT-FAIL] ❌ User ID: ${sender.id} failed to edit message ID: ${data.messageId}`, error.stack);
       client.emit('error', { message: 'Failed to edit message.' });
     }
   }
@@ -809,12 +905,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
     const sender: User = client['user'];
+    this.logger.log(`[MSG-DELETE] 🗑️ User ID: ${sender.id} is deleting message ID: ${data.messageId}`);
     try {
       const deletedMessage = await this.messagesService.deleteMessage(sender.id, data.messageId);
       const payload = { messageId: deletedMessage.id };
       this.server.to(`user-${deletedMessage.sender_id}`).emit('messageDeleted', payload);
       this.server.to(`user-${deletedMessage.receiver_id}`).emit('messageDeleted', payload);
     } catch (error) {
+      this.logger.error(`[MSG-DELETE-FAIL] ❌ User ID: ${sender.id} failed to delete message ID: ${data.messageId}`, error.stack);
       client.emit('error', { message: 'Failed to delete message.' });
     }
   }
@@ -825,6 +923,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const currentUser: User = client['user'];
     if (currentUser && data.otherUserId) {
       this.currentlyViewing.set(currentUser.id, data.otherUserId);
+      this.logger.verbose(`[VIEW-START] 👀 User ID: ${currentUser.id} started viewing chat with User ID: ${data.otherUserId}`);
     }
   }
 
@@ -833,6 +932,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleStopViewingChat(@ConnectedSocket() client: Socket): void {
     const currentUser: User = client['user'];
     if (currentUser && this.currentlyViewing.has(currentUser.id)) {
+      this.logger.verbose(`[VIEW-STOP] 🙈 User ID: ${currentUser.id} stopped viewing a chat.`);
       this.currentlyViewing.delete(currentUser.id);
     }
   }
@@ -842,16 +942,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { minecraftUuid: string; isOnline: boolean },
     @ConnectedSocket() client: Socket
   ): Promise<void> {
-    if (!client['isPlugin']) {
-      return;
-    }
-    
-    // --- УБЕДИСЬ, ЧТО ЭТА СТРОКА ЕСТЬ И ОНА НЕ ЗАКОММЕНТИРОВАНА ---
-    // Эта строка сохраняет статус в базу данных надолго
+    if (!client['isPlugin']) return;
+    this.logger.log(`[MC-STATUS] 🚦 Player status update: UUID ${data.minecraftUuid} is now ${data.isOnline ? 'ONLINE' : 'OFFLINE'}`);
     await this.usersService.updateOnlineStatus(data.minecraftUuid, data.isOnline);
-    // -------------------------------------------------------------
-
-    // Эта строка отвечает за мгновенное обновление на фронтенде
     this.server.emit('playerStatusUpdate', {
       uuid: data.minecraftUuid,
       isOnline: data.isOnline,
@@ -866,18 +959,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         data.minecraftUuid,
         data.minecraftUsername,
       );
-      client.emit('linkStatus', {
-        success: true,
-        minecraftUuid: linkedUser.minecraft_uuid,
-        websiteUsername: linkedUser.username
-      });
+      this.logger.log(`[LINK-SUCCESS] ✅ User ${linkedUser.username} (ID: ${linkedUser.id}) linked to MC Account: ${linkedUser.minecraft_username} (UUID: ${data.minecraftUuid})`);
+      client.emit('linkStatus', { success: true, minecraftUuid: linkedUser.minecraft_uuid, websiteUsername: linkedUser.username });
       this.server.to(`user-${linkedUser.id}`).emit('linkStatus', { success: true, minecraftUsername: linkedUser.minecraft_username });
     } catch (error) {
-      client.emit('linkStatus', {
-        success: false,
-        minecraftUuid: data.minecraftUuid,
-        error: error.message
-      });
+      this.logger.warn(`[LINK-FAIL] ❌ Failed link attempt for MC UUID: ${data.minecraftUuid} with code: ${data.code}. Reason: ${error.message}`);
+      client.emit('linkStatus', { success: false, minecraftUuid: data.minecraftUuid, error: error.message });
     }
   }
 
@@ -885,8 +972,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleNotificationCreated(payload: Notification) {
     if (payload && payload.user && payload.user.id) {
       const room = `user-${payload.user.id}`;
+      this.logger.verbose(`[NOTIFY-PUSH] ✨ Pushing notification (Type: '${payload.type}') to User ID: ${payload.user.id}`);
       this.server.to(room).emit('newNotification', payload);
     } else {
+        this.logger.warn(`[NOTIFY-FAIL] ⚠️ Received malformed notification event payload.`);
     }
   }
 
@@ -895,9 +984,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { minecraftUuid: string; rankName: string },
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    if (!client['isPlugin']) {
-      return;
-    }
+    if (!client['isPlugin']) return;
+    this.logger.log(`[RANK-SYNC] 🔄 Received rank sync from plugin. UUID: ${data.minecraftUuid}, Rank: ${data.rankName}`);
     await this.usersService.syncRankFromPlugin(data.minecraftUuid, data.rankName);
   }
 
@@ -907,17 +995,18 @@ async handleFriendRequestIngame(payload: { requester: User, receiver: User, requ
     const freshReceiver = await this.usersService.findById(receiver.id);
 
     if (!freshReceiver) {
-        console.error(`[DEBUG] Friend Request FATAL: User with ID ${receiver.id} NOT FOUND.`);
+        this.logger.error(`[FRIEND-REQ-FATAL] 🔥 User with ID ${receiver.id} NOT FOUND in friendship.requested.ingame event.`);
         return;
     }
     if (freshReceiver && freshReceiver.is_minecraft_online && freshReceiver.minecraft_uuid) {
+        this.logger.log(`[FRIEND-REQ-GAME] 💌 Pushing friend request from ${requester.username} to in-game player ${freshReceiver.username}`);
         this.server.to('minecraft-plugins').emit('incomingFriendRequest', {
             requesterName: requester.username,
             receiverUuid: freshReceiver.minecraft_uuid,
             requestId: requestId,
         });
     } else {
-      
+      this.logger.verbose(`[FRIEND-REQ-GAME] ➡️ Receiver ${receiver.username} is offline. Skipping in-game notification.`);
     }
 }
 }
@@ -967,6 +1056,8 @@ export const recentMessageSignatures = new Set<string>();
 
 --- START FILE: backend/src/comments/comments.controller.ts ---
 
+// backend/src/comments/comments.controller.ts
+
 import {
   Controller,
   Get,
@@ -978,6 +1069,7 @@ import {
   Request,
   UseGuards,
   ParseIntPipe,
+  Logger,
 } from '@nestjs/common';
 import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
@@ -989,28 +1081,28 @@ import { Comment } from './entities/comment.entity';
 @ApiTags('Comments')
 @Controller()
 export class CommentsController {
+  private readonly logger = new Logger(CommentsController.name);
+
   constructor(private readonly commentsService: CommentsService) {}
 
   @Post('posts/:postId/comments')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add a comment to a post' })
-  @ApiResponse({ status: 201, description: 'The comment has been successfully created.', type: Comment })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 404, description: 'Post not found.' })
   create(
     @Param('postId', ParseIntPipe) postId: number,
     @Body() createCommentDto: CreateCommentDto,
     @Request() req,
   ) {
     const authorId = req.user.userId;
+    this.logger.log(`[CREATE] 💬 User ID: ${authorId} is creating a comment on Post ID: ${postId}`);
     return this.commentsService.create(createCommentDto, authorId, postId);
   }
 
   @Get('posts/:postId/comments')
   @ApiOperation({ summary: 'Get all comments for a post' })
-  @ApiResponse({ status: 200, description: 'Return all comments for the post.', type: [Comment] })
   findAllForPost(@Param('postId', ParseIntPipe) postId: number) {
+    this.logger.verbose(`[GET-ALL] 🔎 Fetching all comments for Post ID: ${postId}`);
     return this.commentsService.findAllForPost(postId);
   }
 
@@ -1018,16 +1110,13 @@ export class CommentsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a comment' })
-  @ApiResponse({ status: 200, description: 'The comment has been successfully updated.', type: Comment })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
-  @ApiResponse({ status: 404, description: 'Comment not found.' })
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateCommentDto: UpdateCommentDto,
     @Request() req,
   ) {
     const userId = req.user.userId;
+    this.logger.log(`[UPDATE] 📝 User ID: ${userId} is attempting to update Comment ID: ${id}`);
     return this.commentsService.update(id, updateCommentDto, userId);
   }
 
@@ -1035,12 +1124,9 @@ export class CommentsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a comment' })
-  @ApiResponse({ status: 204, description: 'The comment has been successfully deleted.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
-  @ApiResponse({ status: 404, description: 'Comment not found.' })
   remove(@Param('id', ParseIntPipe) id: number, @Request() req) {
     const userId = req.user.userId;
+    this.logger.warn(`[DELETE] 🗑️ User ID: ${userId} is attempting to delete Comment ID: ${id}`);
     return this.commentsService.remove(id, userId);
   }
 }
@@ -1070,7 +1156,9 @@ export class CommentsModule {}
 
 --- START FILE: backend/src/comments/comments.service.ts ---
 
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+// backend/src/comments/comments.service.ts
+
+import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Comment } from './entities/comment.entity';
@@ -1082,6 +1170,8 @@ import { SystemRanks } from '../ranks/ranks.service';
 
 @Injectable()
 export class CommentsService {
+  private readonly logger = new Logger(CommentsService.name);
+
   constructor(
     @InjectRepository(Comment)
     private commentsRepository: Repository<Comment>,
@@ -1094,21 +1184,20 @@ export class CommentsService {
   async create(createCommentDto: CreateCommentDto, authorId: number, postId: number): Promise<Comment> {
     const author = await this.usersRepository.findOneBy({ id: authorId });
     if (!author) {
+      this.logger.error(`[CREATE-FAIL] ❌ User with ID: ${authorId} not found. Cannot create comment.`);
       throw new ForbiddenException('User not found or not authorized.');
     }
 
     const post = await this.postsRepository.findOneBy({ id: postId });
     if (!post) {
+      this.logger.warn(`[CREATE-FAIL] ⚠️ User ID: ${authorId} failed to comment. Reason: Post ID ${postId} not found.`);
       throw new NotFoundException(`Post with ID ${postId} not found.`);
     }
 
-    const comment = this.commentsRepository.create({
-      ...createCommentDto,
-      author: author,
-      post: post,
-    });
-
-    return this.commentsRepository.save(comment);
+    const comment = this.commentsRepository.create({ ...createCommentDto, author, post });
+    const savedComment = await this.commentsRepository.save(comment);
+    this.logger.log(`[CREATE-SUCCESS] ✅ User ID: ${authorId} created Comment ID: ${savedComment.id} on Post ID: ${postId}`);
+    return savedComment;
   }
 
   async findAllForPost(postId: number): Promise<Comment[]> {
@@ -1122,54 +1211,62 @@ export class CommentsService {
   async findOne(id: number): Promise<Comment> {
     const comment = await this.commentsRepository.findOneBy({ id });
     if (!comment) {
+      this.logger.warn(`[GET-FAIL] ⚠️ Comment with ID ${id} not found.`);
       throw new NotFoundException(`Comment with ID ${id} not found.`);
     }
     return comment;
   }
 
   async update(id: number, updateCommentDto: UpdateCommentDto, userId: number): Promise<Comment> {
-    const comment = await this.commentsRepository.findOne({ where: { id }, relations: ['author'] });
+    const comment = await this.commentsRepository.findOne({ where: { id }, relations: ['author', 'author.rank'] });
     if (!comment) {
+      this.logger.warn(`[UPDATE-FAIL] ⚠️ Attempt to update non-existent Comment ID: ${id} by User ID: ${userId}.`);
       throw new NotFoundException(`Comment with ID ${id} not found.`);
     }
     
     const user = await this.usersRepository.findOne({ where: { id: userId }, relations: ['rank'] });
     if (!user) {
+      this.logger.error(`[UPDATE-FAIL] ❌ User performing update action not found. User ID: ${userId}`);
       throw new ForbiddenException('User performing the action not found.');
     }
     
     const isAuthor = comment.author_id === userId;
-    // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Проверяем по power_level ---
     const canManage = user.rank && user.rank.power_level >= SystemRanks.MODERATOR.power_level;
 
     if (!isAuthor && !canManage) {
+      this.logger.warn(`[UPDATE-FORBIDDEN] 🚫 User ID: ${userId} (Rank: ${user.rank?.name}) failed to update Comment ID: ${id}. Reason: Not author or moderator.`);
       throw new ForbiddenException('You are not authorized to update this comment.');
     }
 
     Object.assign(comment, updateCommentDto);
-    return this.commentsRepository.save(comment);
+    const updatedComment = await this.commentsRepository.save(comment);
+    this.logger.log(`[UPDATE-SUCCESS] ✅ Comment ID: ${id} updated by User ID: ${userId}.`);
+    return updatedComment;
   }
 
   async remove(id: number, userId: number): Promise<void> {
-    const comment = await this.commentsRepository.findOne({ where: { id }, relations: ['author'] });
+    const comment = await this.commentsRepository.findOne({ where: { id }, relations: ['author', 'author.rank'] });
     if (!comment) {
+      this.logger.warn(`[DELETE-FAIL] ⚠️ Attempt to delete non-existent Comment ID: ${id} by User ID: ${userId}.`);
       throw new NotFoundException(`Comment with ID ${id} not found.`);
     }
 
     const user = await this.usersRepository.findOne({ where: { id: userId }, relations: ['rank'] });
     if (!user) {
+      this.logger.error(`[DELETE-FAIL] ❌ User performing delete action not found. User ID: ${userId}`);
       throw new ForbiddenException('User performing the action not found.');
     }
 
     const isAuthor = comment.author_id === userId;
-    // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Проверяем по power_level ---
     const canManage = user.rank && user.rank.power_level >= SystemRanks.MODERATOR.power_level;
 
     if (!isAuthor && !canManage) {
+      this.logger.warn(`[DELETE-FORBIDDEN] 🚫 User ID: ${userId} (Rank: ${user.rank?.name}) failed to delete Comment ID: ${id}. Reason: Not author or moderator.`);
       throw new ForbiddenException('You are not authorized to delete this comment.');
     }
 
     await this.commentsRepository.remove(comment);
+    this.logger.warn(`[DELETE-SUCCESS] 🗑️ Comment ID: ${id} was deleted by User ID: ${userId}.`);
   }
 }
 --- END FILE: backend/src/comments/comments.service.ts ---
@@ -1465,7 +1562,9 @@ export class Friendship {
 
 --- START FILE: backend/src/friendships/friendships.controller.ts ---
 
-import { Controller, Get, Post, Body, Param, Delete, UseGuards, Request, ParseIntPipe, Patch } from '@nestjs/common';
+// backend/src/friendships/friendships.controller.ts
+
+import { Controller, Get, Post, Body, Param, Delete, UseGuards, Request, ParseIntPipe, Patch, Logger } from '@nestjs/common';
 import { FriendshipsService } from './friendships.service';
 import { CreateFriendRequestDto } from './dto/create-friend-request.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -1476,64 +1575,76 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class FriendshipsController {
+  private readonly logger = new Logger(FriendshipsController.name);
+
   constructor(private readonly friendshipsService: FriendshipsService) { }
 
   @Post('requests')
   @ApiOperation({ summary: 'Send a friend request' })
   sendRequest(@Body() createDto: CreateFriendRequestDto, @Request() req) {
-    return this.friendshipsService.sendRequest(req.user.userId, createDto.receiverId);
+    const actorId = req.user.userId;
+    this.logger.log(`[REQ-SEND] 💌 User ID: ${actorId} is sending a friend request to Receiver ID: ${createDto.receiverId}`);
+    return this.friendshipsService.sendRequest(actorId, createDto.receiverId);
   }
 
   @Get('requests/pending')
   @ApiOperation({ summary: 'Get my pending incoming friend requests' })
   getPendingRequests(@Request() req) {
+    this.logger.verbose(`[GET] 🔎 User ID: ${req.user.userId} is fetching pending requests.`);
     return this.friendshipsService.getPendingRequests(req.user.userId);
   }
 
   @Patch('requests/:id/accept')
   @ApiOperation({ summary: 'Accept a friend request' })
   acceptRequest(@Param('id', ParseIntPipe) id: number, @Request() req) {
-    return this.friendshipsService.acceptRequest(id, req.user.userId);
+    const actorId = req.user.userId;
+    this.logger.log(`[REQ-ACCEPT] ✅ User ID: ${actorId} is accepting friend request ID: ${id}`);
+    return this.friendshipsService.acceptRequest(id, actorId);
   }
 
   @Delete('requests/:id')
   @ApiOperation({ summary: 'Reject an incoming request or cancel an outgoing request' })
   rejectOrCancelRequest(@Param('id', ParseIntPipe) id: number, @Request() req) {
-    return this.friendshipsService.rejectOrCancelRequest(id, req.user.userId);
+    const actorId = req.user.userId;
+    this.logger.warn(`[REQ-REJECT/CANCEL] ❌ User ID: ${actorId} is rejecting/canceling request ID: ${id}`);
+    return this.friendshipsService.rejectOrCancelRequest(id, actorId);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get my friends list' })
   listFriends(@Request() req) {
+    this.logger.verbose(`[GET] 🔎 User ID: ${req.user.userId} is fetching their friends list.`);
     return this.friendshipsService.listFriends(req.user.userId);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Remove a friend by friendship ID' })
   removeFriend(@Param('id', ParseIntPipe) id: number, @Request() req) {
-    return this.friendshipsService.removeFriend(id, req.user.userId);
+    const actorId = req.user.userId;
+    this.logger.warn(`[REMOVE] 🗑️ User ID: ${actorId} is removing friendship ID: ${id}`);
+    return this.friendshipsService.removeFriend(id, actorId);
   }
 
-  // НОВЫЙ ЭНДПОИНТ
- @Get('status/:identifier')
+  @Get('status/:identifier')
   @ApiOperation({ summary: 'Check friendship status with another user' })
-  // Убираем ParseIntPipe, чтобы принимать и строки (slug)
   getFriendshipStatus(@Param('identifier') identifier: string, @Request() req) {
     return this.friendshipsService.getFriendshipStatus(req.user.userId, identifier);
   }
 
-  // НОВЫЙ ЭНДПОИНТ
   @Post('block/:userToBlockId')
   @ApiOperation({ summary: 'Block a user' })
   blockUser(@Param('userToBlockId', ParseIntPipe) userToBlockId: number, @Request() req) {
-    return this.friendshipsService.blockUser(req.user.userId, userToBlockId);
+    const actorId = req.user.userId;
+    this.logger.warn(`[BLOCK] 🚫 User ID: ${actorId} is blocking User ID: ${userToBlockId}`);
+    return this.friendshipsService.blockUser(actorId, userToBlockId);
   }
 
-  // НОВЫЙ ЭНДПОИНТ
   @Delete('block/:userToUnblockId')
   @ApiOperation({ summary: 'Unblock a user' })
   unblockUser(@Param('userToUnblockId', ParseIntPipe) userToUnblockId: number, @Request() req) {
-    return this.friendshipsService.unblockUser(req.user.userId, userToUnblockId);
+    const actorId = req.user.userId;
+    this.logger.log(`[UNBLOCK] ✅ User ID: ${actorId} is unblocking User ID: ${userToUnblockId}`);
+    return this.friendshipsService.unblockUser(actorId, userToUnblockId);
   }
 
   @Get('requests/outgoing')
@@ -1542,7 +1653,6 @@ export class FriendshipsController {
     return this.friendshipsService.getOutgoingRequests(req.user.userId);
   }
 
-  // НОВЫЙ ЭНДПОИНТ
   @Get('blocked')
   @ApiOperation({ summary: 'Get my blocked users list' })
   listBlockedUsers(@Request() req) {
@@ -1577,7 +1687,9 @@ export class FriendshipsModule {}
 
 --- START FILE: backend/src/friendships/friendships.plugin.controller.ts ---
 
-import { Controller, Post, Body, UseGuards, Delete, Get, Param, ValidationPipe } from '@nestjs/common';
+// backend/src/friendships/friendships.plugin.controller.ts
+
+import { Controller, Post, Body, UseGuards, Delete, Get, Param, ValidationPipe, Logger } from '@nestjs/common';
 import { ApiTags, ApiHeader } from '@nestjs/swagger';
 import { FriendshipsService } from './friendships.service';
 import { PluginApiKeyGuard } from '../auth/guards/plugin-api-key.guard';
@@ -1594,31 +1706,37 @@ import { FromPluginRespondRequestDto } from './dto/from-plugin-respond-request.d
   required: true,
 })
 export class FriendshipsPluginController {
+  private readonly logger = new Logger(FriendshipsPluginController.name);
+
   constructor(private readonly friendshipsService: FriendshipsService) {}
 
   @Post('add')
   addFriendFromPlugin(@Body(new ValidationPipe()) dto: FromPluginAddFriendDto) {
+    this.logger.log(`[PLUGIN-REQ-SEND] 🔌 Plugin initiated friend request from UUID: ${dto.requesterUuid} to Receiver Name: ${dto.receiverName}`);
     return this.friendshipsService.sendRequestFromPlugin(dto.requesterUuid, dto.receiverName);
   }
 
   @Delete('remove')
   removeFriendFromPlugin(@Body(new ValidationPipe()) dto: FromPluginRemoveFriendDto) {
+    this.logger.warn(`[PLUGIN-REMOVE] 🔌 Plugin initiated friend removal by UUID: ${dto.removerUuid} of friend: ${dto.friendToRemoveName}`);
     return this.friendshipsService.removeFriendFromPlugin(dto.removerUuid, dto.friendToRemoveName);
   }
 
   @Get('list/:uuid')
   listFriendsForPlugin(@Param('uuid') uuid: string): Promise<string[]> {
+    this.logger.verbose(`[PLUGIN-LIST] 🔌 Plugin requested friend list for UUID: ${uuid}`);
     return this.friendshipsService.listFriendsForPlugin(uuid);
   }
 
   @Post('accept')
   acceptRequestFromPlugin(@Body(new ValidationPipe()) dto: FromPluginRespondRequestDto) {
+    this.logger.log(`[PLUGIN-REQ-ACCEPT] 🔌 Plugin initiated request acceptance by UUID: ${dto.responderUuid} for request ID: ${dto.requestId}`);
     return this.friendshipsService.acceptRequestFromPlugin(dto.responderUuid, dto.requestId);
   }
 
-  // --- НОВЫЙ МЕТОД ДЛЯ ОТКЛОНЕНИЯ ЗАПРОСА ---
   @Post('deny')
   denyRequestFromPlugin(@Body(new ValidationPipe()) dto: FromPluginRespondRequestDto) {
+    this.logger.warn(`[PLUGIN-REQ-DENY] 🔌 Plugin initiated request denial by UUID: ${dto.responderUuid} for request ID: ${dto.requestId}`);
     return this.friendshipsService.rejectRequestFromPlugin(dto.responderUuid, dto.requestId);
   }
 }
@@ -1628,16 +1746,17 @@ export class FriendshipsPluginController {
 
 --- START FILE: backend/src/friendships/friendships.service.ts ---
 
-import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+// backend/src/friendships/friendships.service.ts
+
+import { Injectable, NotFoundException, ForbiddenException, ConflictException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, Not } from 'typeorm';
 import { Friendship } from './entities/friendship.entity';
 import { User } from '../users/entities/user.entity';
 import { FriendStatuses } from '../common/enums/friend-statuses.enum';
 import { PublicUser, UsersService } from '../users/users.service';
-import { EventEmitter2 } from '@nestjs/event-emitter'; // <-- Импортируем EventEmitter
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
-// Определим новый тип для ответа, который включает ID дружбы
 export type FriendWithFriendshipId = {
   friendshipId: number;
   user: PublicUser;
@@ -1645,28 +1764,30 @@ export type FriendWithFriendshipId = {
 
 @Injectable()
 export class FriendshipsService {
+  private readonly logger = new Logger(FriendshipsService.name);
+
   constructor(
     @InjectRepository(Friendship)
     private friendshipsRepository: Repository<Friendship>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
-    private eventEmitter: EventEmitter2, // <-- Внедряем EventEmitter
+    private eventEmitter: EventEmitter2,
     private readonly usersService: UsersService,
-
   ) { }
 
   async sendRequest(requesterId: number, receiverId: number): Promise<Friendship> {
     if (requesterId === receiverId) {
+      this.logger.warn(`[REQ-SEND-FAIL] ⚠️ User ID: ${requesterId} tried to send a friend request to themselves.`);
       throw new ForbiddenException('You cannot send a friend request to yourself.');
     }
 
-    // Нам нужна полная сущность отправителя для события
     const [requester, receiver] = await Promise.all([
       this.usersRepository.findOneBy({ id: requesterId }),
       this.usersRepository.findOneBy({ id: receiverId }),
     ]);
 
     if (!receiver || !requester) {
+      this.logger.error(`[REQ-SEND-FAIL] ❌ User not found. Requester: ${requesterId}, Receiver: ${receiverId}`);
       throw new NotFoundException(`User not found.`);
     }
 
@@ -1678,27 +1799,21 @@ export class FriendshipsService {
     });
 
     if (existingFriendship) {
+      this.logger.warn(`[REQ-SEND-FAIL] ⚠️ Conflict: Friendship/request already exists between User ID: ${requesterId} and User ID: ${receiverId}.`);
       throw new ConflictException('A friendship request already exists or you are already friends.');
     }
 
-    const newRequest = this.friendshipsRepository.create({
-      requester_id: requesterId,
-      receiver_id: receiverId,
-      status: FriendStatuses.PENDING,
-    });
-
+    const newRequest = this.friendshipsRepository.create({ requester_id: requesterId, receiver_id: receiverId, status: FriendStatuses.PENDING });
     const savedRequest = await this.friendshipsRepository.save(newRequest);
 
-    // "Кричим" о событии, что был отправлен новый запрос
- this.eventEmitter.emit(
-      'friendship.requested.ingame',
-      { requester: requester, receiver: receiver, requestId: savedRequest.id }
-    );
-
+    this.logger.log(`[REQ-SEND-SUCCESS] ✅ User ID: ${requesterId} sent a friend request to User ID: ${receiverId}. Friendship ID: ${savedRequest.id}`);
+    this.eventEmitter.emit('friendship.requested.ingame', { requester: requester, receiver: receiver, requestId: savedRequest.id } );
+    
     return savedRequest;
   }
 
   async getPendingRequests(userId: number): Promise<Friendship[]> {
+    this.logger.verbose(`[GET] 🔎 Fetching pending friend requests for User ID: ${userId}`);
     return this.friendshipsRepository.find({
       where: { receiver_id: userId, status: FriendStatuses.PENDING },
       relations: ['requester'],
@@ -1710,33 +1825,49 @@ export class FriendshipsService {
       where: { id: requestId, receiver_id: currentUserId, status: FriendStatuses.PENDING },
       relations: ['requester', 'receiver'],
     });
+
     if (!request) {
+      this.logger.warn(`[REQ-ACCEPT-FAIL] ⚠️ User ID: ${currentUserId} tried to accept non-existent or invalid request ID: ${requestId}.`);
       throw new NotFoundException(`Pending request with ID ${requestId} not found for you.`);
     }
 
     request.status = FriendStatuses.ACCEPTED;
-
-    this.eventEmitter.emit(
-      'friendship.accepted',
-      { requester: request.requester, receiver: request.receiver }
-    );
+    this.logger.log(`[REQ-ACCEPT-SUCCESS] ✅ User ID: ${currentUserId} accepted request ID: ${requestId} from User ID: ${request.requester_id}.`);
+    this.eventEmitter.emit('friendship.accepted', { requester: request.requester, receiver: request.receiver } );
+    
     return this.friendshipsRepository.save(request);
   }
 
-  // ... остальной код (reject, remove, list, block и т.д.) остается без изменений ...
   async rejectOrCancelRequest(requestId: number, currentUserId: number): Promise<void> {
-    const request = await this.friendshipsRepository.findOne({ where: { id: requestId, status: FriendStatuses.PENDING } });
-    if (!request) { throw new NotFoundException(`Pending request with ID ${requestId} not found.`); }
-    if (request.receiver_id !== currentUserId && request.requester_id !== currentUserId) { throw new ForbiddenException('You are not authorized to manage this request.'); }
+    const request = await this.friendshipsRepository.findOne({ where: { id: requestId }});
+    if (!request) { 
+        this.logger.warn(`[REJECT/CANCEL-FAIL] ⚠️ Request ID: ${requestId} not found for User ID: ${currentUserId}.`);
+        throw new NotFoundException(`Request with ID ${requestId} not found.`);
+    }
+    if (request.receiver_id !== currentUserId && request.requester_id !== currentUserId) { 
+        this.logger.error(`[REJECT/CANCEL-FORBIDDEN] 🚫 User ID: ${currentUserId} is not authorized to manage request ID: ${requestId}.`);
+        throw new ForbiddenException('You are not authorized to manage this request.');
+    }
     await this.friendshipsRepository.remove(request);
+    this.logger.warn(`[REJECT/CANCEL-SUCCESS] 🗑️ Request ID: ${requestId} was removed by User ID: ${currentUserId}.`);
   }
+
   async removeFriend(friendshipId: number, currentUserId: number): Promise<void> {
     const friendship = await this.friendshipsRepository.findOneBy({ id: friendshipId, status: FriendStatuses.ACCEPTED });
-    if (!friendship) { throw new NotFoundException(`Friendship with ID ${friendshipId} not found.`); }
-    if (friendship.receiver_id !== currentUserId && friendship.requester_id !== currentUserId) { throw new ForbiddenException('You are not part of this friendship.'); }
+    if (!friendship) { 
+        this.logger.warn(`[REMOVE-FAIL] ⚠️ Friendship ID ${friendshipId} not found or not in ACCEPTED state for User ID: ${currentUserId}.`);
+        throw new NotFoundException(`Friendship with ID ${friendshipId} not found.`);
+    }
+    if (friendship.receiver_id !== currentUserId && friendship.requester_id !== currentUserId) { 
+        this.logger.error(`[REMOVE-FORBIDDEN] 🚫 User ID: ${currentUserId} is not part of friendship ID: ${friendshipId}.`);
+        throw new ForbiddenException('You are not part of this friendship.');
+    }
     await this.friendshipsRepository.remove(friendship);
+    this.logger.warn(`[REMOVE-SUCCESS] 🗑️ Friendship ID: ${friendshipId} was removed by User ID: ${currentUserId}.`);
   }
+
   async listFriends(userId: number): Promise<FriendWithFriendshipId[]> {
+    this.logger.verbose(`[GET] 🔎 Fetching friends list for User ID: ${userId}`);
     const friendships = await this.friendshipsRepository.find({ where: [{ requester_id: userId, status: FriendStatuses.ACCEPTED }, { receiver_id: userId, status: FriendStatuses.ACCEPTED }], relations: ['requester', 'receiver'] });
     return friendships.map(friendship => {
       const friendUserEntity = friendship.requester_id === userId ? friendship.receiver : friendship.requester;
@@ -1744,134 +1875,141 @@ export class FriendshipsService {
       return { friendshipId: friendship.id, user: publicFriendData as PublicUser };
     });
   }
+
   async getFriendshipStatus(currentUserId: number, otherUserIdentifier: string | number) {
-    // Находим пользователя по идентификатору (ID или slug)
+    this.logger.verbose(`[CHECK] 🕵️ Checking friendship status between User ID: ${currentUserId} and Identifier: ${otherUserIdentifier}`);
     const otherUser = await this.usersService.findOne(otherUserIdentifier);
     if (!otherUser) {
+      this.logger.warn(`[STATUS-FAIL] ⚠️ Could not check status. User with identifier '${otherUserIdentifier}' not found.`);
       throw new NotFoundException(`User with identifier '${otherUserIdentifier}' not found.`);
     }
     const otherUserId = otherUser.id;
-
     if (currentUserId === otherUserId) return { status: 'self' };
-
+    
     const friendship = await this.friendshipsRepository.findOne({
       where: [
         { requester_id: currentUserId, receiver_id: otherUserId },
         { requester_id: otherUserId, receiver_id: currentUserId }
       ]
     });
-
+    
     if (!friendship) return { status: 'none' };
-
     if (friendship.status === FriendStatuses.PENDING) {
-      if (friendship.requester_id === currentUserId) {
-        return { status: 'pending_outgoing', requestId: friendship.id };
-      } else {
-        return { status: 'pending_incoming', requestId: friendship.id };
-      }
+      return friendship.requester_id === currentUserId 
+        ? { status: 'pending_outgoing', requestId: friendship.id } 
+        : { status: 'pending_incoming', requestId: friendship.id };
     }
     return { status: friendship.status, friendshipId: friendship.id };
   }
 
   async blockUser(requesterId: number, userToBlockId: number): Promise<Friendship> {
-    if (requesterId === userToBlockId) { throw new ForbiddenException('You cannot block yourself.'); }
+    if (requesterId === userToBlockId) { 
+        this.logger.warn(`[BLOCK-FAIL] ⚠️ User ID: ${requesterId} tried to block themselves.`);
+        throw new ForbiddenException('You cannot block yourself.'); 
+    }
     let friendship = await this.friendshipsRepository.findOne({ where: [{ requester_id: requesterId, receiver_id: userToBlockId }, { requester_id: userToBlockId, receiver_id: requesterId }] });
+    
     if (friendship) {
+      this.logger.log(`[BLOCK] 📝 Updating existing friendship between ${requesterId} and ${userToBlockId} to BLOCKED.`);
       friendship.requester_id = requesterId;
       friendship.receiver_id = userToBlockId;
       friendship.status = FriendStatuses.BLOCKED;
     } else {
+      this.logger.log(`[BLOCK] 📝 Creating new friendship entry to block User ID ${userToBlockId} by ${requesterId}.`);
       friendship = this.friendshipsRepository.create({ requester_id: requesterId, receiver_id: userToBlockId, status: FriendStatuses.BLOCKED });
     }
-    return this.friendshipsRepository.save(friendship);
+    const saved = await this.friendshipsRepository.save(friendship);
+    this.logger.warn(`[BLOCK-SUCCESS] 🚫 User ID: ${requesterId} blocked User ID: ${userToBlockId}. Friendship ID: ${saved.id}`);
+    return saved;
   }
+
   async unblockUser(requesterId: number, userToUnblockId: number): Promise<void> {
     const friendship = await this.friendshipsRepository.findOne({ where: { requester_id: requesterId, receiver_id: userToUnblockId, status: FriendStatuses.BLOCKED } });
-    if (!friendship) { throw new NotFoundException('You have not blocked this user.'); }
+    if (!friendship) { 
+        this.logger.warn(`[UNBLOCK-FAIL] ⚠️ User ID: ${requesterId} tried to unblock User ID: ${userToUnblockId}, but no block was found.`);
+        throw new NotFoundException('You have not blocked this user.'); 
+    }
     await this.friendshipsRepository.remove(friendship);
+    this.logger.log(`[UNBLOCK-SUCCESS] ✅ User ID: ${requesterId} unblocked User ID: ${userToUnblockId}.`);
   }
+
   async getOutgoingRequests(userId: number): Promise<Friendship[]> {
+    this.logger.verbose(`[GET] 🔎 Fetching outgoing friend requests for User ID: ${userId}`);
     return this.friendshipsRepository.find({ where: { requester_id: userId, status: FriendStatuses.PENDING }, relations: ['receiver'] });
   }
+
   async listBlockedUsers(userId: number): Promise<Friendship[]> {
+    this.logger.verbose(`[GET] 🔎 Fetching blocked users list for User ID: ${userId}`);
     return this.friendshipsRepository.find({ where: { requester_id: userId, status: FriendStatuses.BLOCKED }, relations: ['receiver'] });
   }
 
-    async areTheyFriends(userId1: number, userId2: number): Promise<boolean> {
-    if (userId1 === userId2) return true; // Разрешаем отправлять сообщения самому себе
-
+  async areTheyFriends(userId1: number, userId2: number): Promise<boolean> {
+    if (userId1 === userId2) return true;
+    this.logger.verbose(`[CHECK] 🕵️ Checking friendship status between User ID ${userId1} and ${userId2}`);
     const friendship = await this.friendshipsRepository.findOne({
       where: [
         { requester_id: userId1, receiver_id: userId2, status: FriendStatuses.ACCEPTED },
         { requester_id: userId2, receiver_id: userId1, status: FriendStatuses.ACCEPTED },
       ],
     });
-
-    return !!friendship; // Вернет true, если дружба найдена, иначе false
+    return !!friendship;
   }
 
    async sendRequestFromPlugin(requesterUuid: string, receiverName: string): Promise<Friendship> {
     const requester = await this.usersRepository.findOneBy({ minecraft_uuid: requesterUuid });
     const receiver = await this.usersRepository.findOneBy({ minecraft_username: receiverName });
-
     if (!requester || !receiver) {
+      this.logger.warn(`[PLUGIN-REQ-FAIL] ⚠️ One of the players is not linked. Requester UUID: ${requesterUuid}, Receiver Name: ${receiverName}`);
       throw new NotFoundException('One of the players is not linked to a website account.');
     }
-    // Используем уже существующий метод для отправки запроса
     return this.sendRequest(requester.id, receiver.id);
   }
 
-  // --- НОВЫЙ МЕТОД ДЛЯ ПЛАГИНА ---
   async removeFriendFromPlugin(removerUuid: string, friendToRemoveName: string): Promise<void> {
     const remover = await this.usersRepository.findOneBy({ minecraft_uuid: removerUuid });
     const friendToRemove = await this.usersRepository.findOneBy({ minecraft_username: friendToRemoveName });
-
     if (!remover || !friendToRemove) {
+      this.logger.warn(`[PLUGIN-REMOVE-FAIL] ⚠️ One of the players is not linked. Remover UUID: ${removerUuid}, Friend Name: ${friendToRemoveName}`);
       throw new NotFoundException('One of the players is not linked to a website account.');
     }
-
     const friendship = await this.friendshipsRepository.findOne({
         where: [
             { requester_id: remover.id, receiver_id: friendToRemove.id, status: FriendStatuses.ACCEPTED },
             { requester_id: friendToRemove.id, receiver_id: remover.id, status: FriendStatuses.ACCEPTED },
         ]
     });
-
     if (!friendship) {
+        this.logger.warn(`[PLUGIN-REMOVE-FAIL] ⚠️ Friendship not found between ${remover.username} and ${friendToRemove.username}.`);
         throw new NotFoundException('Friendship not found.');
     }
-
-    // Используем уже существующий метод для удаления
     return this.removeFriend(friendship.id, remover.id);
   }
 
-  // --- НОВЫЙ МЕТОД ДЛЯ ПЛАГИНА ---
   async listFriendsForPlugin(playerUuid: string): Promise<string[]> {
     const user = await this.usersRepository.findOneBy({ minecraft_uuid: playerUuid });
     if (!user) {
+      this.logger.warn(`[PLUGIN-LIST-FAIL] ⚠️ Player with UUID: ${playerUuid} is not linked to a website account.`);
       throw new NotFoundException('Player is not linked to a website account.');
     }
-
     const friendsWithData = await this.listFriends(user.id);
-    // Возвращаем только массив никнеймов, как и ожидает плагин
     return friendsWithData.map(f => f.user.minecraft_username || f.user.username);
   }
 
- async acceptRequestFromPlugin(responderUuid: string, requestId: number): Promise<Friendship> {
+  async acceptRequestFromPlugin(responderUuid: string, requestId: number): Promise<Friendship> {
     const responder = await this.usersRepository.findOneBy({ minecraft_uuid: responderUuid });
     if (!responder) {
+      this.logger.warn(`[PLUGIN-ACCEPT-FAIL] ⚠️ Responding player with UUID: ${responderUuid} is not linked.`);
       throw new NotFoundException('Responding player is not linked to a website account.');
     }
-    // Используем уже существующий метод, но с ID пользователя, найденного по UUID
     return this.acceptRequest(requestId, responder.id);
   }
 
   async rejectRequestFromPlugin(responderUuid: string, requestId: number): Promise<void> {
     const responder = await this.usersRepository.findOneBy({ minecraft_uuid: responderUuid });
     if (!responder) {
+      this.logger.warn(`[PLUGIN-DENY-FAIL] ⚠️ Responding player with UUID: ${responderUuid} is not linked.`);
       throw new NotFoundException('Responding player is not linked to a website account.');
     }
-    // Используем уже существующий метод
     return this.rejectOrCancelRequest(requestId, responder.id);
   }
 }
@@ -1924,7 +2062,7 @@ export class LinkCode {
 
 // backend/src/linking/linking.controller.ts
 
-import { Controller, Post, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, UseGuards, Request, HttpCode, HttpStatus, Logger } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { LinkingService } from './linking.service';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -1932,6 +2070,8 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 @ApiTags('Account Linking')
 @Controller('linking')
 export class LinkingController {
+  private readonly logger = new Logger(LinkingController.name);
+
   constructor(private readonly linkingService: LinkingService) {}
 
   @Post('generate-code')
@@ -1942,6 +2082,7 @@ export class LinkingController {
   @ApiResponse({ status: 200, description: 'Returns the generated code.', schema: { type: 'object', properties: { code: { type: 'string' } } }})
   async generateCode(@Request() req): Promise<{ code: string }> {
     const userId = req.user.userId;
+    this.logger.log(`[CODE-GEN] 🔑 User ID: ${userId} is generating a new link code.`);
     const code = await this.linkingService.generateCodeForUser(userId);
     return { code };
   }
@@ -1976,7 +2117,7 @@ export class LinkingModule {}
 
 // backend/src/linking/linking.service.ts
 
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
@@ -1985,6 +2126,8 @@ import { randomBytes } from 'crypto';
 
 @Injectable()
 export class LinkingService {
+  private readonly logger = new Logger(LinkingService.name);
+
   constructor(
     @InjectRepository(LinkCode)
     private linkCodeRepository: Repository<LinkCode>,
@@ -1994,36 +2137,35 @@ export class LinkingService {
 
   async generateCodeForUser(userId: number): Promise<string> {
     await this.linkCodeRepository.delete({ userId });
-
+    
     const user = await this.usersRepository.findOneBy({ id: userId });
 
-    // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: Добавляем проверку на существование пользователя ---
     if (!user) {
-      // Этот случай маловероятен, так как ID берется из токена, но проверка важна
+      this.logger.error(`[CODE-GEN-FAIL] ❌ Attempted to generate code for a non-existent User ID: ${userId}.`);
       throw new NotFoundException(`User with ID ${userId} not found.`);
     }
 
     if (user.minecraft_uuid) {
+      this.logger.warn(`[CODE-GEN-FAIL] ⚠️ User ID: ${userId} (${user.username}) attempted to generate a code but already has a linked account.`);
       throw new ConflictException('This website account is already linked to a Minecraft account.');
     }
 
     const code = randomBytes(3).toString('hex').toUpperCase();
-    const expires_at = new Date(Date.now() + 5 * 60 * 1000); // 5 минут
+    const expires_at = new Date(Date.now() + 5 * 60 * 1000);
 
-    const newLinkCode = this.linkCodeRepository.create({
-      code,
-      userId,
-      expires_at,
-    });
-
+    const newLinkCode = this.linkCodeRepository.create({ code, userId, expires_at });
+    
     await this.linkCodeRepository.save(newLinkCode);
+    this.logger.log(`[CODE-GEN-SUCCESS] ✅ Generated new link code '${code}' for User ID: ${userId}.`);
     return code;
   }
 
   async verifyCodeAndLinkAccount(code: string, minecraftUuid: string, minecraftUsername: string): Promise<User> {
+    this.logger.log(`[VERIFY-LINK] 🔗 Verifying code '${code}' for MC UUID: ${minecraftUuid} (${minecraftUsername}).`);
     const linkCode = await this.linkCodeRepository.findOne({ where: { code } });
 
     if (!linkCode || linkCode.expires_at < new Date()) {
+      this.logger.warn(`[VERIFY-FAIL] ⚠️ Invalid or expired link code '${code}' used by MC UUID: ${minecraftUuid}.`);
       throw new NotFoundException('Invalid or expired link code.');
     }
     
@@ -2033,10 +2175,13 @@ export class LinkingService {
     ]);
 
     if (existingLinkedUser) {
+        this.logger.warn(`[VERIFY-FAIL] ⚠️ Conflict. MC UUID ${minecraftUuid} is already linked to User ID: ${existingLinkedUser.id} (${existingLinkedUser.username}).`);
         throw new ConflictException('This Minecraft account is already linked to another website account.');
     }
 
     if (!userToUpdate) {
+      this.logger.error(`[VERIFY-FAIL] ❌ User account associated with code '${code}' (User ID: ${linkCode.userId}) not found.`);
+      await this.linkCodeRepository.remove(linkCode);
       throw new NotFoundException('User associated with this code not found.');
     }
 
@@ -2045,7 +2190,8 @@ export class LinkingService {
 
     const savedUser = await this.usersRepository.save(userToUpdate);
     await this.linkCodeRepository.remove(linkCode);
-
+    
+    this.logger.log(`[VERIFY-SUCCESS] ✅ Successfully linked User ID: ${savedUser.id} (${savedUser.username}) with MC UUID: ${minecraftUuid}.`);
     return savedUser;
   }
 }
@@ -2055,31 +2201,32 @@ export class LinkingService {
 
 --- START FILE: backend/src/main.ts ---
 
+// backend/src/main.ts
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common'; // <-- Добавляем Logger
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // --- НОВОЕ: Создаем экземпляр логгера для контекста Bootstrap ---
+  const logger = new Logger('Bootstrap'); 
   const configService = app.get(ConfigService);
 
   app.setGlobalPrefix('api');
   app.enableCors();
-
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
     prefix: '/uploads',
   });
-
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: true,
     transform: true,
   }));
-
   const config = new DocumentBuilder()
     .setTitle('Flamewall API')
     .setDescription('API documentation for the Flamewall Minecraft server website')
@@ -2089,17 +2236,12 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-docs', app, document);
 
-  // --- ФИНАЛЬНОЕ, ГАРАНТИРОВАННОЕ РЕШЕНИЕ ---
-  // Мы явно используем нашу переменную API_PORT.
-  // Если ее нет, по умолчанию ставим 3000.
   const port = configService.get<number>('API_PORT', 3000);
-
-  
-  // Слушаем все адреса
   await app.listen(port, '0.0.0.0');
 
-  console.log(`Application is running on port: ${port}`);
-  console.log(`Swagger documentation is available at: /api-docs`);
+  // --- НОВОЕ: Используем Logger вместо console.log ---
+  logger.log(`🚀 Application is running on port: ${port}`);
+  logger.log(`📚 Swagger documentation is available at: /api-docs`);
 }
 bootstrap();
 --- END FILE: backend/src/main.ts ---
@@ -2235,7 +2377,9 @@ export class Message {
 
 --- START FILE: backend/src/messages/messages.controller.ts ---
 
-import { Controller, Get, Param, ParseIntPipe, Request, UseGuards } from '@nestjs/common';
+// backend/src/messages/messages.controller.ts
+
+import { Controller, Get, Param, ParseIntPipe, Request, UseGuards, Logger } from '@nestjs/common';
 import { MessagesService } from './messages.service';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -2245,6 +2389,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class MessagesController {
+  private readonly logger = new Logger(MessagesController.name);
+
   constructor(private readonly messagesService: MessagesService) {}
 
   @Get('conversation/:otherUserId')
@@ -2254,6 +2400,8 @@ export class MessagesController {
     @Param('otherUserId', ParseIntPipe) otherUserId: number
   ) {
     const currentUserId = req.user.userId;
+    // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+    this.logger.log(`[GET-CONVO] 💬 User ID: ${currentUserId} is fetching conversation with User ID: ${otherUserId}`);
     return this.messagesService.getConversation(currentUserId, otherUserId);
   }
 }
@@ -2282,6 +2430,8 @@ export class MessagesModule {}
 
 --- START FILE: backend/src/messages/messages.service.ts ---
 
+// backend/src/messages/messages.service.ts
+
 import { Injectable, Logger, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Message } from './entities/message.entity';
@@ -2301,6 +2451,8 @@ export class MessagesService {
   async createMessage(sender: User, receiver: User, content: string, parentMessageId?: number): Promise<Message | null> {
     const signature = `${sender.id}-${receiver.id}-${content}`;
     if (recentMessageSignatures.has(signature)) {
+      // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+      this.logger.warn(`[MSG-DUPLICATE] ⚠️ Duplicate message blocked from User ID: ${sender.id} to User ID: ${receiver.id}.`);
       return null;
     }
     recentMessageSignatures.add(signature);
@@ -2308,17 +2460,14 @@ export class MessagesService {
       recentMessageSignatures.delete(signature);
     }, 2000);
 
-    const message = this.messagesRepository.create({
-      sender: sender,
-      receiver: receiver,
-      content: content,
-      parentMessageId: parentMessageId,
-    });
-
+    const message = this.messagesRepository.create({ sender, receiver, content, parentMessageId });
     try {
       const savedMessage = await this.messagesRepository.save(message);
+      this.logger.verbose(`[MSG-CREATE-SUCCESS] ✅ Message created (ID: ${savedMessage.id}) between User ID: ${sender.id} and User ID: ${receiver.id}.`);
       return this.findMessageById(savedMessage.id);
     } catch (error) {
+      // --- ИЗМЕНЕНО: Добавлен эмодзи ---
+      this.logger.error(`[MSG-CREATE-FAIL] ❌ Failed to save message from User ID: ${sender.id} to User ID: ${receiver.id}.`, error.stack);
       recentMessageSignatures.delete(signature);
       return null;
     }
@@ -2327,44 +2476,44 @@ export class MessagesService {
   async updateMessage(userId: number, messageId: number, content: string): Promise<Message> {
     const message = await this.findMessageById(messageId);
     if (!message) {
+      this.logger.warn(`[MSG-UPDATE-FAIL] ⚠️ Attempt to update non-existent Message ID: ${messageId} by User ID: ${userId}.`);
       throw new NotFoundException('Message not found.');
     }
     if (message.sender_id !== userId) {
+      this.logger.warn(`[MSG-UPDATE-FORBIDDEN] 🚫 User ID: ${userId} failed to update Message ID: ${messageId}. Reason: Not the sender.`);
       throw new ForbiddenException('You can only edit your own messages.');
     }
     message.content = content;
     const updatedMessage = await this.messagesRepository.save(message);
+    this.logger.log(`[MSG-UPDATE-SUCCESS] 📝 Message ID: ${messageId} was updated by User ID: ${userId}.`);
     return updatedMessage;
   }
 
   async deleteMessage(userId: number, messageId: number): Promise<Message> {
     const message = await this.findMessageById(messageId);
     if (!message) {
+      this.logger.warn(`[MSG-DELETE-FAIL] ⚠️ Attempt to delete non-existent Message ID: ${messageId} by User ID: ${userId}.`);
       throw new NotFoundException('Message not found.');
     }
     if (message.sender_id !== userId) {
+      this.logger.warn(`[MSG-DELETE-FORBIDDEN] 🚫 User ID: ${userId} failed to delete Message ID: ${messageId}. Reason: Not the sender.`);
       throw new ForbiddenException('You can only delete your own messages.');
     }
     message.is_deleted = true;
     message.content = 'Message has been deleted.';
+    this.logger.warn(`[MSG-DELETE-SUCCESS] 🗑️ Message ID: ${messageId} was soft-deleted by User ID: ${userId}.`);
     return this.messagesRepository.save(message);
   }
 
   async getConversation(userId1: number, userId2: number): Promise<Message[]> {
+    this.logger.verbose(`[DB-GET-CONVO] 💾 Fetching conversation from DB between User ID: ${userId1} and User ID: ${userId2}`);
     return this.messagesRepository.find({
       where: [
         { sender_id: userId1, receiver_id: userId2 },
         { sender_id: userId2, receiver_id: userId1 },
       ],
-      relations: [
-        'sender',
-        'receiver',
-        'parentMessage',
-        'parentMessage.sender',
-      ],
-      order: {
-        sent_at: 'ASC',
-      },
+      relations: ['sender', 'receiver', 'parentMessage', 'parentMessage.sender'],
+      order: { sent_at: 'ASC' },
     });
   }
   
@@ -2587,6 +2736,8 @@ export class News {
 
 --- START FILE: backend/src/news/news.controller.ts ---
 
+// backend/src/news/news.controller.ts
+
 import { 
   Controller, 
   Get, 
@@ -2600,6 +2751,7 @@ import {
   Request,
   Patch,
   Delete,
+  Logger,
 } from '@nestjs/common';
 import { NewsService } from './news.service';
 import { CreateNewsDto } from './dto/create-news.dto';
@@ -2614,60 +2766,54 @@ import { SystemRanks } from '../ranks/ranks.service';
 @ApiTags('News')
 @Controller('news')
 export class NewsController {
+  private readonly logger = new Logger(NewsController.name);
+
   constructor(private readonly newsService: NewsService) {}
 
- @Post()
+  @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
   @Roles(SystemRanks.MODERATOR.power_level)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new news article (Admins/Mods only)' })
-  @ApiResponse({ status: 201, description: 'The news article has been successfully created.', type: NewsEntity })
-  @ApiResponse({ status: 403, description: 'Forbidden. User does not have permission.' })
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
   create(@Body() createNewsDto: CreateNewsDto, @Request() req): Promise<NewsEntity> {
-    return this.newsService.create(createNewsDto, req.user.userId);
+    const actorId = req.user.userId;
+    this.logger.log(`[CREATE] 📰 User ID: ${actorId} is creating a news article titled: "${createNewsDto.name}"`);
+    return this.newsService.create(createNewsDto, actorId);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all news articles' })
-  @ApiResponse({ status: 200, description: 'Return all news articles.', type: [NewsEntity] })
   findAll(): Promise<NewsEntity[]> {
+    this.logger.verbose(`[GET-ALL] 🔎 Fetching all news articles.`);
     return this.newsService.findAll();
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific news article by ID' })
-  @ApiResponse({ status: 200, description: 'Return the news article.', type: NewsEntity })
-  @ApiResponse({ status: 404, description: 'News article not found.' })
   findOne(@Param('id', ParseIntPipe) id: number): Promise<NewsEntity> {
+    this.logger.verbose(`[GET-ONE] 🔎 Fetching news article with ID: ${id}`);
     return this.newsService.findOne(id);
   }
 
- @Patch(':id')
+  @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
   @Roles(SystemRanks.MODERATOR.power_level)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a news article (Admins/Mods only)' })
-  @ApiResponse({ status: 200, description: 'The news article has been successfully updated.', type: NewsEntity })
-  @ApiResponse({ status: 403, description: 'Forbidden. User does not have permission.' })
-  @ApiResponse({ status: 404, description: 'News article not found.' })
   @UsePipes(new ValidationPipe({ whitelist: true, skipMissingProperties: true, forbidNonWhitelisted: true }))
-  update(@Param('id', ParseIntPipe) id: number, @Body() updateNewsDto: UpdateNewsDto): Promise<NewsEntity> {
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateNewsDto: UpdateNewsDto, @Request() req): Promise<NewsEntity> {
+    this.logger.log(`[UPDATE] 📝 User ID: ${req.user.userId} is attempting to update news article ID: ${id}.`);
     return this.newsService.update(id, updateNewsDto);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
   @Roles(SystemRanks.MODERATOR.power_level)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a news article (Admins/Mods only)' })
-  @ApiResponse({ status: 204, description: 'The news article has been successfully deleted.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. User does not have permission.' })
-  @ApiResponse({ status: 404, description: 'News article not found.' })
-  remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req): Promise<void> {
+    this.logger.warn(`[DELETE] 🗑️ User ID: ${req.user.userId} is attempting to delete news article ID: ${id}.`);
     return this.newsService.remove(id);
   }
 }
@@ -2697,7 +2843,9 @@ export class NewsModule {}
 
 --- START FILE: backend/src/news/news.service.ts ---
 
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+// backend/src/news/news.service.ts
+
+import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { News } from './entities/news.entity';
@@ -2707,6 +2855,8 @@ import { UpdateNewsDto } from './dto/update-news.dto';
 
 @Injectable()
 export class NewsService {
+  private readonly logger = new Logger(NewsService.name);
+
   constructor(
     @InjectRepository(News)
     private newsRepository: Repository<News>,
@@ -2717,6 +2867,7 @@ export class NewsService {
   async create(createNewsDto: CreateNewsDto, authorId: number): Promise<News> {
     const author = await this.usersRepository.findOne({ where: { id: authorId } });
     if (!author) {
+      this.logger.error(`[CREATE-FAIL] ❌ Author with ID ${authorId} not found. Cannot create news.`);
       throw new ForbiddenException('Authenticated user not found.');
     }
 
@@ -2724,8 +2875,9 @@ export class NewsService {
       ...createNewsDto,
       author: author,
     });
-
-    return this.newsRepository.save(newsItem);
+    const savedNews = await this.newsRepository.save(newsItem);
+    this.logger.log(`[CREATE-SUCCESS] ✅ User ID: ${authorId} created News ID: ${savedNews.id} titled: "${savedNews.name}"`);
+    return savedNews;
   }
 
   async findAll(): Promise<News[]> {
@@ -2743,23 +2895,26 @@ export class NewsService {
       relations: ['author'] 
     });
     if (!newsItem) {
+      this.logger.warn(`[GET-ONE-FAIL] ⚠️ News item with ID ${id} not found.`);
       throw new NotFoundException(`News item with ID ${id} not found`);
     }
     return newsItem;
   }
 
   async update(id: number, updateNewsDto: UpdateNewsDto): Promise<News> {
-    const newsItem = await this.findOne(id); 
+    const newsItem = await this.findOne(id);
     
     Object.assign(newsItem, updateNewsDto);
 
-    return this.newsRepository.save(newsItem);
+    const updatedNews = await this.newsRepository.save(newsItem);
+    this.logger.log(`[UPDATE-SUCCESS] ✅ News article ID: ${id} was successfully updated.`);
+    return updatedNews;
   }
 
   async remove(id: number): Promise<void> {
-    const newsItem = await this.findOne(id); 
-
+    const newsItem = await this.findOne(id);
     await this.newsRepository.remove(newsItem);
+    this.logger.warn(`[DELETE-SUCCESS] 🗑️ News article ID: ${id} was successfully deleted.`);
   }
 }
 --- END FILE: backend/src/news/news.service.ts ---
@@ -2833,12 +2988,13 @@ export class Notification {
 
 --- START FILE: backend/src/notifications/notifications.controller.ts ---
 
-import { Controller, Get, Param, ParseIntPipe, UseGuards, Post, HttpCode, HttpStatus, Request, Body } from '@nestjs/common';
+// backend/src/notifications/notifications.controller.ts
+
+import { Controller, Get, Param, ParseIntPipe, UseGuards, Post, HttpCode, HttpStatus, Request, Body, Logger } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApiBearerAuth, ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { Notification } from './entities/notification.entity';
-// --- ДОБАВЛЕНО: Импортируем DTO ---
 import { MarkAsReadByLinkDto } from './dto/mark-as-read-by-link.dto';
 
 @ApiTags('Notifications')
@@ -2846,12 +3002,16 @@ import { MarkAsReadByLinkDto } from './dto/mark-as-read-by-link.dto';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class NotificationsController {
+  // --- НОВОЕ: Инициализируем Logger ---
+  private readonly logger = new Logger(NotificationsController.name);
+
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
   @ApiOperation({ summary: "Get current user's notifications" })
   @ApiResponse({ status: 200, description: 'A list of notifications', type: [Notification] })
   getNotifications(@Request() req) {
+    this.logger.verbose(`[GET-ALL] User ID: ${req.user.userId} is fetching their notifications.`);
     return this.notificationsService.getForUser(req.user.userId);
   }
 
@@ -2861,24 +3021,25 @@ export class NotificationsController {
   @ApiResponse({ status: 200, description: 'Notification marked as read', type: Notification })
   @ApiResponse({ status: 404, description: 'Notification not found.' })
   markAsRead(@Request() req, @Param('id', ParseIntPipe) id: number) {
+    this.logger.log(`[MARK-READ] User ID: ${req.user.userId} is marking notification ID: ${id} as read.`);
     return this.notificationsService.markAsRead(id, req.user.userId);
   }
 
-  // --- НОВЫЙ ЭНДПОИНТ: Пометить все как прочитанные ---
   @Post('read-all')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark all notifications as read' })
   @ApiResponse({ status: 200, description: 'All notifications marked as read.' })
   markAllAsRead(@Request() req) {
+    this.logger.log(`[MARK-ALL-READ] User ID: ${req.user.userId} is marking all their notifications as read.`);
     return this.notificationsService.markAllAsRead(req.user.userId);
   }
 
-  // --- НОВЫЙ ЭНДПОИНТ: Пометить как прочитанные по ссылке ---
   @Post('read-by-link')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark notifications as read by link' })
   @ApiResponse({ status: 200, description: 'Notifications marked as read.' })
   markAsReadByLink(@Request() req, @Body() dto: MarkAsReadByLinkDto) {
+    this.logger.log(`[MARK-READ-LINK] User ID: ${req.user.userId} is marking notifications with link '${dto.link}' as read.`);
     return this.notificationsService.markAsReadByLink(req.user.userId, dto.link);
   }
 }
@@ -2906,6 +3067,8 @@ export class NotificationsModule {}
 
 --- START FILE: backend/src/notifications/notifications.service.ts ---
 
+// backend/src/notifications/notifications.service.ts
+
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Notification } from './entities/notification.entity';
@@ -2916,6 +3079,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class NotificationsService {
+  // Logger уже был, отлично!
   private readonly logger = new Logger(NotificationsService.name);
 
   constructor(
@@ -2940,26 +3104,31 @@ export class NotificationsService {
           relations: ['user']
       });
 
+      // --- НОВОЕ: Логируем создание и отправку события ---
+      this.logger.log(`[CREATE-SUCCESS] Created notification (ID: ${savedNotification.notification_id}, Type: ${type}) for User ID: ${user.id}.`);
       this.eventEmitter.emit('notification.created', populatedNotification);
       
     } catch (error) {
+      // --- НОВОЕ: Логируем ошибку, если создание не удалось ---
+      this.logger.error(`[CREATE-FAIL] Failed to create notification for User ID: ${user.id}. Title: ${title}`, error.stack);
     }
   }
-
-  // --- Слушатели событий остаются без изменений ---
 
   @OnEvent('friendship.accepted', { async: true })
   async handleFriendshipAccepted(payload: { requester: User, receiver: User }) {
     const { requester, receiver } = payload;
+    // --- НОВОЕ: Логируем получение события ---
+    this.logger.verbose(`[EVENT] Received 'friendship.accepted' for requester ID: ${requester.id} and receiver ID: ${receiver.id}.`);
     const title = 'Friend Request Accepted';
     const message = `${receiver.username} is now your friend.`;
-    const link = `/users/${receiver.id}`;
+    const link = `/users/${receiver.profile_slug || receiver.id}`; // Улучшенная ссылка
     await this.create(requester, title, message, 'friendship.accepted', link);
   }
 
   @OnEvent('friendship.requested', { async: true })
   async handleFriendshipRequested(payload: { requester: User, receiver: User }) {
     const { requester, receiver } = payload;
+    this.logger.verbose(`[EVENT] Received 'friendship.requested' from User ID: ${requester.id} to User ID: ${receiver.id}.`);
     const title = 'New Friend Request';
     const message = `${requester.username} wants to be your friend.`;
     const link = `/friends`;
@@ -2969,19 +3138,18 @@ export class NotificationsService {
   @OnEvent('message.sent', { async: true })
   async handleMessageSent(payload: { sender: User, recipient: User }) {
     const { sender, recipient } = payload;
+    this.logger.verbose(`[EVENT] Received 'message.sent' from User ID: ${sender.id} to User ID: ${recipient.id}.`);
     const title = 'New Message';
     const message = `You have a new message from ${sender.username}.`;
     const link = `/messages/${sender.id}`;
     await this.create(recipient, title, message, 'message.sent', link);
   }
 
-  // --- Методы для работы с контроллером ---
-
   async getForUser(userId: number): Promise<Notification[]> {
     return this.notificationsRepository.find({
       where: { user_id: userId },
       order: { created_at: 'DESC' },
-      take: 30,
+      take: 30, // Ограничиваем выборку для производительности
     });
   }
 
@@ -2990,11 +3158,12 @@ export class NotificationsService {
       notification_id: notificationId, 
       user_id: userId
     });
-
     if (!notification) {
+      this.logger.warn(`[MARK-READ-FAIL] User ID: ${userId} failed to mark notification ID: ${notificationId} as read. Reason: Not found or no permission.`);
       throw new NotFoundException('Notification not found or you do not have permission to access it.');
     }
     notification.read = true;
+    this.logger.log(`[MARK-READ-SUCCESS] Notification ID: ${notificationId} was marked as read by User ID: ${userId}.`);
     return this.notificationsRepository.save(notification);
   }
 
@@ -3003,15 +3172,16 @@ export class NotificationsService {
       { user_id: userId, read: false },
       { read: true },
     );
+    this.logger.log(`[MARK-ALL-READ-SUCCESS] Marked ${result.affected || 0} notification(s) as read for User ID: ${userId}.`);
     return { affected: result.affected };
   }
 
-  // --- НОВЫЙ МЕТОД: Пометить как прочитанные по ссылке ---
   async markAsReadByLink(userId: number, link: string): Promise<{ affected?: number }> {
       const result = await this.notificationsRepository.update(
           { user_id: userId, link: link, read: false },
           { read: true },
       );
+      this.logger.log(`[MARK-READ-LINK-SUCCESS] Marked ${result.affected || 0} notification(s) as read for User ID: ${userId} with link: ${link}.`);
       return { affected: result.affected };
   }
 }
@@ -3174,6 +3344,8 @@ export class Post {
 
 --- START FILE: backend/src/posts/posts.controller.ts ---
 
+// backend/src/posts/posts.controller.ts
+
 import {
   Controller,
   Get,
@@ -3187,53 +3359,50 @@ import {
   ParseIntPipe,
   UsePipes,
   ValidationPipe,
-  Injectable,
   Query,
+  Logger, // <-- Добавлено
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Post as PostEntity } from './entities/post.entity';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger'; // Импортируем декораторы Swagger
-import { AuthGuard } from '@nestjs/passport';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { OptionalJwtAuthGuard } from 'src/auth/guards/optional-jwt-auth.guard';
 import { FindAllPostsDto } from './dto/find-all-posts';
 
 @ApiTags('Posts') 
 @Controller('posts')
 export class PostsController {
+  // --- НОВОЕ: Инициализируем Logger ---
+  private readonly logger = new Logger(PostsController.name);
+
   constructor(private readonly postsService: PostsService) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth() 
-  @ApiOperation({ summary: 'Create a new post' }) 
-  @ApiResponse({ status: 201, description: 'The post has been successfully created.', type: PostEntity })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. User not found or not authorized.' })
+  @ApiOperation({ summary: 'Create a new post' })
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
   create(@Body() createPostDto: CreatePostDto, @Request() req): Promise<PostEntity> {
     const authorId = req.user.userId;
+    this.logger.log(`[CREATE] 💬 User ID: ${authorId} is creating a new post titled "${createPostDto.title}"`);
     return this.postsService.create(createPostDto, authorId);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all posts' })
-  @ApiResponse({ status: 200, description: 'Return all posts.', type: [PostEntity] })
-  // --- ИЗМЕНЕНО: Уточняем возвращаемый тип ---
   findAll(@Query(new ValidationPipe({ transform: true, forbidNonWhitelisted: true })) query: FindAllPostsDto) {
+    this.logger.verbose(`[GET-ALL] 🔎 Fetching all posts with query: ${JSON.stringify(query)}`);
     return this.postsService.findAll(query);
   }
 
- @Get(':id')
-  @UseGuards(OptionalJwtAuthGuard) // Используем "мягкий" Guard
+  @Get(':id')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get a specific post by ID' })
-  @ApiResponse({ status: 200, description: 'Return the post.', type: PostEntity })
-  @ApiResponse({ status: 404, description: 'Post not found.' })
-  findOne(@Param('id', ParseIntPipe) id: number, @Request() req): Promise<PostEntity> {
-    // req.user может быть объектом пользователя или undefined
+  findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
     const userId = req.user ? req.user.userId : null;
+    this.logger.verbose(`[GET-ONE] 🔎 Fetching post ID: ${id} for User ID: ${userId || 'Guest'}`);
     return this.postsService.findOne(id, userId);
   }
 
@@ -3241,10 +3410,6 @@ export class PostsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth() 
   @ApiOperation({ summary: 'Update a post' })
-  @ApiResponse({ status: 200, description: 'The post has been successfully updated.', type: PostEntity })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. User not authorized to update this post.' })
-  @ApiResponse({ status: 404, description: 'Post not found.' })
   @UsePipes(new ValidationPipe({ whitelist: true, skipMissingProperties: true, forbidNonWhitelisted: true }))
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -3252,6 +3417,7 @@ export class PostsController {
     @Request() req,
   ): Promise<PostEntity> {
     const userId = req.user.userId;
+    this.logger.log(`[UPDATE] 📝 User ID: ${userId} is attempting to update Post ID: ${id}`);
     return this.postsService.update(id, updatePostDto, userId);
   }
 
@@ -3259,12 +3425,9 @@ export class PostsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth() 
   @ApiOperation({ summary: 'Delete a post' })
-  @ApiResponse({ status: 200, description: 'The post has been successfully deleted.' }) 
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. User not authorized to delete this post.' })
-  @ApiResponse({ status: 404, description: 'Post not found.' })
   remove(@Param('id', ParseIntPipe) id: number, @Request() req): Promise<void> {
     const userId = req.user.userId;
+    this.logger.warn(`[DELETE] 🗑️ User ID: ${userId} is attempting to delete Post ID: ${id}`);
     return this.postsService.remove(id, userId);
   }
 }
@@ -3299,19 +3462,23 @@ export class PostsModule {}
 
 --- START FILE: backend/src/posts/posts.service.ts ---
 
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+// backend/src/posts/posts.service.ts
+
+import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Post } from './entities/post.entity';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { User } from '../users/entities/user.entity';
-import { Ranks } from '../common/enums/ranks.enum';
 import { FindAllPostsDto } from './dto/find-all-posts';
 import { SystemRanks } from '../ranks/ranks.service';
 
 @Injectable()
 export class PostsService {
+  // --- НОВОЕ: Инициализируем Logger ---
+  private readonly logger = new Logger(PostsService.name);
+
   constructor(
     @InjectRepository(Post)
     private postsRepository: Repository<Post>,
@@ -3322,20 +3489,20 @@ export class PostsService {
   async create(createPostDto: CreatePostDto, authorId: number): Promise<Post> {
     const author = await this.usersRepository.findOne({ where: { id: authorId } });
     if (!author) {
+      this.logger.error(`[CREATE-FAIL] ❌ Author with ID ${authorId} not found. Cannot create post.`);
       throw new ForbiddenException('User not found or not authorized to create a post.');
     }
 
-    const post = this.postsRepository.create({
-      ...createPostDto,
-      author: author,
-    });
-
-    return this.postsRepository.save(post);
+    const post = this.postsRepository.create({ ...createPostDto, author });
+    const savedPost = await this.postsRepository.save(post);
+    this.logger.log(`[CREATE-SUCCESS] ✅ User ID: ${authorId} created Post ID: ${savedPost.id}.`);
+    return savedPost;
   }
 
- async findAll(queryDto: FindAllPostsDto): Promise<{ data: any[], total: number }> {
+  async findAll(queryDto: FindAllPostsDto): Promise<{ data: any[], total: number }> {
     const { sortBy, order, search, page = 1, limit = 10 } = queryDto;
-
+    this.logger.verbose(`[DB-QUERY] 💾 Executing findAll with page: ${page}, limit: ${limit}, sortBy: ${sortBy}, order: ${order}, search: ${search || 'none'}`);
+    
     const queryBuilder = this.postsRepository.createQueryBuilder('post');
 
     queryBuilder
@@ -3349,78 +3516,44 @@ export class PostsService {
       queryBuilder.where('post.title ILIKE :search', { search: `%${search}%` });
     }
 
-    if (sortBy === 'score') {
-      queryBuilder.orderBy('score', order);
-    } else {
-      queryBuilder.orderBy('post.created_at', order);
-    }
-
-    // Добавляем пагинацию
-    queryBuilder.take(limit);
-    queryBuilder.skip((page - 1) * limit);
-
-    // Используем getManyAndCount для получения постов и их общего количества
-    const [entities, total] = await queryBuilder.getManyAndCount();
+    queryBuilder.orderBy(sortBy === 'score' ? 'score' : `post.${sortBy}`, order as 'ASC' | 'DESC');
     
-    // Получаем "сырые" данные для поля score, так как getMany не вернет его
-    const rawEntities = await queryBuilder.getRawMany();
+    queryBuilder.take(limit).skip((page - 1) * limit);
 
-    // Соединяем сущности с рассчитанным полем score
+    const [entities, total] = await queryBuilder.getManyAndCount();
+    const rawEntities = await queryBuilder.getRawMany();
+    
     const postsWithScores = entities.map(post => {
         const rawPost = rawEntities.find(raw => raw.post_id === post.id);
-        return {
-            ...post,
-            score: rawPost ? parseInt(rawPost.score, 10) : 0,
-        };
+        return { ...post, score: rawPost ? parseInt(rawPost.score, 10) : 0 };
     });
 
-    return {
-      data: postsWithScores,
-      total: total,
-    };
+    this.logger.verbose(`[DB-RESULT] 💾 Found ${total} total posts, returning ${postsWithScores.length}.`);
+    return { data: postsWithScores, total };
   }
 
 
   async findOne(id: number, userId?: number): Promise<any> {
     const post = await this.postsRepository.findOne({
       where: { id },
-      relations: [
-        'author',
-        'comments',
-        'comments.author',
-        'votes',
-        'comments.votes',
-        'votes.voter', // Загружаем voter, чтобы получить voter.id
-        'comments.votes.voter',
-      ],
-      order: {
-        comments: { created_at: "ASC" },
-      },
+      relations: ['author', 'author.rank', 'comments', 'comments.author', 'comments.author.rank', 'votes', 'comments.votes', 'votes.voter', 'comments.votes.voter'],
+      order: { comments: { created_at: "ASC" } },
     });
-
     if (!post) {
+      this.logger.warn(`[GET-ONE-FAIL] ⚠️ Post with ID ${id} not found.`);
       throw new NotFoundException(`Post with ID ${id} not found.`);
     }
 
-    // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
     const mapVotes = (entity: any, currentUserId?: number) => {
+      if (!entity.votes) return { ...entity, likes: 0, dislikes: 0, currentUserVote: 0 };
       const likes = entity.votes.filter(v => v.value === 1).length;
       const dislikes = entity.votes.filter(v => v.value === -1).length;
-
-      let currentUserVote = 0;
-      if (currentUserId) {
-        const vote = entity.votes.find(v => v.voter.id === currentUserId);
-        if (vote) currentUserVote = vote.value;
-      }
-
-      // Создаем новый объект, исключая из него полное свойство votes
+      const vote = currentUserId ? entity.votes.find(v => v.voter.id === currentUserId) : null;
       const { votes, ...restOfEntity } = entity;
-
-      return { ...restOfEntity, likes, dislikes, currentUserVote };
+      return { ...restOfEntity, likes, dislikes, currentUserVote: vote ? vote.value : 0 };
     };
 
     const postWithVotes = mapVotes(post, userId);
-
     if (post.comments) {
       postWithVotes.comments = post.comments.map(comment => mapVotes(comment, userId));
     }
@@ -3429,46 +3562,54 @@ export class PostsService {
   }
 
   async update(id: number, updatePostDto: UpdatePostDto, userId: number): Promise<Post> {
-    const post = await this.findOne(id, userId); // findOne нужно немного поправить, чтобы он не возвращал any
+    const post = await this.postsRepository.findOne({ where: { id }, relations: ['author'] });
+    if (!post) {
+      this.logger.warn(`[UPDATE-FAIL] ⚠️ Post with ID: ${id} not found for update attempt by User ID: ${userId}.`);
+      throw new NotFoundException(`Post with ID ${id} not found.`);
+    }
+
     const user = await this.usersRepository.findOne({ where: { id: userId }, relations: ['rank'] });
     if (!user) {
+      this.logger.error(`[UPDATE-FAIL] ❌ User performing update action not found. User ID: ${userId}`);
       throw new ForbiddenException('User performing the action not found.');
     }
 
     const isAuthor = post.author_id === userId;
-    // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Проверяем по power_level ---
     const canManagePosts = user.rank && user.rank.power_level >= SystemRanks.MODERATOR.power_level;
 
     if (!isAuthor && !canManagePosts) {
+      this.logger.warn(`[UPDATE-FORBIDDEN] 🚫 User ID: ${userId} (Rank: ${user.rank?.name}) failed to update Post ID: ${id}. Reason: Not author or moderator.`);
       throw new ForbiddenException('You are not authorized to update this post.');
     }
-
-    const postToUpdate = await this.postsRepository.findOneBy({ id });
-    if (!postToUpdate) throw new NotFoundException('Post not found');
-
-    Object.assign(postToUpdate, updatePostDto);
-    return this.postsRepository.save(postToUpdate);
+    
+    await this.postsRepository.update(id, updatePostDto);
+    this.logger.log(`[UPDATE-SUCCESS] ✅ Post ID: ${id} updated by User ID: ${userId}.`);
+    return this.findOne(id, userId);
   }
 
   async remove(id: number, userId: number): Promise<void> {
-    const post = await this.findOne(id, userId);
+    const post = await this.postsRepository.findOne({ where: { id }, relations: ['author'] });
+    if (!post) {
+      this.logger.warn(`[DELETE-FAIL] ⚠️ Post with ID: ${id} not found for delete attempt by User ID: ${userId}.`);
+      throw new NotFoundException(`Post with ID ${id} not found.`);
+    }
+
     const user = await this.usersRepository.findOne({ where: { id: userId }, relations: ['rank'] });
     if (!user) {
+      this.logger.error(`[DELETE-FAIL] ❌ User performing delete action not found. User ID: ${userId}`);
       throw new ForbiddenException('User performing the action not found.');
     }
 
     const isAuthor = post.author_id === userId;
-    // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Проверяем по power_level ---
     const canManagePosts = user.rank && user.rank.power_level >= SystemRanks.MODERATOR.power_level;
 
     if (!isAuthor && !canManagePosts) {
+      this.logger.warn(`[DELETE-FORBIDDEN] 🚫 User ID: ${userId} (Rank: ${user.rank?.name}) failed to delete Post ID: ${id}. Reason: Not author or moderator.`);
       throw new ForbiddenException('You are not authorized to delete this post.');
     }
-
-    const postToRemove = await this.postsRepository.findOneBy({ id });
-    if (!postToRemove) throw new NotFoundException('Post not found');
-
-    await this.postsRepository.remove(postToRemove);
+    
+    await this.postsRepository.remove(post);
+    this.logger.warn(`[DELETE-SUCCESS] ✅ Post ID: ${id} was deleted by User ID: ${userId}.`);
   }
 }
 --- END FILE: backend/src/posts/posts.service.ts ---
@@ -3640,7 +3781,7 @@ export class Rank {
 
 // backend/src/ranks/ranks.controller.ts
 
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, UseGuards, Logger } from '@nestjs/common';
 import { RanksService, SystemRanks } from './ranks.service';
 import { CreateRankDto } from './dto/create-rank.dto';
 import { UpdateRankDto } from './dto/update-rank.dto';
@@ -3654,12 +3795,15 @@ import { Roles } from '../auth/decorators/roles.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class RanksController {
+  private readonly logger = new Logger(RanksController.name);
+
   constructor(private readonly ranksService: RanksService) {}
 
   @Post()
   @Roles(SystemRanks.ADMIN.power_level)
   @ApiOperation({ summary: 'Create a new rank (Admin only)' })
   create(@Body() createRankDto: CreateRankDto) {
+    this.logger.log(`[CREATE] 🎖️ Admin is creating a new rank: ${JSON.stringify(createRankDto)}`);
     return this.ranksService.create(createRankDto);
   }
 
@@ -3667,6 +3811,7 @@ export class RanksController {
   @Roles(SystemRanks.MODERATOR.power_level)
   @ApiOperation({ summary: 'Get all ranks (Mods+)' })
   findAll() {
+    this.logger.verbose(`[GET-ALL] 🔎 Fetching all ranks.`);
     return this.ranksService.findAll();
   }
 
@@ -3674,17 +3819,18 @@ export class RanksController {
   @Roles(SystemRanks.ADMIN.power_level)
   @ApiOperation({ summary: 'Update a rank (Admin only)' })
   update(@Param('id', ParseIntPipe) id: number, @Body() updateRankDto: UpdateRankDto) {
+    this.logger.log(`[UPDATE] 📝 Admin is attempting to update Rank ID: ${id} with data: ${JSON.stringify(updateRankDto)}`);
     return this.ranksService.update(id, updateRankDto);
   }
 
- @Delete(':id')
+  @Delete(':id')
   @Roles(SystemRanks.ADMIN.power_level)
   @ApiOperation({ summary: 'Delete a rank (Admin only)' })
-  // --- ИЗМЕНЕНО: Добавляем @Body для получения ID миграции ---
   remove(
     @Param('id', ParseIntPipe) id: number,
-    @Body('migrationRankId') migrationRankId?: number // Это поле будет необязательным
+    @Body('migrationRankId') migrationRankId?: number
   ) {
+    this.logger.warn(`[DELETE] 🗑️ Admin is attempting to delete Rank ID: ${id}. Migration Target ID: ${migrationRankId || 'N/A'}`);
     return this.ranksService.remove(id, migrationRankId);
   }
 }
@@ -3718,7 +3864,7 @@ export class RanksModule {}
 
 // backend/src/ranks/ranks.service.ts
 
-import { Injectable, OnModuleInit, NotFoundException, ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, OnModuleInit, NotFoundException, ConflictException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, ILike, Repository } from 'typeorm';
 import { Rank } from './entities/rank.entity';
@@ -3726,8 +3872,6 @@ import { CreateRankDto } from './dto/create-rank.dto';
 import { UpdateRankDto } from './dto/update-rank.dto';
 import { User } from 'src/users/entities/user.entity';
 
-// Определяем наши "цементированные" ранги
-const a = 1;
 export const SystemRanks = {
   OWNER: { id: 1, name: 'Owner', system_name: 'owner', power_level: 999, display_color: '#AA0000', is_removable: false },
   ADMIN: { id: 2, name: 'Admin', system_name: 'admin', power_level: 900, display_color: '#FF5555', is_removable: false },
@@ -3737,6 +3881,8 @@ export const SystemRanks = {
 
 @Injectable()
 export class RanksService implements OnModuleInit {
+  private readonly logger = new Logger(RanksService.name);
+
   constructor(
     @InjectRepository(Rank)
     private ranksRepository: Repository<Rank>,
@@ -3745,8 +3891,8 @@ export class RanksService implements OnModuleInit {
     private dataSource: DataSource,
   ) { }
 
-  // Этот метод выполнится при старте приложения
   async onModuleInit() {
+    this.logger.log(`[SEED] 🌱 Checking for initial system ranks on module initialization...`);
     await this.seedInitialRanks();
   }
 
@@ -3754,26 +3900,28 @@ export class RanksService implements OnModuleInit {
     for (const rankDetails of Object.values(SystemRanks)) {
       const rankExists = await this.ranksRepository.findOneBy({ id: rankDetails.id });
       if (!rankExists) {
+        this.logger.log(`[SEED] 🌱 System rank "${rankDetails.name}" not found. Seeding now...`);
         const newRank = this.ranksRepository.create(rankDetails);
         await this.ranksRepository.save(newRank);
+      } else {
+        this.logger.verbose(`[SEED] 🌱 System rank "${rankDetails.name}" already exists. Skipping.`);
       }
     }
   }
 
   async create(createRankDto: CreateRankDto): Promise<Rank> {
     const existingRank = await this.ranksRepository.findOne({
-      where: [
-        { name: createRankDto.name },
-        { power_level: createRankDto.power_level }
-      ]
+      where: [{ name: createRankDto.name }, { power_level: createRankDto.power_level }, { system_name: createRankDto.system_name }]
     });
-
     if (existingRank) {
-      throw new ConflictException('Rank with this name or power level already exists.');
+      this.logger.warn(`[CREATE-FAIL] ⚠️ Conflict: Rank with this name, system_name, or power level already exists. Input: ${JSON.stringify(createRankDto)}`);
+      throw new ConflictException('Rank with this name, system_name, or power level already exists.');
     }
 
     const rank = this.ranksRepository.create(createRankDto);
-    return this.ranksRepository.save(rank);
+    const savedRank = await this.ranksRepository.save(rank);
+    this.logger.log(`[CREATE-SUCCESS] ✅ Successfully created rank "${savedRank.name}" with ID: ${savedRank.id}`);
+    return savedRank;
   }
 
   findAll(): Promise<Rank[]> {
@@ -3783,36 +3931,30 @@ export class RanksService implements OnModuleInit {
   async findOne(id: number): Promise<Rank> {
     const rank = await this.ranksRepository.findOneBy({ id });
     if (!rank) {
+      this.logger.warn(`[GET-ONE-FAIL] ⚠️ Rank with ID ${id} not found.`);
       throw new NotFoundException(`Rank with ID ${id} not found.`);
     }
     return rank;
   }
-
-  async findDefaultRank(): Promise<Rank> {
-    const rank = await this.ranksRepository.findOneBy({ id: SystemRanks.DEFAULT.id });
-    if (!rank) {
-      // Если ранг по умолчанию не найден в БД, это критическая ошибка.
-      // Приложение не сможет создавать новых пользователей.
-      throw new InternalServerErrorException('Default rank not found in database. Seeding may have failed.');
-    }
-    return rank;
-  }
-
+  
   async update(id: number, updateRankDto: UpdateRankDto): Promise<Rank> {
     const rank = await this.findOne(id);
-
-    // Системные ранги можно только переименовывать и менять цвет
     if (!rank.is_removable) {
-      delete updateRankDto.power_level; // Запрещаем менять power_level
+      if (updateRankDto.power_level || updateRankDto.system_name) {
+          this.logger.warn(`[UPDATE-DENIED] 🚫 Attempt to change power_level or system_name of a non-removable system rank (ID: ${id}) was prevented.`);
+      }
+      delete updateRankDto.power_level;
+      delete updateRankDto.system_name;
     }
 
     Object.assign(rank, updateRankDto);
-    return this.ranksRepository.save(rank);
+    const updatedRank = await this.ranksRepository.save(rank);
+    this.logger.log(`[UPDATE-SUCCESS] ✅ Rank ID: ${id} ("${updatedRank.name}") was successfully updated.`);
+    return updatedRank;
   }
 
   async remove(id: number, migrationRankId?: number): Promise<void> {
-    // Используем транзакцию, чтобы оба действия (обновление пользователей и удаление ранга)
-    // выполнились успешно, либо не выполнились вовсе.
+    this.logger.log(`[DELETE-TX-START] 🗑️ Starting transaction to delete Rank ID: ${id}.`);
     return this.dataSource.transaction(async (manager) => {
       const rankToRemove = await manager.findOneBy(Rank, { id });
 
@@ -3820,56 +3962,54 @@ export class RanksService implements OnModuleInit {
         throw new NotFoundException(`Rank with ID ${id} not found.`);
       }
       if (!rankToRemove.is_removable) {
+        this.logger.error(`[DELETE-FAIL] 🚫 Attempt to delete a non-removable system rank (ID: ${id}).`);
         throw new ConflictException('Cannot delete a system rank.');
       }
 
-      // Находим всех пользователей с этим рангом
       const usersWithRank = await manager.find(User, { where: { rank_id: id } });
 
-      // Если пользователей с таким рангом нет, просто удаляем его
-      if (usersWithRank.length === 0) {
-        await manager.remove(Rank, rankToRemove);
-        return;
+      if (usersWithRank.length > 0) {
+        if (!migrationRankId) {
+          this.logger.warn(`[DELETE-CONFLICT] ⚠️ Rank ID ${id} is assigned to ${usersWithRank.length} user(s). Migration rank ID is required.`);
+          throw new ConflictException(`Rank is currently assigned to ${usersWithRank.length} user(s). Please provide a migration rank.`);
+        }
+        if (migrationRankId === id) {
+          this.logger.error(`[DELETE-FAIL] ❌ Cannot migrate users to the same rank that is being deleted (ID: ${id}).`);
+          throw new ConflictException('Cannot migrate users to the same rank that is being deleted.');
+        }
+        const migrationRank = await manager.findOneBy(Rank, { id: migrationRankId });
+        if (!migrationRank) {
+          this.logger.error(`[DELETE-FAIL] ❌ Migration target rank with ID ${migrationRankId} not found.`);
+          throw new NotFoundException(`Migration rank with ID ${migrationRankId} not found.`);
+        }
+
+        const userIdsToUpdate = usersWithRank.map(user => user.id);
+        this.logger.log(`[DELETE-MIGRATE] ➡️ Migrating ${userIdsToUpdate.length} user(s) to Rank ID: ${migrationRankId} ("${migrationRank.name}")...`);
+        await manager.update(User, userIdsToUpdate, { rank_id: migrationRankId });
+      } else {
+          this.logger.log(`[DELETE] ➡️ No users assigned to Rank ID ${id}. Proceeding with simple deletion.`);
       }
-
-      // Если пользователи есть, но не указан ранг для миграции, выбрасываем ошибку.
-      // Фронтенд поймает эту ошибку и покажет модальное окно.
-      if (!migrationRankId) {
-        throw new ConflictException(`Rank is currently assigned to ${usersWithRank.length} user(s). Please provide a migration rank.`);
-      }
-
-      // Проверяем, существует ли ранг, на который мы хотим перевести пользователей
-      const migrationRank = await manager.findOneBy(Rank, { id: migrationRankId });
-      if (!migrationRank) {
-        throw new NotFoundException(`Migration rank with ID ${migrationRankId} not found.`);
-      }
-
-      // Запрещаем мигрировать на тот же ранг, который удаляем
-      if (migrationRank.id === rankToRemove.id) {
-        throw new ConflictException('Cannot migrate users to the same rank that is being deleted.');
-      }
-
-      // Собираем ID пользователей для обновления
-      const userIdsToUpdate = usersWithRank.map(user => user.id);
-
-      // Массово обновляем ранг для всех этих пользователей
-      await manager.update(User, userIdsToUpdate, { rank_id: migrationRankId });
-
-      // Наконец, удаляем старый ранг
+      
       await manager.remove(Rank, rankToRemove);
-    });
-  }
-  async findRankBySystemName(systemName: string): Promise<Rank | null> {
-    return this.ranksRepository.findOne({
-      where: { system_name: ILike(systemName) }
+      this.logger.warn(`[DELETE-SUCCESS] ✅ Successfully deleted Rank ID: ${id} ("${rankToRemove.name}") and migrated users (if any).`);
     });
   }
 
-   async findOwnerRank(): Promise<Rank> {
+  // Другие методы для поиска рангов
+  async findDefaultRank(): Promise<Rank> {
+    const rank = await this.ranksRepository.findOneBy({ id: SystemRanks.DEFAULT.id });
+    if (!rank) throw new InternalServerErrorException('Default rank not found in database.');
+    return rank;
+  }
+  
+  async findRankBySystemName(systemName: string): Promise<Rank | null> {
+    this.logger.verbose(`[DB-QUERY] 💾 Finding rank by system_name: ${systemName}`);
+    return this.ranksRepository.findOne({ where: { system_name: ILike(systemName) } });
+  }
+
+  async findOwnerRank(): Promise<Rank> {
     const rank = await this.ranksRepository.findOneBy({ id: SystemRanks.OWNER.id });
-    if (!rank) {
-      throw new InternalServerErrorException('Owner rank not found in database. Seeding may have failed.');
-    }
+    if (!rank) throw new InternalServerErrorException('Owner rank not found in database.');
     return rank;
   }
 }
@@ -4015,7 +4155,7 @@ export class ShopItem {
 --- START FILE: backend/src/shop/shop.controller.ts ---
 
 // backend/src/shop/shop.controller.ts
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, ParseIntPipe, Logger } from '@nestjs/common';
 import { ShopService } from './shop.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -4027,49 +4167,50 @@ import { CreateShopDto, UpdateShopDto } from './dto/admin-shop.dto';
 
 @Controller('shop')
 export class ShopController {
+  private readonly logger = new Logger(ShopController.name);
+
   constructor(private readonly shopService: ShopService) {}
 
-  // --- Роуты для фронтенда ---
-  
   @Get()
   findAllActive() {
+    this.logger.verbose('🔎 Fetching all active shop items for a user.');
     return this.shopService.findAllActive();
   }
 
   @Post('purchase')
   @UseGuards(JwtAuthGuard)
   purchaseItem(@Body() purchaseDto: PurchaseDto, @Request() req) {
+    this.logger.log(`[PURCHASE] 💳 User ID: ${req.user.userId} is attempting to purchase Item ID: ${purchaseDto.itemId} for target: "${purchaseDto.targetUsername || 'self'}".`);
     return this.shopService.purchase(purchaseDto, req.user.userId);
   }
-
-  // --- Роуты для плагина (защищены API ключом) ---
 
   @Get('pending-commands')
   @UseGuards(PluginApiKeyGuard)
   getPendingCommands() {
+    this.logger.log('[PLUGIN-FETCH] 🔌 Plugin is fetching pending commands.');
     return this.shopService.getPendingCommands();
   }
 
   @Post('clear-pending-commands')
   @UseGuards(PluginApiKeyGuard)
   clearPendingCommands(@Body('commandIds') commandIds: number[]) {
+    this.logger.log(`[PLUGIN-CLEAR] 🔌 Plugin is clearing ${commandIds?.length || 0} executed command(s). IDs: [${commandIds?.join(', ')}]`);
     return this.shopService.clearPendingCommands(commandIds);
   }
-
-  // --- Роуты для админ-панели (защищены по рангу) ---
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(SystemRanks.ADMIN.power_level)
-  create(@Body() createDto: CreateShopDto) { // <-- Вот здесь
+  create(@Body() createDto: CreateShopDto) {
+    this.logger.log(`[ADMIN-CREATE] 📦 Admin is creating a new shop item: "${createDto.name}"`);
     return this.shopService.create(createDto);
   }
-
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(SystemRanks.ADMIN.power_level)
   update(@Param('id', ParseIntPipe) id: number, @Body() updateDto: UpdateShopDto) {
+    this.logger.log(`[ADMIN-UPDATE] 📝 Admin is updating shop item ID: ${id}.`);
     return this.shopService.update(id, updateDto);
   }
 
@@ -4077,6 +4218,7 @@ export class ShopController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(SystemRanks.ADMIN.power_level)
   remove(@Param('id', ParseIntPipe) id: number) {
+    this.logger.warn(`[ADMIN-DELETE] 🗑️ Admin is deleting shop item ID: ${id}.`);
     return this.shopService.remove(id);
   }
 }
@@ -4113,26 +4255,25 @@ export class ShopModule {}
 --- START FILE: backend/src/shop/shop.service.ts ---
 
 // backend/src/shop/shop.service.ts
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ShopItem } from './entities/shop-item.entity';
 import { PendingCommand } from './entities/pending-command.entity';
 import { User } from '../users/entities/user.entity';
-import { ChatGateway } from '../chat/chat.gateway';
-import { PurchaseDto } from './dto/purchase.dto'; // Создадим этот DTO в следующем шаге
-import { CreateShopDto, UpdateShopDto } from './dto/admin-shop.dto'; // И эти тоже
+import { PurchaseDto } from './dto/purchase.dto';
+import { CreateShopDto, UpdateShopDto } from './dto/admin-shop.dto';
 
 @Injectable()
 export class ShopService {
+  private readonly logger = new Logger(ShopService.name);
+
   constructor(
     @InjectRepository(ShopItem) private shopItemsRepository: Repository<ShopItem>,
     @InjectRepository(PendingCommand) private pendingCommandsRepository: Repository<PendingCommand>,
     @InjectRepository(User) private usersRepository: Repository<User>,
-    private readonly chatGateway: ChatGateway,
+    // ChatGateway больше не нужен, так как мы используем систему команд
   ) {}
-
-  // --- Методы для всех пользователей ---
 
   async findAllActive(): Promise<ShopItem[]> {
     return this.shopItemsRepository.findBy({ is_active: true });
@@ -4140,68 +4281,86 @@ export class ShopService {
 
   async purchase(purchaseDto: PurchaseDto, buyerId: number): Promise<{ message: string }> {
     const { itemId, targetUsername } = purchaseDto;
-
     const item = await this.shopItemsRepository.findOneBy({ item_id: itemId, is_active: true });
-    if (!item) throw new NotFoundException('Item not found or is not available for purchase.');
-
+    if (!item) {
+        this.logger.warn(`[PURCHASE-FAIL] ⚠️ Attempt to purchase non-existent or inactive Item ID: ${itemId} by User ID: ${buyerId}.`);
+        throw new NotFoundException('Item not found or is not available for purchase.');
+    }
+    
     const buyer = await this.usersRepository.findOneBy({ id: buyerId });
-    if (!buyer) throw new NotFoundException('Buyer account not found.');
-
-    if (buyer.balance < item.price) throw new ForbiddenException('Insufficient funds.');
+    if (!buyer) {
+        this.logger.error(`[PURCHASE-FAIL] ❌ Buyer account not found for User ID: ${buyerId}.`);
+        throw new NotFoundException('Buyer account not found.');
+    }
+    if (buyer.balance < item.price) {
+        this.logger.warn(`[PURCHASE-FAIL] 🚫 User ID: ${buyerId} has insufficient funds for Item ID: ${itemId} (Price: ${item.price}, Balance: ${buyer.balance}).`);
+        throw new ForbiddenException('Insufficient funds.');
+    }
 
     let finalCommand: string;
     let recipientName: string;
-
-    if (targetUsername) { // Покупка в подарок
+    if (targetUsername) {
       recipientName = targetUsername;
       finalCommand = item.ingame_command.replace('{username}', recipientName);
-    } else { // Покупка для себя
-      if (!buyer.minecraft_username) throw new ForbiddenException('To buy for yourself, you must link your Minecraft account first.');
+    } else {
+      if (!buyer.minecraft_username) {
+          this.logger.warn(`[PURCHASE-FAIL] 🚫 User ID: ${buyerId} tried to buy for self but has no linked Minecraft account.`);
+          throw new ForbiddenException('To buy for yourself, you must link your Minecraft account first.');
+      }
       recipientName = buyer.minecraft_username;
       finalCommand = item.ingame_command.replace('{username}', recipientName);
     }
 
     buyer.balance -= item.price;
     await this.usersRepository.save(buyer);
-
     const pendingCommand = this.pendingCommandsRepository.create({ command: finalCommand });
     await this.pendingCommandsRepository.save(pendingCommand);
 
+    this.logger.log(`[PURCHASE-SUCCESS] ✅ User ID: ${buyerId} purchased Item ID: ${item.item_id} for "${recipientName}". Price: ${item.price}. New balance: ${buyer.balance}.`);
     const message = `Successfully purchased "${item.name}" for ${recipientName}! The item will be delivered in-game shortly.`;
     return { message };
   }
 
-  // --- Методы для плагина ---
-
   async getPendingCommands(): Promise<PendingCommand[]> {
-    return this.pendingCommandsRepository.find();
+    const commands = await this.pendingCommandsRepository.find();
+    this.logger.verbose(`[PLUGIN-FETCH-SUCCESS] 💾 Found ${commands.length} pending commands for the plugin.`);
+    return commands;
   }
 
   async clearPendingCommands(commandIds: number[]): Promise<void> {
-    if (commandIds.length > 0) {
+    if (commandIds && commandIds.length > 0) {
       await this.pendingCommandsRepository.delete(commandIds);
+      this.logger.warn(`[PLUGIN-CLEAR-SUCCESS] ✅ Cleared ${commandIds.length} command(s) from the database.`);
     }
   }
   
-  // --- Методы для админов ---
-  
   async create(createDto: CreateShopDto): Promise<ShopItem> {
       const newItem = this.shopItemsRepository.create(createDto);
-      return this.shopItemsRepository.save(newItem);
+      const savedItem = await this.shopItemsRepository.save(newItem);
+      this.logger.log(`[ADMIN-CREATE-SUCCESS] ✅ Created new shop item "${savedItem.name}" with ID: ${savedItem.item_id}.`);
+      return savedItem;
   }
 
   async update(id: number, updateDto: UpdateShopDto): Promise<ShopItem> {
       await this.shopItemsRepository.update(id, updateDto);
       const updatedItem = await this.shopItemsRepository.findOneBy({ item_id: id });
-      if (!updatedItem) throw new NotFoundException('Item not found');
+      if (!updatedItem) {
+          this.logger.error(`[ADMIN-UPDATE-FAIL] ❌ Shop item with ID ${id} not found after update operation.`);
+          throw new NotFoundException('Item not found');
+      }
+      this.logger.log(`[ADMIN-UPDATE-SUCCESS] ✅ Updated shop item ID: ${id}.`);
       return updatedItem;
   }
 
   async remove(id: number): Promise<void> {
       const result = await this.shopItemsRepository.delete(id);
-      if (result.affected === 0) throw new NotFoundException('Item not found');
+      if (result.affected === 0) {
+          this.logger.error(`[ADMIN-DELETE-FAIL] ❌ Shop item with ID ${id} not found for deletion.`);
+          throw new NotFoundException('Item not found');
+      }
+      this.logger.warn(`[ADMIN-DELETE-SUCCESS] ✅ Deleted shop item ID: ${id}.`);
   }
-}  
+}
 --- END FILE: backend/src/shop/shop.service.ts ---
 
 
@@ -4515,11 +4674,11 @@ export class User {
 
 --- START FILE: backend/src/users/users.controller.ts ---
 
+// backend/src/users/users.controller.ts
+
 import {
   Controller, Get, Post, Body, Param, UsePipes, ValidationPipe, Patch, UseGuards, Request, Delete, HttpCode, HttpStatus,
-  UseInterceptors, UploadedFile, ParseFilePipe, MaxFileSizeValidator, Logger, BadRequestException,
-  Query,
-  ParseIntPipe
+  UseInterceptors, UploadedFile, ParseFilePipe, MaxFileSizeValidator, Logger, BadRequestException, Query
 } from '@nestjs/common';
 import { PublicUser, UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -4532,9 +4691,6 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { FindAllUsersDto } from './dto/find-all-users.dto';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { AdminUpdateUserDto } from 'src/admin/dto/admin-update-user.dto';
-import { Ranks } from 'src/common/enums/ranks.enum';
 
 const generateUniqueFilename = (req, file, callback) => {
   const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -4545,17 +4701,15 @@ const generateUniqueFilename = (req, file, callback) => {
 @ApiTags('Users')
 @Controller('users')
 export class UsersController {
-
   private readonly logger = new Logger(UsersController.name);
 
   constructor(private readonly usersService: UsersService) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a new user (for future admin use)' })
-  @ApiResponse({ status: 201, description: 'User created successfully.', type: User })
-  @ApiResponse({ status: 409, description: 'Conflict. Email already exists.' })
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
   create(@Body() createUserDto: CreateUserDto) {
+    this.logger.log(`[CREATE] 👤 Admin is creating a new user: ${createUserDto.email}`);
     return this.usersService.create(createUserDto);
   }
 
@@ -4563,13 +4717,9 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update my profile' })
-  // --- ИЗМЕНЕНО: Обновляем тип в декораторе Swagger ---
-  @ApiResponse({ status: 200, description: 'Profile updated successfully.', type: UpdateProfileResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 409, description: 'Conflict. Profile slug is already in use.' })
-  // --- ИЗМЕНЕНО: Обновляем тип возвращаемого значения ---
   updateMyProfile(@Request() req, @Body() updateUserDto: UpdateUserDto): Promise<{ user: PublicUser; access_token: string; }> {
     const userId = req.user.userId;
+    this.logger.log(`[UPDATE-ME] 📝 User ID: ${userId} is updating their own profile.`);
     return this.usersService.updateProfile(userId, updateUserDto);
   }
 
@@ -4578,30 +4728,23 @@ export class UsersController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete my account' })
-  @ApiResponse({ status: 204, description: 'Account deleted successfully.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 404, description: 'User not found.' })
   deleteMyAccount(@Request() req): Promise<void> {
     const userId = req.user.userId;
+    this.logger.warn(`[DELETE-ME] 🗑️ User ID: ${userId} is soft-deleting their own account.`);
     return this.usersService.softDeleteUser(userId);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all users' })
-  // --- ИЗМЕНЕНО: Уточняем тип возвращаемых данных для Swagger и TypeScript ---
-  @ApiResponse({ status: 200, description: 'Return a paginated list of users.' })
-  findAll(
-    @Query(new ValidationPipe({ transform: true, forbidNonWhitelisted: true })) query: FindAllUsersDto
-  ): Promise<{ data: PublicUser[], total: number }> { // <-- Уточняем тип
+  findAll(@Query(new ValidationPipe({ transform: true, forbidNonWhitelisted: true })) query: FindAllUsersDto): Promise<{ data: PublicUser[], total: number }> {
+    this.logger.verbose(`[GET-ALL] 🔎 Fetching all users with query: ${JSON.stringify(query)}`);
     return this.usersService.findAll(query);
   }
 
   @Get(':identifier')
   @ApiOperation({ summary: 'Get a single user by ID or slug' })
-  @ApiResponse({ status: 200, description: 'Return a single user.', type: User })
-  @ApiResponse({ status: 404, description: 'User not found.' })
   findOne(@Param('identifier') identifier: string) {
-    // Пробуем преобразовать в число. Если получается - ищем по ID, если нет - по slug (строке)
+    this.logger.verbose(`[GET-ONE] 🔎 Fetching user with identifier: '${identifier}'`);
     const idAsNumber = parseInt(identifier, 10);
     const queryIdentifier = isNaN(idAsNumber) ? identifier : idAsNumber;
     return this.usersService.findOne(queryIdentifier);
@@ -4610,32 +4753,15 @@ export class UsersController {
   @Post('me/avatar')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({
-      destination: './uploads/avatars',
-      filename: generateUniqueFilename,
-    }),
-  }))
-  async uploadAvatar(
-    @Request() req,
-    @UploadedFile(
-      // --- ИЗМЕНЕНО: Убираем FileTypeValidator, оставляем только проверку размера ---
-      new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5 MB
-        ],
-        // Делаем пайп опциональным, чтобы наша ручная проверка могла выполниться первой
-        fileIsRequired: true,
-      }),
-    ) file: Express.Multer.File,
-  ) {
-
+  @UseInterceptors(FileInterceptor('file', { storage: diskStorage({ destination: './uploads/avatars', filename: generateUniqueFilename }) }))
+  async uploadAvatar(@Request() req, @UploadedFile(new ParseFilePipe({ validators: [new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 })], fileIsRequired: true })) file: Express.Multer.File) {
+    const userId = req.user.userId;
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
+      this.logger.warn(`[UPLOAD-AVATAR-FAIL] 🚫 User ID: ${userId} uploaded an invalid file type: ${file.mimetype}`);
       throw new BadRequestException(`Invalid file type. Only JPEG, PNG, and GIF are allowed.`);
     }
-
-    const userId = req.user.userId;
+    this.logger.log(`[UPLOAD-AVATAR] 🖼️ User ID: ${userId} is uploading a new avatar: ${file.filename}`);
     const avatarUrl = `/uploads/avatars/${file.filename}`;
     return this.usersService.updateAvatar(userId, avatarUrl);
   }
@@ -4643,45 +4769,27 @@ export class UsersController {
   @Post('me/banner')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({
-      destination: './uploads/banners',
-      filename: generateUniqueFilename,
-    }),
-  }))
-  async uploadBanner(
-    @Request() req,
-    @UploadedFile(
-      // --- ИЗМЕНЕНО: Убираем FileTypeValidator ---
-      new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }), // 10 MB
-        ],
-        fileIsRequired: true,
-      }),
-    ) file: Express.Multer.File,
-  ) {
-
-    // --- ДОБАВЛЕНО: Ручная, надежная проверка MIME-типа ---
+  @UseInterceptors(FileInterceptor('file', { storage: diskStorage({ destination: './uploads/banners', filename: generateUniqueFilename }) }))
+  async uploadBanner(@Request() req, @UploadedFile(new ParseFilePipe({ validators: [new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 })], fileIsRequired: true })) file: Express.Multer.File) {
+    const userId = req.user.userId;
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
+      this.logger.warn(`[UPLOAD-BANNER-FAIL] 🚫 User ID: ${userId} uploaded an invalid file type: ${file.mimetype}`);
       throw new BadRequestException(`Invalid file type. Only JPEG, PNG, and GIF are allowed.`);
     }
-
-    const userId = req.user.userId;
+    this.logger.log(`[UPLOAD-BANNER] 🖼️ User ID: ${userId} is uploading a new banner: ${file.filename}`);
     const bannerUrl = `/uploads/banners/${file.filename}`;
     return this.usersService.updateBanner(userId, bannerUrl);
   }
 
-   @Post('me/unlink-minecraft')
+  @Post('me/unlink-minecraft')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Unlink Minecraft account from my profile' })
-  @ApiResponse({ status: 200, description: 'Minecraft account unlinked successfully.', type: UpdateProfileResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   unlinkMinecraftAccount(@Request() req) {
     const userId = req.user.userId;
+    this.logger.log(`[UNLINK-MC] 🔗 User ID: ${userId} is unlinking their Minecraft account.`);
     return this.usersService.unlinkMinecraftAccount(userId);
   }
 }
@@ -4717,67 +4825,67 @@ export class UsersModule { }
 
 --- START FILE: backend/src/users/users.service.ts ---
 
-import { Injectable, NotFoundException, ConflictException, ForbiddenException, InternalServerErrorException } from '@nestjs/common';
+// backend/src/users/users.service.ts
+
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not, ILike, FindManyOptions } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
-import { Ranks } from '../common/enums/ranks.enum';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { FindAllUsersDto } from './dto/find-all-users.dto';
-
 import { JwtService } from '@nestjs/jwt';
 import { AdminUpdateUserDto } from 'src/admin/dto/admin-update-user.dto';
-import { RanksService, SystemRanks } from '../ranks/ranks.service'; // <-- ДОБАВЛЕНО
+import { RanksService, SystemRanks } from '../ranks/ranks.service';
 import { Rank } from 'src/ranks/entities/rank.entity';
-
+import { PendingCommand } from 'src/shop/entities/pending-command.entity';
+import { ChatGateway } from 'src/chat/chat.gateway';
 
 export type PublicUser = Omit<User, 'password_hash' | 'validatePassword' | 'deleted_at'>;
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+
+    @InjectRepository(PendingCommand)
+    private pendingCommandsRepository: Repository<PendingCommand>,
+    private readonly chatGateway: ChatGateway,
     private jwtService: JwtService,
-    private ranksService: RanksService, // <-- ДОБАВЛЕНО
+    private ranksService: RanksService,
   ) { }
 
   async create(createUserDto: CreateUserDto): Promise<PublicUser> {
     const { email, username, password } = createUserDto;
-
-    // Считаем, сколько всего пользователей в базе
     const totalUsers = await this.usersRepository.count();
-
-    // Если этот пользователь первый, он должен стать Владельцем (Owner)
     let rankToAssign: Rank;
-    if (totalUsers === 0) {
-      rankToAssign = await this.ranksService.findOwnerRank();
-    } else {
-      // Если пользователи уже есть, выдаем ранг по умолчанию
-      rankToAssign = await this.ranksService.findDefaultRank();
-    }
 
-    if (!rankToAssign) {
-      // Эта проверка на случай, если что-то пошло не так с поиском рангов
+    try {
+      rankToAssign = totalUsers === 0 ? await this.ranksService.findOwnerRank() : await this.ranksService.findDefaultRank();
+    } catch (error) {
+      this.logger.error(`[CREATE-FAIL] 🔥 CRITICAL: Could not find system ranks for new user. Seeding may have failed.`, error.stack);
       throw new InternalServerErrorException('Could not determine rank for new user.');
     }
 
     const existingUserByEmail = await this.usersRepository.findOne({ where: { email } });
     if (existingUserByEmail) {
+      this.logger.warn(`[CREATE-FAIL] ⚠️ Attempt to register with existing email: ${email}`);
       throw new ConflictException('User with this email already exists');
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    const userToCreate = this.usersRepository.create({
-      username: username,
-      email: email,
-      password_hash: hashedPassword,
-      rank: rankToAssign, // <-- Присваиваем нужный ранг
-    });
+    const userToCreate = this.usersRepository.create({ username, email, password_hash: hashedPassword, rank: rankToAssign });
     const savedUser = await this.usersRepository.save(userToCreate);
+
+    if (totalUsers === 0) {
+      this.logger.log(`[CREATE-OWNER] ✅ First user created! Assigning OWNER rank to ${username} (ID: ${savedUser.id})`);
+    } else {
+      this.logger.log(`[CREATE-SUCCESS] ✅ User ${username} successfully created with ID: ${savedUser.id} and DEFAULT rank.`);
+    }
 
     const { password_hash, validatePassword, deleted_at, ...result } = savedUser;
     return result as PublicUser;
@@ -4785,15 +4893,12 @@ export class UsersService {
 
   async updateProfile(userId: number, updateUserDto: UpdateUserDto): Promise<{ user: PublicUser, access_token: string }> {
     const user = await this.usersRepository.findOne({ where: { id: userId } });
-    if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found.`);
-    }
+    if (!user) throw new NotFoundException(`User with ID ${userId} not found.`);
 
     if (updateUserDto.profile_slug) {
-      const existingSlugUser = await this.usersRepository.findOne({
-        where: { profile_slug: updateUserDto.profile_slug, id: Not(userId) }
-      });
+      const existingSlugUser = await this.usersRepository.findOne({ where: { profile_slug: updateUserDto.profile_slug, id: Not(userId) } });
       if (existingSlugUser) {
+        this.logger.warn(`[UPDATE-ME-FAIL] ⚠️ User ID: ${userId} failed to update profile. Slug "${updateUserDto.profile_slug}" is already taken.`);
         throw new ConflictException('This profile URL slug is already taken.');
       }
     }
@@ -4801,23 +4906,23 @@ export class UsersService {
     Object.assign(user, updateUserDto);
     const updatedUser = await this.usersRepository.save(user);
 
-    // Создаем новый токен с обновленными данными (например, с новым username)
     const jwtTokenPayload = { username: updatedUser.username, sub: updatedUser.id, rank: updatedUser.rank };
     const newAccessToken = this.jwtService.sign(jwtTokenPayload);
 
+    this.logger.log(`[UPDATE-ME-SUCCESS] ✅ User ID: ${userId} updated their profile.`);
     const { password_hash, validatePassword, deleted_at, ...publicData } = updatedUser;
-
     return { user: publicData as PublicUser, access_token: newAccessToken };
   }
-
 
   async banUser(userId: number): Promise<PublicUser> {
     const user = await this.usersRepository.findOneBy({ id: userId });
     if (!user) {
+      this.logger.error(`[BAN-FAIL] ❌ Attempted to ban non-existent User ID: ${userId}.`);
       throw new NotFoundException(`User with ID ${userId} not found.`);
     }
     user.is_banned = true;
     const bannedUser = await this.usersRepository.save(user);
+    this.logger.warn(`[BAN-SUCCESS] 🚫 User ID: ${userId} has been banned.`);
     const { password_hash, validatePassword, deleted_at, ...result } = bannedUser;
     return result as PublicUser;
   }
@@ -4825,10 +4930,12 @@ export class UsersService {
   async unbanUser(userId: number): Promise<PublicUser> {
     const user = await this.usersRepository.findOneBy({ id: userId });
     if (!user) {
+      this.logger.error(`[UNBAN-FAIL] ❌ Attempted to unban non-existent User ID: ${userId}.`);
       throw new NotFoundException(`User with ID ${userId} not found.`);
     }
     user.is_banned = false;
     const unbannedUser = await this.usersRepository.save(user);
+    this.logger.log(`[UNBAN-SUCCESS] ✅ User ID: ${userId} has been unbanned.`);
     const { password_hash, validatePassword, deleted_at, ...result } = unbannedUser;
     return result as PublicUser;
   }
@@ -4836,100 +4943,80 @@ export class UsersService {
   async softDeleteUser(userId: number): Promise<void> {
     const result = await this.usersRepository.softDelete(userId);
     if (result.affected === 0) {
+      this.logger.error(`[DELETE-ME-FAIL] ❌ Attempted to soft-delete non-existent User ID: ${userId}.`);
       throw new NotFoundException(`User with ID ${userId} not found.`);
     }
+    this.logger.warn(`[DELETE-ME-SUCCESS] 🗑️ User ID: ${userId} was soft-deleted.`);
   }
 
   async adminUpdateUser(targetUserId: number, dto: AdminUpdateUserDto, actorId: number): Promise<PublicUser> {
-
-    // 1. Находим и пользователя, которого меняют, и того, кто меняет (актора)
+    this.logger.log(`[ADMIN-UPDATE] 📝 Admin ID: ${actorId} is attempting to update User ID: ${targetUserId}`);
     const [targetUser, actor] = await Promise.all([
       this.usersRepository.findOne({ where: { id: targetUserId }, relations: ['rank'] }),
       this.usersRepository.findOne({ where: { id: actorId }, relations: ['rank'] })
     ]);
-
-    if (!targetUser) {
-      throw new NotFoundException(`User with ID ${targetUserId} not found.`);
-    }
-    if (!actor) {
-      throw new ForbiddenException('Actor performing the action not found.');
+    if (!targetUser || !actor) {
+      this.logger.error(`[ADMIN-UPDATE-FAIL] ❌ Target User (ID: ${targetUserId}) or Actor (ID: ${actorId}) not found.`);
+      throw new NotFoundException(`Target user or actor not found.`);
     }
 
-    // 2. Проверяем, не пытается ли актор изменить кого-то равного или выше по рангу
-    // Владелец может редактировать всех, кроме самого себя.
     if (actor.id !== targetUser.id && actor.rank.power_level <= targetUser.rank.power_level) {
+      this.logger.warn(`[ADMIN-UPDATE-FORBIDDEN] 🚫 Admin ID: ${actorId} (Power: ${actor.rank.power_level}) denied modifying User ID: ${targetUserId} (Power: ${targetUser.rank.power_level}).`);
       throw new ForbiddenException('You cannot modify a user with an equal or higher rank.');
     }
 
-    // 3. Если в запросе есть изменение ранга, применяем его с доп. проверками
     if (dto.rank_id) {
       const newRank = await this.ranksService.findOne(dto.rank_id);
-
-      // 4. Проверяем, имеет ли актор право назначать этот ранг
-      // Можно назначать только ранги с power_level строго меньше, чем у себя
       if (actor.rank.power_level <= newRank.power_level) {
+        this.logger.warn(`[ADMIN-UPDATE-FORBIDDEN] 🚫 Admin ID: ${actorId} (Power: ${actor.rank.power_level}) denied assigning Rank "${newRank.name}" (Power: ${newRank.power_level}).`);
         throw new ForbiddenException(`You do not have permission to assign the rank "${newRank.name}".`);
       }
       targetUser.rank = newRank;
     }
 
-    // 5. Применяем другие возможные изменения (например, репутацию)
     if (dto.reputation_count !== undefined) {
       targetUser.reputation_count = dto.reputation_count;
     }
 
-    // Сохраняем все изменения
     const updatedUser = await this.usersRepository.save(targetUser);
-
+    this.logger.log(`[ADMIN-UPDATE-SUCCESS] ✅ User ID: ${targetUserId} was successfully updated by Admin ID: ${actorId}.`);
     const { password_hash, validatePassword, deleted_at, ...result } = updatedUser;
     return result as PublicUser;
   }
 
   async findAll(queryDto: FindAllUsersDto): Promise<{ data: PublicUser[], total: number }> {
     const { search, order = 'DESC', sortBy: requestedSortBy = 'first_login', page = 1, limit = 10 } = queryDto;
-
+    this.logger.verbose(`[GET-ALL] 🔎 Finding all users with query: ${JSON.stringify(queryDto)}`);
     const allowedSortFields: (keyof User)[] = ['username', 'reputation_count', 'first_login'];
     const sortBy = allowedSortFields.includes(requestedSortBy as keyof User) ? requestedSortBy : 'first_login';
-
     const findOptions: FindManyOptions<User> = {
       relations: ['rank'],
-      order: {
-        [sortBy]: order,
-      },
-      take: limit, // <-- Взять 'limit' записей
-      skip: (page - 1) * limit, // <-- Пропустить (page - 1) * limit записей
+      order: { [sortBy]: order },
+      take: limit,
+      skip: (page - 1) * limit,
     };
-
     if (search) {
       findOptions.where = { username: ILike(`%${search}%`) };
     }
 
-    // Используем findAndCount, который возвращает массив с данными и общее количество
     const [users, total] = await this.usersRepository.findAndCount(findOptions);
-
+    this.logger.verbose(`[DB-RESULT] 💾 Found ${total} total users, returning ${users.length}.`);
     const publicUsers = users.map(user => {
       const { password_hash, validatePassword, deleted_at, ...result } = user;
       return result as PublicUser;
     });
-
-    // Возвращаем объект с данными и общим количеством
-    return {
-      data: publicUsers,
-      total: total,
-    };
+    return { data: publicUsers, total };
   }
 
   async findOne(identifier: string | number): Promise<PublicUser> {
-    // Проверяем, является ли идентификатор числом или строкой, состоящей только из цифр
+    this.logger.verbose(`[GET-ONE] 🔎 Finding user by identifier: '${identifier}'`);
     const isNumeric = typeof identifier === 'number' || /^\d+$/.test(String(identifier));
-
     const user = await this.usersRepository.findOne({
-      where: isNumeric
-        ? { id: Number(identifier) }
-        : { profile_slug: String(identifier) },
+      where: isNumeric ? { id: Number(identifier) } : [{ profile_slug: String(identifier) }, { username: String(identifier) }],
+      relations: ['rank'],
     });
-
     if (!user) {
+      this.logger.warn(`[GET-ONE-FAIL] ⚠️ User with identifier '${identifier}' not found.`);
       throw new NotFoundException(`User with identifier '${identifier}' not found`);
     }
 
@@ -4937,136 +5024,99 @@ export class UsersService {
     return result as PublicUser;
   }
 
-  async findOneByUsername(username: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { username } });
-  }
-
   async findOneWithPasswordByEmail(email: string): Promise<User | null> {
-    return this.usersRepository.createQueryBuilder("user")
-      .addSelect("user.password_hash")
-      .where("user.email = :email", { email })
-      .getOne();
+    this.logger.verbose(`[DB-QUERY] 🤫 Finding user by email to get password hash for: ${email}`);
+    return this.usersRepository.createQueryBuilder("user").addSelect("user.password_hash").where("user.email = :email", { email }).getOne();
   }
 
   async updatePassword(userId: number, newHashedPassword: string): Promise<void> {
+    this.logger.log(`[PWD-UPDATE] 🔑 Updating password hash in DB for User ID: ${userId}.`);
     await this.usersRepository.update(userId, { password_hash: newHashedPassword });
   }
 
   async findOneWithPasswordById(id: number): Promise<User | null> {
-    return this.usersRepository.createQueryBuilder("user")
-      .addSelect("user.password_hash")
-      .where("user.id = :id", { id })
-      .getOne();
+    this.logger.verbose(`[DB-QUERY] 🤫 Finding user by ID to get password hash for: ${id}`);
+    return this.usersRepository.createQueryBuilder("user").addSelect("user.password_hash").where("user.id = :id", { id }).getOne();
   }
 
   async findUserEntityById(id: number): Promise<User | null> {
+    this.logger.verbose(`[DB-QUERY] 👤 Finding full user entity by ID: ${id}`);
     return this.usersRepository.findOneBy({ id });
   }
 
   async updateAvatar(userId: number, avatarUrl: string): Promise<User> {
     const user = await this.usersRepository.findOneBy({ id: userId });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+    if (!user) throw new NotFoundException('User not found');
     user.pfp_url = avatarUrl;
+    this.logger.log(`[AVATAR-UPDATE] ✅ Updated avatar URL for User ID: ${userId}.`);
     return this.usersRepository.save(user);
   }
 
-  // --- НОВЫЙ МЕТОД: Обновление URL баннера ---
   async updateBanner(userId: number, bannerUrl: string): Promise<User> {
     const user = await this.usersRepository.findOneBy({ id: userId });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+    if (!user) throw new NotFoundException('User not found');
     user.banner_url = bannerUrl;
+    this.logger.log(`[BANNER-UPDATE] ✅ Updated banner URL for User ID: ${userId}.`);
     return this.usersRepository.save(user);
-  }
-
-  async setMinecraftOnlineStatus(minecraftUuid: string, isOnline: boolean): Promise<User | null> {
-    const user = await this.usersRepository.findOneBy({ minecraft_uuid: minecraftUuid });
-    if (user) {
-      user.is_minecraft_online = isOnline;
-      return this.usersRepository.save(user);
-    }
-    return null;
-  }
-
-  async findUserByMinecraftUuid(uuid: string): Promise<User | null> {
-    return this.usersRepository.findOneBy({ minecraft_uuid: uuid });
-  }
-
-  async findOneByMinecraftUsername(mcUsername: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { minecraft_username: mcUsername } });
   }
 
   async syncRankFromPlugin(minecraftUuid: string, rankName: string): Promise<void> {
-    if (!minecraftUuid || !rankName) {
-      // Игнорируем, если не пришли нужные данные
-      return;
-    }
-
-    // 1. Находим пользователя в нашей базе данных по его UUID из Minecraft
+    if (!minecraftUuid || !rankName) return;
     const user = await this.usersRepository.findOneBy({ minecraft_uuid: minecraftUuid });
-
     if (!user) {
-      // Это нормальная ситуация: ранг мог поменяться у игрока,
-      // который не привязал свой аккаунт к сайту. Просто логируем и выходим.
+      this.logger.verbose(`[RANK-SYNC-SKIP] ➡️ Skipping rank sync for UUID ${minecraftUuid}. User not linked to a website account.`);
       return;
     }
-
-    // 2. Находим ранг в таблице ranks по имени, которое прислал плагин.
-    // Используем ILike для регистронезависимого поиска (например, "vip" и "VIP" будут считаться одинаковыми).
     const rank = await this.ranksService.findRankBySystemName(rankName);
-
     if (!rank) {
-      // Это ошибка конфигурации: ранг в LuckPerms не совпадает с рангом в базе данных сайта.
-      // Это важно залогировать, чтобы администратор мог исправить.
-      console.warn(`[Rank Sync] Could not find a rank named "${rankName}" in the database for user ${user.username} (ID: ${user.id}).`);
+      this.logger.warn(`[RANK-SYNC-FAIL] ⚠️ Could not find a rank with system_name "${rankName}" in the database for user ${user.username} (ID: ${user.id}).`);
       return;
     }
-
-    // 3. Если пользователь и ранг найдены, и ранг нужно обновить
     if (user.rank_id !== rank.id) {
-      user.rank = rank; // Присваиваем новую сущность ранга
+      user.rank = rank;
       await this.usersRepository.save(user);
+      this.logger.log(`[RANK-SYNC-SUCCESS] ✅ Synced rank for User ID: ${user.id} to "${rank.name}".`);
     }
   }
 
   async unlinkMinecraftAccount(userId: number): Promise<{ user: PublicUser, access_token: string }> {
     const user = await this.usersRepository.findOneBy({ id: userId });
-
-    if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found.`);
-    }
-
-    // Очищаем поля, связанные с Minecraft
+    if (!user) throw new NotFoundException(`User with ID ${userId} not found.`);
     user.minecraft_uuid = null;
     user.minecraft_username = null;
     user.is_minecraft_online = false;
-
     const updatedUser = await this.usersRepository.save(user);
-
-    // Генерируем новый токен, чтобы фронтенд сразу обновил данные пользователя
     const jwtTokenPayload = { username: updatedUser.username, sub: updatedUser.id, rank: updatedUser.rank };
     const newAccessToken = this.jwtService.sign(jwtTokenPayload);
-
+    this.logger.log(`[UNLINK-SUCCESS] ✅ Unlinked Minecraft account for User ID: ${userId}.`);
     const { password_hash, validatePassword, deleted_at, ...publicData } = updatedUser;
     return { user: publicData as PublicUser, access_token: newAccessToken };
   }
 
   async findById(id: number): Promise<User | null> {
-    return this.usersRepository.findOne({
-      where: { id },
-      relations: ['rank'], // Загружаем связанный ранг, это может понадобиться
-    });
+    this.logger.verbose(`[DB-QUERY] 👤 Finding user by ID: ${id} with rank.`);
+    return this.usersRepository.findOne({ where: { id }, relations: ['rank'] });
   }
 
   async updateOnlineStatus(minecraftUuid: string, isOnline: boolean): Promise<void> {
-    const user = await this.usersRepository.findOne({ where: { minecraft_uuid: minecraftUuid } });
-    if (user) {
-      user.is_minecraft_online = isOnline;
-      await this.usersRepository.save(user);
-    }
+    this.logger.verbose(`[MC-STATUS-UPDATE] 🚦 Updating online status for MC UUID: ${minecraftUuid} to ${isOnline}.`);
+    // Используем `update` для большей производительности, так как нам не нужно возвращать всего юзера
+    await this.usersRepository.update({ minecraft_uuid: minecraftUuid }, { is_minecraft_online: isOnline });
+  }
+
+  async findOneByUsername(username: string): Promise<User | null> {
+    this.logger.verbose(`[DB-QUERY] 👤 Finding user by username: ${username}`);
+    return this.usersRepository.findOne({ where: { username } });
+  }
+
+  async findUserByMinecraftUuid(uuid: string): Promise<User | null> {
+    this.logger.verbose(`[DB-QUERY] 🎮 Finding user by MC UUID: ${uuid}`);
+    return this.usersRepository.findOneBy({ minecraft_uuid: uuid });
+  }
+
+  async findOneByMinecraftUsername(mcUsername: string): Promise<User | null> {
+    this.logger.verbose(`[DB-QUERY] 🎮 Finding user by MC Username: ${mcUsername}`);
+    return this.usersRepository.findOne({ where: { minecraft_username: mcUsername } });
   }
 }
 --- END FILE: backend/src/users/users.service.ts ---
@@ -5140,6 +5190,8 @@ export class Vote {
 
 --- START FILE: backend/src/votes/votes.controller.ts ---
 
+// backend/src/votes/votes.controller.ts
+
 import {
   Controller,
   Post,
@@ -5150,6 +5202,7 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
+  Logger, // <-- Добавлено
 } from '@nestjs/common';
 import { VotesService } from './votes.service';
 import { CreateVoteDto } from './dto/create-vote.dto';
@@ -5161,6 +5214,8 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class VotesController {
+  private readonly logger = new Logger(VotesController.name);
+
   constructor(private readonly votesService: VotesService) {}
 
   @Post('/posts/:id')
@@ -5172,6 +5227,7 @@ export class VotesController {
     @Body() createVoteDto: CreateVoteDto,
   ) {
     const voterId = req.user.userId;
+    this.logger.log(`[VOTE-POST] 👍 User ID: ${voterId} is voting on Post ID: ${id} with value: ${createVoteDto.value}`);
     return this.votesService.castVote(voterId, 'post', id, createVoteDto.value);
   }
 
@@ -5184,6 +5240,7 @@ export class VotesController {
     @Body() createVoteDto: CreateVoteDto,
   ) {
     const voterId = req.user.userId;
+    this.logger.log(`[VOTE-COMMENT] 👍 User ID: ${voterId} is voting on Comment ID: ${id} with value: ${createVoteDto.value}`);
     return this.votesService.castVote(voterId, 'comment', id, createVoteDto.value);
   }
 }
@@ -5214,7 +5271,9 @@ export class VotesModule {}
 
 --- START FILE: backend/src/votes/votes.service.ts ---
 
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+// backend/src/votes/votes.service.ts
+
+import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Vote } from './entities/vote.entity';
@@ -5222,11 +5281,10 @@ import { User } from '../users/entities/user.entity';
 import { Post } from '../posts/entities/post.entity';
 import { Comment } from '../comments/entities/comment.entity';
 
-// --- ИЗМЕНЕНИЕ: Этот тип больше не нужен, мы будем полагаться на выведение типов TypeScript ---
-// type VotableEntity = Post | Comment;
-
 @Injectable()
 export class VotesService {
+  private readonly logger = new Logger(VotesService.name);
+
   constructor(
     @InjectRepository(Vote)
     private votesRepository: Repository<Vote>,
@@ -5235,7 +5293,7 @@ export class VotesService {
     @InjectRepository(Comment)
     private commentsRepository: Repository<Comment>,
     private dataSource: DataSource,
-  ) {}
+  ) { }
 
   async castVote(
     voterId: number,
@@ -5244,68 +5302,68 @@ export class VotesService {
     value: number,
   ) {
     return this.dataSource.transaction(async (manager) => {
-      // --- ИЗМЕНЕНИЕ: Убираем строгую типизацию, позволяя TypeScript вывести тип как (Post | Comment | null) ---
-      let target; 
-      
+      this.logger.verbose(`[VOTE-TX-START] 🗳️  User ID: ${voterId} casting vote on ${targetType} ID: ${targetId} (Value: ${value}).`);
+
+      let target: Post | Comment | null;
+
       if (targetType === 'post') {
         target = await manager.findOne(Post, { where: { id: targetId }, relations: ['author'] });
       } else {
         target = await manager.findOne(Comment, { where: { id: targetId }, relations: ['author'] });
       }
 
-      // Эта проверка теперь корректно отсекает случай, когда target === null
       if (!target) {
+        this.logger.warn(`[VOTE-FAIL] ⚠️  Target ${targetType} with ID ${targetId} not found.`);
         throw new NotFoundException(`${targetType} with ID ${targetId} not found.`);
       }
 
       if (!target.author) {
+        // Эта ситуация маловероятна, если в БД все консистентно, но проверка важна
+        this.logger.error(`[VOTE-FAIL] ❌ Author for ${targetType} with ID ${targetId} not found. Content seems orphaned.`);
         throw new NotFoundException(`Author for ${targetType} with ID ${targetId} not found.`);
       }
       if (target.author.id === voterId) {
+        this.logger.warn(`[VOTE-DENIED] 🚫 User ID: ${voterId} attempted to vote for their own ${targetType} (ID: ${targetId}).`);
         throw new ForbiddenException('You cannot vote for your own content.');
       }
 
       const author = target.author;
-
       const existingVote = await manager.findOne(Vote, {
-        where: {
-          voter: { id: voterId },
-          [targetType]: { id: targetId },
-        },
+        where: { voter: { id: voterId }, [targetType]: { id: targetId } },
       });
 
       let reputationChange = 0;
 
       if (existingVote) {
         if (existingVote.value === value) {
+          this.logger.log(`[VOTE-REMOVE] 🗑️ User ID: ${voterId} is removing their vote from ${targetType} ID: ${targetId}.`);
           await manager.remove(Vote, existingVote);
           reputationChange = -value;
         } else {
+          this.logger.log(`[VOTE-CHANGE] ↔️  User ID: ${voterId} is changing their vote on ${targetType} ID: ${targetId} from ${existingVote.value} to ${value}.`);
           reputationChange = value - existingVote.value;
           existingVote.value = value;
           await manager.save(Vote, existingVote);
         }
       } else {
-        const newVote = manager.create(Vote, {
-          voter: { id: voterId },
-          [targetType]: { id: targetId },
-          value,
-        });
+        this.logger.log(`[VOTE-NEW] ✨ User ID: ${voterId} is casting a new vote on ${targetType} ID: ${targetId}.`);
+        const newVote = manager.create(Vote, { voter: { id: voterId }, [targetType]: { id: targetId }, value });
         await manager.save(Vote, newVote);
         reputationChange = value;
       }
 
       if (reputationChange !== 0) {
+        this.logger.log(`[VOTE-REPUTATION] 📈 Updating reputation for author ID: ${author.id} by ${reputationChange}.`);
         await manager.increment(User, { id: author.id }, 'reputation_count', reputationChange);
       }
-      
+
       const votes = await manager.find(Vote, { where: { [targetType]: { id: targetId } } });
       const likes = votes.filter(v => v.value === 1).length;
       const dislikes = votes.filter(v => v.value === -1).length;
 
+      this.logger.log(`[VOTE-TX-SUCCESS] ✅ Vote transaction for ${targetType} ID: ${targetId} completed. New score: ${likes - dislikes}`);
       return { likes, dislikes };
     });
-    
   }
 }
 --- END FILE: backend/src/votes/votes.service.ts ---
@@ -12814,6 +12872,8 @@ services:
     container_name: flamewall_backend_dev
     ports:
       - "3001:3000" # <-- ВОТ РЕШЕНИЕ: внутренний порт 3000 "смотрит" наружу через порт 3001
+    environment:
+      - FORCE_COLOR=1 # Значение может быть 1, 2 или 3. 1 - базовые цвета.
     volumes:
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
@@ -12890,9 +12950,11 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile.prod
-    image: maximceahur/flamewall-backend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+    image: flamewall-backend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_backend_prod
     restart: unless-stopped
+    environment:
+      - FORCE_COLOR=1 # Значение может быть 1, 2 или 3. 1 - базовые цвета.
     env_file: ./.env
     volumes:
       - ./uploads:/usr/src/app/uploads
@@ -12907,7 +12969,7 @@ services:
       dockerfile: frontend/Dockerfile.prod
       args:
         - REACT_APP_FULL_API_URL=${REACT_APP_FULL_API_URL}
-    image: maximceahur/flamewall-frontend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+    image: flamewall-frontend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_frontend_prod
     restart: unless-stopped
     networks:
