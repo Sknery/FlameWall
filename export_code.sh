@@ -24,7 +24,8 @@ FILES_TO_EXPORT=(
     "backend/Dockerfile.prod"
     "frontend/Dockerfile"
     "frontend/Dockerfile.prod"
-    "package.json" 
+    "frontend/vite.config.js"
+    "backend/package.json"
     "frontend/package.json"
     "FlameWallBridge/pom.xml" # <-- ДОБАВЛЕНО: Файл конфигурации Maven для плагина
 )
