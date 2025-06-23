@@ -24,7 +24,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile.prod
       args:
-        - REACT_APP_FULL_API_URL=${REACT_APP_FULL_API_URL}
+        - VITE_FULL_API_URL=${VITE_FULL_API_URL}
     image: flamewall-frontend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_frontend_prod
     restart: unless-stopped
