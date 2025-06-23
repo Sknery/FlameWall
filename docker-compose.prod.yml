@@ -48,7 +48,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
-   volumes:
+    volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       # --- ИЗМЕНЕНИЕ 2: Подключаем ТОТ ЖЕ САМЫЙ именованный volume ---
       # Nginx будет читать файлы из этого общего хранилища
@@ -64,7 +64,7 @@ services:
 volumes:
   postgres_data:
   uploads_data:
-  
+
 networks:
   flamewall_net:
     driver: bridge
