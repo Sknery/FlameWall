@@ -1,5 +1,5 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Mon Jun 23 15:22:55 EEST 2025
+PROJECT SNAPSHOT CREATED ON: Mon Jun 23 21:58:57 EEST 2025
 ===============================================
 
 
@@ -180,6 +180,8 @@ import { VotesModule } from './votes/votes.module';
 import { LinkCode } from './linking/entities/link-code.entity';
 import { RanksModule } from './ranks/ranks.module';
 import { Rank } from './ranks/entities/rank.entity';
+import { PagesModule } from './pages/pages.module';
+import { CustomPage } from './pages/entities/page.entity';
 
 @Module({
   imports: [
@@ -203,7 +205,7 @@ import { Rank } from './ranks/entities/rank.entity';
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_DATABASE'),
         entities: [
-          User, ShopItem, Post, Friendship, Message, News, Notification, Comment, Purchase, LinkCode, Rank// <-- ДОБАВЛЯЕМ СЮДА
+          User, ShopItem, Post, Friendship, Message, News, Notification, Comment, Purchase, LinkCode, Rank, CustomPage// <-- ДОБАВЛЯЕМ СЮДА
         ],
         synchronize: false,
         autoLoadEntities: true,
@@ -224,7 +226,8 @@ import { Rank } from './ranks/entities/rank.entity';
     CommentsModule,
     VotesModule,
     MessagesModule,
-    RanksModule
+    RanksModule,
+    PagesModule
   ],
   controllers: [AppController],
   providers: [AppService], // <-- Удалили ChatGateway отсюда
@@ -2677,6 +2680,31 @@ export class AddRankCommandTemplates1750613617027 implements MigrationInterface 
 
 
 
+--- START FILE: backend/src/migrations/1750691690126-CreatePagesTable.ts ---
+
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+export class CreatePagesTable1750691690126 implements MigrationInterface {
+    name = 'CreatePagesTable1750691690126'
+
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`CREATE TABLE "custom_pages" ("id" SERIAL NOT NULL, "title" character varying(255) NOT NULL, "slug" character varying(255) NOT NULL, "content" text NOT NULL, "is_published" boolean NOT NULL DEFAULT false, "author_id" integer NOT NULL, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_24ff72a94da2290c8a791a030ef" UNIQUE ("slug"), CONSTRAINT "PK_9bbf7c05420c7434f117c934345" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_24ff72a94da2290c8a791a030e" ON "custom_pages" ("slug") `);
+        await queryRunner.query(`ALTER TABLE "custom_pages" ADD CONSTRAINT "FK_6e6edd09635b73b1326136f3f1a" FOREIGN KEY ("author_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+    }
+
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "custom_pages" DROP CONSTRAINT "FK_6e6edd09635b73b1326136f3f1a"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_24ff72a94da2290c8a791a030e"`);
+        await queryRunner.query(`DROP TABLE "custom_pages"`);
+    }
+
+}
+
+--- END FILE: backend/src/migrations/1750691690126-CreatePagesTable.ts ---
+
+
+
 --- START FILE: backend/src/news/dto/create-news.dto.ts ---
 
 import { IsNotEmpty, IsString, MinLength, MaxLength } from 'class-validator';
@@ -3234,6 +3262,315 @@ export class NotificationsService {
   }
 }
 --- END FILE: backend/src/notifications/notifications.service.ts ---
+
+
+
+--- START FILE: backend/src/pages/dto/create-page.dto.ts ---
+
+// backend/src/pages/dto/create-page.dto.ts
+import { IsString, IsNotEmpty, MinLength, MaxLength } from 'class-validator';
+
+export class CreatePageDto {
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  @MaxLength(255)
+  title: string;
+
+  @IsString()
+  @IsNotEmpty()
+  content: string;
+}
+--- END FILE: backend/src/pages/dto/create-page.dto.ts ---
+
+
+
+--- START FILE: backend/src/pages/dto/update-page.dto.ts ---
+
+// backend/src/pages/dto/update-page.dto.ts
+import { IsString, IsOptional, MinLength, MaxLength, IsBoolean } from 'class-validator';
+import { Matches } from 'class-validator';
+
+export class UpdatePageDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(255)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  content?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  @Matches(/^[a-z0-9-]+$/, {
+    message: 'Slug can only contain lowercase letters, numbers, and hyphens.',
+  })
+  slug?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  is_published?: boolean;
+}
+--- END FILE: backend/src/pages/dto/update-page.dto.ts ---
+
+
+
+--- START FILE: backend/src/pages/entities/page.entity.ts ---
+
+// backend/src/pages/entities/page.entity.ts
+import { User } from '../../users/entities/user.entity';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
+
+@Entity('custom_pages')
+export class CustomPage {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ type: 'varchar', length: 255 })
+  title: string;
+
+  @Index({ unique: true }) // Уникальная ссылка, чтобы не было двух страниц с одинаковым адресом
+  @Column({ type: 'varchar', length: 255, unique: true })
+  slug: string;
+
+  @Column({ type: 'text' }) // Здесь будет храниться HTML-код страницы
+  content: string;
+
+  @Column({ type: 'boolean', default: false })
+  is_published: boolean;
+
+  @Column({ name: 'author_id' })
+  author_id: number;
+
+  @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'author_id' })
+  author: User;
+
+  @CreateDateColumn({ name: 'created_at' })
+  created_at: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updated_at: Date;
+}
+--- END FILE: backend/src/pages/entities/page.entity.ts ---
+
+
+
+--- START FILE: backend/src/pages/pages.controller.ts ---
+
+// backend/src/pages/pages.controller.ts
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, UseGuards, Request, Logger, UseInterceptors, UploadedFile } from '@nestjs/common'; // [!code ++]
+import { FileInterceptor } from '@nestjs/platform-express'; // [!code ++]
+import { diskStorage } from 'multer'; // [!code ++]
+import { extname } from 'path'; // [!code ++]
+import { PagesService } from './pages.service';
+import { CreatePageDto } from './dto/create-page.dto';
+import { UpdatePageDto } from './dto/update-page.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { SystemRanks } from '../ranks/ranks.service';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+
+const generateUniqueFilename = (req, file, callback) => {
+  const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+  const extension = extname(file.originalname);
+  callback(null, `${uniqueSuffix}${extension}`);
+};
+
+@ApiTags('Custom Pages')
+@Controller()
+export class PagesController {
+  private readonly logger = new Logger(PagesController.name);
+  constructor(private readonly pagesService: PagesService) {}
+
+  @Get('p/:slug')
+  @ApiOperation({ summary: 'Get a single published custom page by its slug' })
+  findOnePublic(@Param('slug') slug: string) {
+    this.logger.verbose(`[PUBLIC-REQ] 🗣️ Request for public page /p/${slug}`);
+    return this.pagesService.findOnePublic(slug);
+  }
+
+  @Post('admin/pages')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a new custom page (Admin only)' })
+  create(@Body() createPageDto: CreatePageDto, @Request() req) {
+    this.logger.log(`[ADMIN-REQ] ✨ User ID ${req.user.userId} is creating a new page.`);
+    return this.pagesService.create(createPageDto, req.user.userId);
+  }
+
+  @Get('admin/pages')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get a list of all custom pages (Admin only)' })
+  findAllForAdmin() {
+    this.logger.verbose(`[ADMIN-REQ]  목록 Fetching all pages for admin panel.`);
+    return this.pagesService.findAllForAdmin();
+  }
+  
+  @Get('admin/pages/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get a single page by ID for editing (Admin only)' })
+  findOneForAdmin(@Param('id', ParseIntPipe) id: number) {
+    this.logger.verbose(`[ADMIN-REQ] 📥 Fetching page ${id} for editing.`);
+    return this.pagesService.findOneForAdmin(id);
+  }
+
+  @Patch('admin/pages/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update a custom page (Admin only)' })
+  update(@Param('id', ParseIntPipe) id: number, @Body() updatePageDto: UpdatePageDto) {
+    this.logger.log(`[ADMIN-REQ] ✏️ Updating page ${id}.`);
+    return this.pagesService.update(id, updatePageDto);
+  }
+
+  @Delete('admin/pages/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a custom page (Admin only)' })
+  remove(@Param('id', ParseIntPipe) id: number) {
+    this.logger.warn(`[ADMIN-REQ] ❌ Deleting page ${id}.`);
+    return this.pagesService.remove(id);
+  }
+
+   @Post('admin/pages/upload-image')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  @ApiBearerAuth()
+  @UseInterceptors(FileInterceptor('file', {
+      storage: diskStorage({
+          destination: './uploads/pages', // Сохраняем картинки для страниц в отдельную папку
+          filename: generateUniqueFilename,
+      }),
+  }))
+  uploadFile(@UploadedFile() file: Express.Multer.File) {
+    this.logger.log(`[PAGE-IMAGE-UPLOAD] 🖼️ Uploaded image ${file.filename} for custom pages.`);
+    // Возвращаем публичный URL, по которому картинка будет доступна
+    return { url: `/uploads/pages/${file.filename}` };
+  }
+}
+--- END FILE: backend/src/pages/pages.controller.ts ---
+
+
+
+--- START FILE: backend/src/pages/pages.module.ts ---
+
+// backend/src/pages/pages.module.ts
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { CustomPage } from './entities/page.entity';
+import { User } from '../users/entities/user.entity';
+import { PagesService } from './pages.service';
+import { PagesController } from './pages.controller';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([CustomPage, User])],
+  providers: [PagesService],
+  controllers: [PagesController],
+})
+export class PagesModule {}
+--- END FILE: backend/src/pages/pages.module.ts ---
+
+
+
+--- START FILE: backend/src/pages/pages.service.ts ---
+
+// backend/src/pages/pages.service.ts
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { CustomPage } from './entities/page.entity';
+import { CreatePageDto } from './dto/create-page.dto';
+import { UpdatePageDto } from './dto/update-page.dto';
+import * as DOMPurify from 'dompurify';
+import { JSDOM } from 'jsdom';
+
+@Injectable()
+export class PagesService {
+  private readonly logger = new Logger(PagesService.name);
+  private domPurify;
+
+  constructor(
+    @InjectRepository(CustomPage)
+    private pagesRepository: Repository<CustomPage>,
+  ) {
+    const window = new JSDOM('').window;
+    this.domPurify = DOMPurify(window);
+  }
+
+  async create(createPageDto: CreatePageDto, authorId: number): Promise<CustomPage> {
+    const { title, content } = createPageDto;
+    this.logger.log(`[CREATE] 📄 User ID: ${authorId} is creating a new page titled: "${title}"`);
+
+    const sanitizedContent = this.domPurify.sanitize(content);
+    const slug = title.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '');
+
+    const newPage = this.pagesRepository.create({
+      title,
+      slug,
+      content: sanitizedContent,
+      author_id: authorId,
+      is_published: false,
+    });
+    return this.pagesRepository.save(newPage);
+  }
+
+  findAllForAdmin(): Promise<CustomPage[]> {
+    this.logger.verbose('[GET-ALL-ADMIN] 🔎 Fetching all custom pages for admin panel.');
+    return this.pagesRepository.find({ order: { updated_at: 'DESC' } });
+  }
+  
+  async findOneForAdmin(id: number): Promise<CustomPage> {
+    this.logger.verbose(`[GET-ONE-ADMIN] 🔎 Fetching page ID: ${id} for admin panel.`);
+    const page = await this.pagesRepository.findOneBy({ id });
+    if (!page) throw new NotFoundException(`Page with ID ${id} not found.`);
+    return page;
+  }
+
+  async update(id: number, updatePageDto: UpdatePageDto): Promise<CustomPage> {
+    this.logger.log(`[UPDATE] 📝 Updating page ID: ${id}`);
+    const page = await this.findOneForAdmin(id);
+    if (updatePageDto.content) {
+      updatePageDto.content = this.domPurify.sanitize(updatePageDto.content);
+    }
+    Object.assign(page, updatePageDto);
+    return this.pagesRepository.save(page);
+  }
+
+  async remove(id: number): Promise<void> {
+    this.logger.warn(`[DELETE] 🗑️ Deleting page ID: ${id}`);
+    const result = await this.pagesRepository.delete(id);
+    if (result.affected === 0) throw new NotFoundException(`Page with ID ${id} not found.`);
+  }
+
+  async findOnePublic(slug: string): Promise<CustomPage> {
+    this.logger.verbose(`[GET-PUBLIC] 🔎 Public request for page with slug: ${slug}`);
+    const page = await this.pagesRepository.findOne({ where: { slug, is_published: true } });
+    if (!page) throw new NotFoundException('This page does not exist or is not published.');
+    return page;
+  }
+}
+--- END FILE: backend/src/pages/pages.service.ts ---
 
 
 
@@ -5583,11 +5920,13 @@ import { Box, Typography } from '@mui/joy'; // <-- ДОБАВЛЕНО
 import { ThemeProvider as MuiThemeProvider, createTheme as createMuiTheme } from '@mui/material/styles';
 import AdminShopPage from './pages/AdminShopPage'; // <-- ДОБАВЬ ЭТУ СТРОКУ
 import AdminCreateItemPage from './pages/AdminCreateItemPage'; // <-- ДОБАВЬ ЭТУ СТРОКУ
-
+import AdminCustomPages from './pages/AdminCustomPages';   // [!code ++]
+import AdminEditPage from './pages/AdminEditPage';         // [!code ++]
+import CustomPageView from './pages/CustomPageView';       // [!code ++]
 import axios from 'axios'; // <-- Убедитесь, что axios импортирован
 
 axios.defaults.baseURL = process.env.REACT_APP_API_BASE_URL;
-
+ 
 const muiTheme = createMuiTheme({
   palette: {
     mode: 'dark',
@@ -5626,6 +5965,10 @@ function App() {
                     <Route path="/profile/link-minecraft" element={<ProtectedRoute><LinkMinecraftPage /></ProtectedRoute>} />
                     <Route path="/admin/ranks" element={<ProtectedRoute><AdminRanksPage /></ProtectedRoute>} />
                     <Route path="/shop" element={<ShopPage />} />
+                    <Route path="/admin/pages" element={<ProtectedRoute><AdminCustomPages /></ProtectedRoute>} /> {/* [!code ++] */}
+                    <Route path="/admin/pages/new" element={<ProtectedRoute><AdminEditPage /></ProtectedRoute>} /> {/* [!code ++] */}
+                    <Route path="/admin/pages/:pageId" element={<ProtectedRoute><AdminEditPage /></ProtectedRoute>} /> {/* [!code ++] */}
+                    <Route path="/p/:slug" element={<CustomPageView />} /> {/* [!code ++] */}
                     <Route path="/admin/shop" element={<ProtectedRoute><AdminShopPage /></ProtectedRoute>} /> {/* <-- ВОТ ЭТА СТРОКА */}
                     <Route path="/admin/shop/new" element={<ProtectedRoute><AdminCreateItemPage /></ProtectedRoute>} /> {/* <-- ВОТ ЭТА СТРОКА */}
                     <Route path="/store/ranks" element={
@@ -5777,7 +6120,7 @@ const navItems = [
     {
         name: 'Store', icon: <StorefrontIcon />, subItems: [
             { name: 'Ranks', icon: <AdbIcon />, path: '/store/ranks' },
-            { name: 'Items', icon: <DiamondIcon />, path: '/shop' }, 
+            { name: 'Items', icon: <DiamondIcon />, path: '/shop' },
         ],
     },
     { name: 'Support', icon: <SupportAgentIcon />, path: '/support' },
@@ -5797,7 +6140,8 @@ const adminNavItem = {
         { name: 'User Management', icon: <SupervisedUserCircleIcon />, path: '/admin/users' },
         { name: 'Post Management', icon: <DynamicFeedIcon />, path: '/admin/posts' },
         { name: 'Rank Management', icon: <ShieldIcon />, path: '/admin/ranks' },
-                { name: 'Shop Management', icon: <StorefrontIcon />, path: '/admin/shop' }
+        { name: 'Shop Management', icon: <StorefrontIcon />, path: '/admin/shop' },
+        { name: 'Custom Pages', icon: <ArticleIcon />, path: '/admin/pages' } 
     ],
 };
 
@@ -6013,7 +6357,7 @@ const CollapsiblePushSidebar = ({ children }) => {
                                 <Button component={NavLink} to="/login" variant="outlined" color="primary" size="md">
                                     <Typography sx={{ display: { xs: 'none', sm: 'inline' } }}>Log in</Typography>
                                     <LoginIcon sx={{ display: { sm: 'none' } }} />
-                                </Button>                                
+                                </Button>
                                 <Button component={NavLink} to="/register" variant="outlined" color="primary" size="md">
                                     <Typography sx={{ display: { xs: 'none', sm: 'inline' } }}>Register</Typography>
                                     <GroupAddIcon sx={{ display: { sm: 'none' } }} />
@@ -6352,6 +6696,207 @@ export default PurchaseModal;
 
 
 
+--- START FILE: frontend/src/components/TiptapEditor.js ---
+
+// frontend/src/components/TiptapEditor.js
+import React, { useCallback } from 'react';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Image from '@tiptap/extension-image'; // <-- 1. Импортируем расширение
+
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import { Box, Button, ToggleButtonGroup, Divider, IconButton, Select, Option } from '@mui/joy';
+import { constructImageUrl } from '../utils/url';
+import FontFamily from '@tiptap/extension-font-family'; // <-- 1. Импорт для шрифтов
+import Link from '@tiptap/extension-link';
+import TextAlign from '@tiptap/extension-text-align'; // <-- 1. Импорт выравнивания
+import { Color } from '@tiptap/extension-color';      // <-- 2. Импорт цвета
+import TextStyle from '@tiptap/extension-text-style';  // <-- 3. Импорт стилей
+import Underline from '@tiptap/extension-underline';
+import Strike from '@tiptap/extension-strike';
+import Highlight from '@tiptap/extension-highlight';
+import Superscript from '@tiptap/extension-superscript';
+import Subscript from '@tiptap/extension-subscript';
+
+import LinkIcon from '@mui/icons-material/Link';
+import LinkOffIcon from '@mui/icons-material/LinkOff';
+import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
+import FormatAlignCenterIcon from '@mui/icons-material/FormatAlignCenter';
+import FormatAlignRightIcon from '@mui/icons-material/FormatAlignRight';
+import FormatColorTextIcon from '@mui/icons-material/FormatColorText';
+import FormatUnderlinedIcon from '@mui/icons-material/FormatUnderlined';
+import StrikethroughSIcon from '@mui/icons-material/StrikethroughS';
+import BorderColorIcon from '@mui/icons-material/BorderColor';
+import SuperscriptIcon from '@mui/icons-material/Superscript';
+import SubscriptIcon from '@mui/icons-material/Subscript';
+// Иконки
+import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
+import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
+import HorizontalRuleIcon from '@mui/icons-material/HorizontalRule';
+import ImageIcon from '@mui/icons-material/Image';
+
+const MenuBar = ({ editor }) => {
+    const { authToken } = useAuth(); // Нужен для отправки авторизованного запроса
+
+
+    const setLink = useCallback(() => {
+        const previousUrl = editor.getAttributes('link').href;
+        const url = window.prompt('URL', previousUrl);
+
+        // если пользователь нажал Cancel
+        if (url === null) {
+            return;
+        }
+
+        // если пользователь удалил URL, то убираем ссылку
+        if (url === '') {
+            editor.chain().focus().extendMarkRange('link').unsetLink().run();
+            return;
+        }
+
+        // вставляем или обновляем ссылку
+        editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    }, [editor]);
+
+    if (!editor) return null;
+
+    // --- 2. Логика загрузки изображения ---
+    const addImage = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = async () => {
+            const file = input.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await axios.post('/api/admin/pages/upload-image', formData, {
+                    headers: { Authorization: `Bearer ${authToken}` },
+                });
+
+                // --- 2. ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+                const relativeUrl = response.data.url; // Получаем относительный путь, например /uploads/pages/img.png
+                if (relativeUrl) {
+                    // Превращаем его в полный путь, например http://localhost:3001/uploads/pages/img.png
+                    const fullUrl = constructImageUrl(relativeUrl);
+                    // Вставляем в редактор уже полный, правильный URL
+                    editor.chain().focus().setImage({ src: fullUrl }).run();
+                }
+                // --------------------------
+
+            } catch (error) {
+                console.error('Image upload failed:', error);
+                alert('Image upload failed!');
+            }
+        };
+        input.click();
+    };
+
+    return (
+        <ToggleButtonGroup
+            variant="soft"
+            spacing={0.5}
+            sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider', flexWrap: 'wrap', gap: 0.5 }}
+        >
+            {/* --- 4. Кнопки для заголовков, включая H1 и H4 --- */}
+            <Button onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} value="h1" variant={editor.isActive('heading', { level: 1 }) ? 'solid' : 'plain'}>H1</Button>
+            <Button onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} value="h2" variant={editor.isActive('heading', { level: 2 }) ? 'solid' : 'plain'}>H2</Button>
+            <Button onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} value="h3" variant={editor.isActive('heading', { level: 3 }) ? 'solid' : 'plain'}>H3</Button>
+            <Button onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()} value="h4" variant={editor.isActive('heading', { level: 4 }) ? 'solid' : 'plain'}>H4</Button>
+
+            <Divider orientation="vertical" sx={{ bgcolor: 'divider' }} /> {/* <-- 5. ИСПРАВЛЕННЫЙ ЦВЕТ */}
+
+            {/* --- 6. Выпадающий список для выбора шрифта --- */}
+            <Select
+                size="sm"
+                variant="plain"
+                value={editor.getAttributes('textStyle').fontFamily || 'Inter'}
+                onChange={(e, newValue) => editor.chain().focus().setFontFamily(newValue).run()}
+                sx={{ minWidth: 120 }}
+            >
+                <Option value="Inter">Inter (Default)</Option>
+                <Option value="Arial">Arial</Option>
+                <Option value="Georgia">Georgia</Option>
+                <Option value="Courier New">Courier New</Option>
+            </Select>
+
+            <Divider orientation="vertical" sx={{ bgcolor: 'divider' }} /> {/* <-- 5. ИСПРАВЛЕННЫЙ ЦВЕТ */}
+
+            <Button onClick={() => editor.chain().focus().toggleBold().run()} value="bold" variant={editor.isActive('bold') ? 'solid' : 'plain'}><b>B</b></Button>
+            <Button onClick={() => editor.chain().focus().toggleItalic().run()} value="italic" variant={editor.isActive('italic') ? 'solid' : 'plain'}><i>I</i></Button>
+            <Button onClick={() => editor.chain().focus().toggleUnderline().run()} value="underline" variant={editor.isActive('underline') ? 'solid' : 'plain'}><FormatUnderlinedIcon /></Button>
+            <Button onClick={() => editor.chain().focus().toggleStrike().run()} value="strike" variant={editor.isActive('strike') ? 'solid' : 'plain'}><StrikethroughSIcon /></Button>
+            <Button onClick={() => editor.chain().focus().toggleHighlight({ color: '#ffcc00' }).run()} value="highlight" variant={editor.isActive('highlight') ? 'solid' : 'plain'}><BorderColorIcon /></Button>
+            <IconButton component="label" value="color" aria-label="color">
+                <FormatColorTextIcon />
+                <input type="color" onInput={(event) => editor.chain().focus().setColor(event.target.value).run()} value={editor.getAttributes('textStyle').color || '#ffffff'} style={{ position: 'absolute', opacity: 0 }} />
+            </IconButton>
+
+            <Divider orientation="vertical" sx={{ bgcolor: 'divider' }} /> {/* <-- 5. ИСПРАВЛЕННЫЙ ЦВЕТ */}
+
+            <Button onClick={() => editor.chain().focus().setTextAlign('left').run()} value="left" variant={editor.isActive({ textAlign: 'left' }) ? 'solid' : 'plain'}><FormatAlignLeftIcon /></Button>
+            <Button onClick={() => editor.chain().focus().setTextAlign('center').run()} value="center" variant={editor.isActive({ textAlign: 'center' }) ? 'solid' : 'plain'}><FormatAlignCenterIcon /></Button>
+            <Button onClick={() => editor.chain().focus().setTextAlign('right').run()} value="right" variant={editor.isActive({ textAlign: 'right' }) ? 'solid' : 'plain'}><FormatAlignRightIcon /></Button>
+
+            <Divider orientation="vertical" sx={{ bgcolor: 'divider' }} /> {/* <-- 5. ИСПРАВЛЕННЫЙ ЦВЕТ */}
+
+            <Button onClick={setLink} value="link" variant={editor.isActive('link') ? 'solid' : 'plain'}><LinkIcon /></Button>
+            <Button onClick={() => editor.chain().focus().unsetLink().run()} value="unlink" disabled={!editor.isActive('link')}><LinkOffIcon /></Button>
+            <Button onClick={addImage} value="image"><ImageIcon /></Button>
+            <Button onClick={() => editor.chain().focus().toggleBlockquote().run()} value="quote" variant={editor.isActive('blockquote') ? 'solid' : 'plain'}>Quote</Button>
+            <Button onClick={() => editor.chain().focus().toggleBulletList().run()} value="ul" variant={editor.isActive('bulletList') ? 'solid' : 'plain'}><FormatListBulletedIcon /></Button>
+            <Button onClick={() => editor.chain().focus().toggleOrderedList().run()} value="ol" variant={editor.isActive('orderedList') ? 'solid' : 'plain'}><FormatListNumberedIcon /></Button>
+            <Button onClick={() => editor.chain().focus().setHorizontalRule().run()} value="hr"><HorizontalRuleIcon /></Button>
+        </ToggleButtonGroup>
+    );
+};
+
+export const TiptapEditor = ({ content, onChange, ...props }) => {
+    const editor = useEditor({
+        extensions: [
+            StarterKit,
+            Image,
+            TextAlign.configure({ types: ['heading', 'paragraph'] }),
+            TextStyle,
+            Color,
+            FontFamily, // <-- 7. Подключаем расширение для шрифтов
+            Link.configure({ // <-- 8. Подключаем и настраиваем расширение для ссылок
+                openOnClick: false, // не открывать ссылку по клику в редакторе
+                autolink: true, // автоматически превращать текст в ссылки
+            }),
+            Underline,
+            Strike,
+            Highlight.configure({ multicolor: true }), // разрешаем разные цвета маркера
+            Superscript,
+            Subscript,
+        ],
+        content: content || '',
+        onUpdate: ({ editor }) => {
+            onChange(editor.getHTML());
+        },
+        editorProps: {
+            attributes: {
+                style: `min-height: 250px; padding: 10px; outline: none; color: var(--joy-palette-text-primary);`,
+            },
+        },
+        ...props,
+    });
+
+    return (
+        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 'sm', overflow: 'hidden' }}>
+            <MenuBar editor={editor} />
+            <EditorContent editor={editor} />
+        </Box>
+    );
+};
+--- END FILE: frontend/src/components/TiptapEditor.js ---
+
+
+
 --- START FILE: frontend/src/components/VoteButtons.js ---
 
 // frontend/src/components/VoteButtons.js
@@ -6483,12 +7028,22 @@ export const AuthProvider = ({ children }) => {
           setAuthToken(token);
 
         } catch (error) {
-          // Если токен невалиден или профиль не загрузился
-          localStorage.removeItem('authToken');
-          delete axios.defaults.headers.common['Authorization'];
-          setUser(null);
-          setAuthToken(null);
+        // Выкидываем пользователя, только если сервер ЯВНО сказал, что мы не авторизованы (401) или доступ запрещен (403).
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+            console.error("Auth Error: Logging out due to 401/403 response.");
+            localStorage.removeItem('authToken');
+            delete axios.defaults.headers.common['Authorization'];
+            setUser(null);
+            setAuthToken(null);
+        } else {
+            // Если это сетевая ошибка (бэкенд еще не поднялся) или другая ошибка сервера (5xx),
+            // мы НЕ выкидываем пользователя. Мы просто не можем подтвердить его сессию в данный момент.
+            // Пользователь увидит индикатор загрузки, а при следующей перезагрузке страницы,
+            // когда бэкенд будет готов, авторизация пройдет успешно.
+            console.error("Could not verify session. Backend might be temporarily unavailable or returning an error.", error);
+            // Важно: мы не вызываем setUser(null) и не стираем токен, если это не ошибка авторизации.
         }
+      }
       } else {
         // Если токена нет, просто устанавливаем user в null
         setUser(null);
@@ -6807,6 +7362,21 @@ code {
     monospace;
 }
 
+/* Эти стили для редактора Tiptap можно оставить, они не мешают */
+.tiptap .ProseMirror img {
+  max-width: 400px;
+  height: auto;
+  display: block;
+  margin-left: 0;
+  margin-right: 0;
+}
+.tiptap .ProseMirror img.ProseMirror-selectednode {
+  max-width: 400px;
+}
+.ProseMirror img {
+  max-width: 100% !important;
+  height: auto !important;
+}
 --- END FILE: frontend/src/index.css ---
 
 
@@ -7007,6 +7577,275 @@ function AdminCreateItemPage() {
 
 export default AdminCreateItemPage;
 --- END FILE: frontend/src/pages/AdminCreateItemPage.js ---
+
+
+
+--- START FILE: frontend/src/pages/AdminCustomPages.js ---
+
+// frontend/src/pages/AdminCustomPages.js
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import {
+    Box, Typography, Button, CircularProgress, Alert, Sheet, Table,
+    IconButton, Tooltip, Link as JoyLink, Chip
+} from '@mui/joy';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import ArticleIcon from '@mui/icons-material/Article';
+
+
+function AdminCustomPages() {
+    const { authToken } = useAuth();
+    const navigate = useNavigate();
+    const [pages, setPages] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    const fetchPages = useCallback(async () => {
+        setLoading(true);
+        try {
+            const response = await axios.get('/api/admin/pages', {
+                headers: { Authorization: `Bearer ${authToken}` },
+            });
+            setPages(response.data);
+        } catch (err) {
+            setError('Failed to load pages.');
+        } finally {
+            setLoading(false);
+        }
+    }, [authToken]);
+
+    useEffect(() => {
+        fetchPages();
+    }, [fetchPages]);
+
+    const handleDelete = async (pageId) => {
+        if (!window.confirm('Are you sure you want to delete this page?')) return;
+        try {
+            await axios.delete(`/api/admin/pages/${pageId}`, {
+                headers: { Authorization: `Bearer ${authToken}` },
+            });
+            fetchPages();
+        } catch (err) {
+            alert('Failed to delete page.');
+        }
+    };
+
+    if (loading) return <CircularProgress />;
+    if (error) return <Alert color="danger">{error}</Alert>;
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography level="h2">Custom Pages</Typography>
+                <Button
+                    component={RouterLink}
+                    to="/admin/pages/new"
+                    startDecorator={<AddIcon />}
+                >
+                    Create Page
+                </Button>
+            </Box>
+            <Sheet variant="outlined" sx={{ borderRadius: 'sm', overflow: 'auto' }}>
+                <Table hoverRow>
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>URL Slug</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {pages.map((page) => (
+                            <tr key={page.id}>
+                                <td>{page.title}</td>
+                                <td>
+                                    <JoyLink component={RouterLink} to={`/p/${page.slug}`} target="_blank" rel="noopener noreferrer">
+                                        /p/{page.slug}
+                                    </JoyLink>
+                                </td>
+                                <td>
+                                    {page.is_published ? (
+                                        <Chip color="success" size="sm">Published</Chip>
+                                    ) : (
+                                        <Chip color="neutral" size="sm">Draft</Chip>
+                                    )}
+                                </td>
+                                <td>
+                                    <Tooltip title="Edit">
+                                        <IconButton size="sm" variant="outlined" color="neutral" onClick={() => navigate(`/admin/pages/${page.id}`)}>
+                                            <EditIcon />
+                                        </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Delete">
+                                        <IconButton size="sm" variant="soft" color="danger" onClick={() => handleDelete(page.id)}>
+                                            <DeleteForeverIcon />
+                                        </IconButton>
+                                    </Tooltip>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </Table>
+            </Sheet>
+        </Box>
+    );
+}
+
+export default AdminCustomPages;
+--- END FILE: frontend/src/pages/AdminCustomPages.js ---
+
+
+
+--- START FILE: frontend/src/pages/AdminEditPage.js ---
+
+// frontend/src/pages/AdminEditPage.js
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import { TiptapEditor } from '../components/TiptapEditor'; // Наш новый редактор
+import {
+    Box, Typography, Button, CircularProgress, Alert, FormControl,
+    FormLabel, Input, Switch, Stack, Breadcrumbs, Link as JoyLink
+} from '@mui/joy';
+import HomeIcon from '@mui/icons-material/Home';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import toast from 'react-hot-toast';
+
+function AdminEditPage() {
+    const { pageId } = useParams();
+    const navigate = useNavigate();
+    const { authToken } = useAuth();
+    const isCreating = !pageId;
+
+    const [title, setTitle] = useState('');
+    const [slug, setSlug] = useState('');
+    const [content, setContent] = useState('');
+    const [is_published, setIsPublished] = useState(false);
+
+    const [loading, setLoading] = useState(!isCreating);
+    const [error, setError] = useState(null);
+
+    const fetchPageData = useCallback(() => {
+        if (!isCreating) {
+            axios.get(`/api/admin/pages/${pageId}`, { headers: { Authorization: `Bearer ${authToken}` } })
+                .then(response => {
+                    const { title, slug, content, is_published } = response.data;
+                    setTitle(title);
+                    setSlug(slug);
+                    setContent(content);
+                    setIsPublished(is_published);
+                })
+                .catch(() => setError('Failed to load page data.'))
+                .finally(() => setLoading(false));
+        }
+    }, [pageId, isCreating, authToken]);
+
+    useEffect(() => {
+        fetchPageData();
+    }, [fetchPageData]);
+
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        setLoading(true);
+        setError(null);
+
+        // --- ВОТ НАШЕ ИСПРАВЛЕНИЕ ---
+        // Мы будем отправлять не весь formData, а специально подготовленный объект payload
+        let payload;
+
+        if (isCreating) {
+            // Для создания страницы отправляем только title и content, как того требует CreatePageDto
+            payload = {
+                title: title,
+                content: content,
+            };
+        } else {
+            // Для редактирования отправляем все поля, так как UpdatePageDto это разрешает
+            payload = {
+                title: title,
+                slug: slug,
+                content: content,
+                is_published: is_published,
+            };
+        }
+        // -----------------------------
+
+        const apiCall = isCreating
+            ? axios.post('/api/admin/pages', payload, { headers: { Authorization: `Bearer ${authToken}` } })
+            : axios.patch(`/api/admin/pages/${pageId}`, payload, { headers: { Authorization: `Bearer ${authToken}` } });
+
+        try {
+            await apiCall;
+            toast.success(`Page ${isCreating ? 'created' : 'updated'} successfully!`);
+            navigate('/admin/pages');
+        } catch (err) {
+            const errorMessage = err.response?.data?.message || 'An error occurred.';
+            // Если сообщение об ошибке - это массив, объединим его в одну строку
+            setError(Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage);
+            setLoading(false);
+        }
+    };
+
+    if (loading && !isCreating) return <CircularProgress />;
+
+    return (
+        <Box component="form" onSubmit={handleSubmit}>
+            <Breadcrumbs separator={<ChevronRightIcon />} sx={{ mb: 2 }}>
+                <JoyLink component={RouterLink} to="/admin/users"><HomeIcon /></JoyLink>
+                <JoyLink component={RouterLink} to="/admin/pages">Custom Pages</JoyLink>
+                <Typography>{isCreating ? 'Create' : 'Edit'}</Typography>
+            </Breadcrumbs>
+
+            <Typography level="h2" sx={{ mb: 2 }}>{isCreating ? 'Create New Page' : 'Edit Page'}</Typography>
+
+            {error && <Alert color="danger" sx={{ mb: 2 }}>{error}</Alert>}
+
+            <Stack spacing={2}>
+                <FormControl required>
+                    <FormLabel>Page Title</FormLabel>
+                    <Input name="title" value={title} onChange={(e) => setTitle(e.target.value)} />
+                </FormControl>
+
+                {!isCreating && (
+                    <FormControl required>
+                        <FormLabel>URL Slug (e.g., /p/your-slug)</FormLabel>
+                        <Input name="slug" value={slug} onChange={(e) => setSlug(e.target.value)} />
+                    </FormControl>
+                )}
+                <FormControl required>
+                    <FormLabel>Content</FormLabel>
+                    {/* Создаем "клетку" (контейнер-ограничитель) для редактора */}
+                    <Box
+                        sx={{
+                            width: '100%',
+                            maxWidth: '100%', // Важно, чтобы контейнер не вылезал за пределы родителя
+                        }}
+                    >
+                        <TiptapEditor content={content} onChange={setContent} />
+                    </Box>
+                </FormControl>
+
+                <FormControl sx={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <FormLabel>Publish Page</FormLabel>
+                    <Switch checked={is_published} onChange={(e) => setIsPublished(e.target.checked)} />
+                </FormControl>
+
+                <Button type="submit" loading={loading} sx={{ mt: 2, alignSelf: 'flex-start' }}>
+                    {isCreating ? 'Create Page' : 'Save Changes'}
+                </Button>
+            </Stack>
+        </Box>
+    );
+}
+
+export default AdminEditPage;
+--- END FILE: frontend/src/pages/AdminEditPage.js ---
 
 
 
@@ -8728,6 +9567,127 @@ function CreatePostPage() {
 
 export default CreatePostPage;
 --- END FILE: frontend/src/pages/CreatePostPage.js ---
+
+
+
+--- START FILE: frontend/src/pages/CustomPageView.js ---
+
+// frontend/src/pages/CustomPageView.js
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import axios from 'axios';
+import { Box, Typography, CircularProgress, Alert, Divider } from '@mui/joy';
+
+function CustomPageView() {
+    const { slug } = useParams();
+    const [page, setPage] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        if (!slug) return;
+        setLoading(true);
+        axios.get(`/api/p/${slug}`)
+            .then(response => {
+                setPage(response.data);
+                document.title = `${response.data.title} - FlameWall`;
+            })
+            .catch(() => {
+                setError('Page not found.');
+            })
+            .finally(() => {
+                setLoading(false);
+            });
+
+        return () => { document.title = 'FlameWall'; };
+    }, [slug]);
+
+    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
+    if (error) return <Alert color="danger" sx={{ mt: 2 }}>{error}</Alert>;
+    if (!page) return null;
+
+    return (
+        <Box>
+            <Typography level="h1">{page.title}</Typography>
+            <Divider sx={{ my: 2 }} />
+
+            <Box sx={{
+                // Стили для заголовков
+                '& h1, & h2, & h3, & h4': {
+                    fontFamily: 'var(--joy-font-family-display)',
+                    color: 'var(--joy-palette-text-primary)',
+                    margin: '1.5rem 0 1rem 0',
+                    fontWeight: 'var(--joy-font-weight-lg)',
+                    lineHeight: 1.3,
+                },
+                '& h1': { fontSize: 'var(--joy-font-size-xl4)' },
+                '& h2': { fontSize: 'var(--joy-font-size-xl2)' },
+                '& h3': { fontSize: 'var(--joy-font-size-xl)' },
+                '& h4': { fontSize: 'var(--joy-font-size-lg)' },
+                
+                // Стили для параграфов и списков
+                '& p, & li': {
+                    fontFamily: 'var(--joy-font-family-body)',
+                    fontSize: 'var(--joy-font-size-md)',
+                    color: 'var(--joy-palette-text-secondary)',
+                    lineHeight: 1.7,
+                    marginBottom: '1rem',
+                },
+
+                // --- НОВЫЕ СТИЛИ ДЛЯ НОВЫХ ИНСТРУМЕНТОВ ---
+                '& u': { // Подчеркивание
+                    textDecorationColor: 'var(--joy-palette-primary-300)',
+                },
+                '& s': { // Зачеркивание
+                    color: 'var(--joy-palette-text-tertiary)',
+                },
+                '& mark': { // Маркер
+                    background: 'rgba(255, 229, 102, 0.2)', // Полупрозрачный желтый
+                    color: 'var(--joy-palette-warning-100)', // Светло-желтый текст
+                    padding: '0.1em 0.3em',
+                    borderRadius: 'var(--joy-radius-sm)',
+                },
+                // ------------------------------------------
+
+                // Старые стили, которые остаются
+                '& a': {
+                    color: 'var(--joy-palette-primary-300)',
+                    textDecoration: 'underline',
+                    '&:hover': {
+                        textDecoration: 'none',
+                    },
+                },
+                '& img': {
+                    maxWidth: '100%',
+                    height: 'auto',
+                    borderRadius: 'var(--joy-radius-md)',
+                    margin: '1rem 0',
+                },
+                '& ul, & ol': { paddingLeft: '2rem' },
+                '& blockquote': {
+                    borderLeft: '4px solid var(--joy-palette-divider)',
+                    paddingLeft: '1rem',
+                    margin: '1.5rem 0',
+                    color: 'var(--joy-palette-text-tertiary)',
+                    fontStyle: 'italic',
+                },
+                '& pre': {
+                    backgroundColor: 'var(--joy-palette-neutral-900)',
+                    border: '1px solid var(--joy-palette-divider)',
+                    padding: '1rem',
+                    borderRadius: 'var(--joy-radius-sm)',
+                    overflowX: 'auto',
+                    fontFamily: 'var(--joy-font-family-code)',
+                },
+            }}>
+                <div dangerouslySetInnerHTML={{ __html: page.content }} />
+            </Box>
+        </Box>
+    );
+} 
+
+export default CustomPageView;
+--- END FILE: frontend/src/pages/CustomPageView.js ---
 
 
 
@@ -13042,6 +14002,9 @@ services:
     container_name: flamewall_frontend_dev # Назовем его иначе, чтобы не было конфликтов
     ports:
       - "5173:3000" # <-- ВАЖНО: Пробрасываем порт 3000 из контейнера на порт 5173 вашего компьютера
+    environment:
+      - WATCHPACK_POLLING=true
+      - WDS_SOCKET_PORT=0
     volumes:
       - ./frontend:/app # <-- ВАЖНО: Связываем папку с кодом для live-reload
       - /app/node_modules
@@ -13098,21 +14061,21 @@ services:
     networks:
       - flamewall_net
 
-  nginx:
-    image: nginx:alpine
-    container_name: flamewall_nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"     # Открываем стандартный HTTP порт
-      - "443:443"   # Открываем стандартный HTTPS порт
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf # Подключаем наш файл конфигурации
-      # В будущем здесь будут SSL-сертификаты
-    depends_on:
-      - frontend
-      - backend
-    networks:
-      - flamewall_net
+# nginx:
+#  image: nginx:alpine
+# container_name: flamewall_nginx
+# restart: unless-stopped
+#    ports:
+#      - "80:80"     # Открываем стандартный HTTP порт
+#      - "443:443"   # Открываем стандартный HTTPS порт
+#    volumes:
+#      - ./nginx/nginx.conf:/etc/nginx/nginx.conf # Подключаем наш файл конфигурации
+#      # В будущем здесь будут SSL-сертификаты
+#    depends_on:
+#      - frontend
+#      - backend
+#    networks:
+#      - flamewall_net
 
 volumes:
   postgres_data:
@@ -13299,6 +14262,19 @@ CMD ["nginx", "-g", "daemon off;"]
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^13.5.0",
+    "@tiptap/extension-color": "^2.22.3",
+    "@tiptap/extension-font-family": "^2.22.3",
+    "@tiptap/extension-highlight": "^2.22.3",
+    "@tiptap/extension-image": "^2.22.3",
+    "@tiptap/extension-link": "^2.22.3",
+    "@tiptap/extension-strike": "^2.22.3",
+    "@tiptap/extension-subscript": "^2.22.3",
+    "@tiptap/extension-superscript": "^2.22.3",
+    "@tiptap/extension-text-align": "^2.22.3",
+    "@tiptap/extension-text-style": "^2.22.3",
+    "@tiptap/extension-underline": "^2.22.3",
+    "@tiptap/react": "^2.22.3",
+    "@tiptap/starter-kit": "^2.22.3",
     "axios": "^1.9.0",
     "jwt-decode": "^4.0.0",
     "react": "^19.1.0",
@@ -13310,7 +14286,7 @@ CMD ["nginx", "-g", "daemon off;"]
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "nodemon",
+    "start": "react-scripts start",
     "start:react": "react-scripts start",
     "build": "react-scripts build && npm run rename-sw",
     "test": "react-scripts test",
