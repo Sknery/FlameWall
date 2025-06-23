@@ -12,7 +12,8 @@ services:
       - FORCE_COLOR=1 # Значение может быть 1, 2 или 3. 1 - базовые цвета.
     env_file: ./.env
     volumes:
-      - ./uploads:/usr/src/app/uploads
+      # --- ИЗМЕНЕНИЕ 1: Подключаем именованный volume ---
+      - uploads_data:/usr/src/app/uploads
     networks:
       - flamewall_net
     depends_on:
@@ -47,12 +48,12 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    volumes:
+   volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
-      - ./uploads:/usr/share/nginx/html/uploads:ro
-      # Сертификаты (чтобы Nginx их нашел)
+      # --- ИЗМЕНЕНИЕ 2: Подключаем ТОТ ЖЕ САМЫЙ именованный volume ---
+      # Nginx будет читать файлы из этого общего хранилища
+      - uploads_data:/usr/share/nginx/html/uploads:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
-      # Файлы для проверки Certbot (для авто-обновления)
       - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       - frontend
@@ -62,7 +63,8 @@ services:
 
 volumes:
   postgres_data:
-
+  uploads_data:
+  
 networks:
   flamewall_net:
     driver: bridge
