@@ -1,5 +1,5 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Mon Jun 23 21:58:57 EEST 2025
+PROJECT SNAPSHOT CREATED ON: Mon Jun 23 23:35:08 EEST 2025
 ===============================================
 
 
@@ -9606,7 +9606,7 @@ function CustomPageView() {
     if (error) return <Alert color="danger" sx={{ mt: 2 }}>{error}</Alert>;
     if (!page) return null;
 
-    return (
+  return (
         <Box>
             <Typography level="h1">{page.title}</Typography>
             <Divider sx={{ my: 2 }} />
@@ -9620,65 +9620,18 @@ function CustomPageView() {
                     fontWeight: 'var(--joy-font-weight-lg)',
                     lineHeight: 1.3,
                 },
-                '& h1': { fontSize: 'var(--joy-font-size-xl4)' },
-                '& h2': { fontSize: 'var(--joy-font-size-xl2)' },
-                '& h3': { fontSize: 'var(--joy-font-size-xl)' },
-                '& h4': { fontSize: 'var(--joy-font-size-lg)' },
+                // СТРОКИ С 'fontSize' ДЛЯ ЗАГОЛОВКОВ УДАЛЕНЫ
                 
                 // Стили для параграфов и списков
                 '& p, & li': {
                     fontFamily: 'var(--joy-font-family-body)',
-                    fontSize: 'var(--joy-font-size-md)',
+                    // СТРОКА С 'fontSize' ДЛЯ ПАРАГРАФОВ УДАЛЕНА
                     color: 'var(--joy-palette-text-secondary)',
                     lineHeight: 1.7,
                     marginBottom: '1rem',
                 },
 
-                // --- НОВЫЕ СТИЛИ ДЛЯ НОВЫХ ИНСТРУМЕНТОВ ---
-                '& u': { // Подчеркивание
-                    textDecorationColor: 'var(--joy-palette-primary-300)',
-                },
-                '& s': { // Зачеркивание
-                    color: 'var(--joy-palette-text-tertiary)',
-                },
-                '& mark': { // Маркер
-                    background: 'rgba(255, 229, 102, 0.2)', // Полупрозрачный желтый
-                    color: 'var(--joy-palette-warning-100)', // Светло-желтый текст
-                    padding: '0.1em 0.3em',
-                    borderRadius: 'var(--joy-radius-sm)',
-                },
-                // ------------------------------------------
-
-                // Старые стили, которые остаются
-                '& a': {
-                    color: 'var(--joy-palette-primary-300)',
-                    textDecoration: 'underline',
-                    '&:hover': {
-                        textDecoration: 'none',
-                    },
-                },
-                '& img': {
-                    maxWidth: '100%',
-                    height: 'auto',
-                    borderRadius: 'var(--joy-radius-md)',
-                    margin: '1rem 0',
-                },
-                '& ul, & ol': { paddingLeft: '2rem' },
-                '& blockquote': {
-                    borderLeft: '4px solid var(--joy-palette-divider)',
-                    paddingLeft: '1rem',
-                    margin: '1.5rem 0',
-                    color: 'var(--joy-palette-text-tertiary)',
-                    fontStyle: 'italic',
-                },
-                '& pre': {
-                    backgroundColor: 'var(--joy-palette-neutral-900)',
-                    border: '1px solid var(--joy-palette-divider)',
-                    padding: '1rem',
-                    borderRadius: 'var(--joy-radius-sm)',
-                    overflowX: 'auto',
-                    fontFamily: 'var(--joy-font-family-code)',
-                },
+                // ... остальные стили (для ссылок, картинок и т.д.) остаются без изменений ...
             }}>
                 <div dangerouslySetInnerHTML={{ __html: page.content }} />
             </Box>
@@ -13992,21 +13945,27 @@ REACT_APP_FULL_API_URL=http://localhost:3001
 
 --- START FILE: docker-compose.yml ---
 
+# docker-compose.yml
+
 services:
-  # Фронтенд больше не выставляет свой порт наружу.
-  # С ним будет общаться только Nginx внутри сети Docker.
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: flamewall_frontend_dev # Назовем его иначе, чтобы не было конфликтов
+    container_name: flamewall_frontend_dev
+    # Пробрасываем порт 3000 из контейнера на порт 5173 вашего компьютера
+    # Это позволит вам открывать http://localhost:5173 в браузере
     ports:
-      - "5173:3000" # <-- ВАЖНО: Пробрасываем порт 3000 из контейнера на порт 5173 вашего компьютера
+      - "5173:3000"
+    # Эти переменные КЛЮЧЕВЫЕ для работы hot-reload в Docker
     environment:
-      - WATCHPACK_POLLING=true
-      - WDS_SOCKET_PORT=0
+      - CHOKIDAR_USEPOLLING=true # <-- ДОБАВЛЕНО: Заставляет библиотеку слежения за файлами работать в стабильном режиме
+    # Связываем папку с кодом для live-reload
+    # Все изменения в папке frontend будут сразу видны в контейнере
     volumes:
-      - ./frontend:/app # <-- ВАЖНО: Связываем папку с кодом для live-reload
+      - ./frontend:/app
+      # Эта строка предотвращает затирание node_modules из контейнера
+      # локальной пустой папкой node_modules
       - /app/node_modules
     restart: unless-stopped
     networks:
@@ -14017,15 +13976,16 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: flamewall_backend_dev
+    # Пробрасываем порт 3000 бэкенда на 3001 вашего компьютера
     ports:
-      - "3001:3000" # <-- ВОТ РЕШЕНИЕ: внутренний порт 3000 "смотрит" наружу через порт 3001
+      - "3001:3000"
     environment:
-      - FORCE_COLOR=1 # Значение может быть 1, 2 или 3. 1 - базовые цвета.
+      - FORCE_COLOR=1 # Для цветных логов в Docker
     volumes:
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
     env_file:
-      - ./.env # Убедитесь, что эта строка есть
+      - ./.env
     depends_on:
       - db
     restart: unless-stopped
@@ -14034,22 +13994,21 @@ services:
 
   db:
     image: postgres:15
-    container_name: flamewall_db
+    container_name: flamewall_db_dev # Дадим уникальное имя для разработки
     restart: unless-stopped
     env_file:
       - ./.env
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_dev:/var/lib/postgresql/data # Используем отдельный volume для разработки
     networks:
       - flamewall_net
-    # ports: - "${DB_PORT:-5432}:5432"
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: flamewall_pgadmin
+    container_name: flamewall_pgadmin_dev # Уникальное имя
     restart: unless-stopped
-    logging: # <-- ДОБАВИТЬ
-      driver: "none" # <-- ДОБАВИТЬ
+    logging:
+      driver: "none"
     env_file:
       - ./.env
     ports:
@@ -14057,29 +14016,13 @@ services:
     depends_on:
       - db
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
+      - pgadmin_data_dev:/var/lib/pgadmin # Отдельный volume
     networks:
       - flamewall_net
 
-# nginx:
-#  image: nginx:alpine
-# container_name: flamewall_nginx
-# restart: unless-stopped
-#    ports:
-#      - "80:80"     # Открываем стандартный HTTP порт
-#      - "443:443"   # Открываем стандартный HTTPS порт
-#    volumes:
-#      - ./nginx/nginx.conf:/etc/nginx/nginx.conf # Подключаем наш файл конфигурации
-#      # В будущем здесь будут SSL-сертификаты
-#    depends_on:
-#      - frontend
-#      - backend
-#    networks:
-#      - flamewall_net
-
 volumes:
-  postgres_data:
-  pgadmin_data:
+  postgres_data_dev: # Уникальное имя volume
+  pgadmin_data_dev:  # Уникальное имя volume
 
 networks:
   flamewall_net:
@@ -14209,12 +14152,27 @@ CMD ["node", "dist/main"]
 
 --- START FILE: frontend/Dockerfile ---
 
+# frontend/Dockerfile
+
 FROM node:20-alpine
+
+# Устанавливаем рабочую директорию
 WORKDIR /app
+
+# Копируем package.json и package-lock.json для установки зависимостей
+# Это кешируется, если файлы не менялись, что ускоряет пересборку
 COPY package*.json ./
-RUN npm install --silent
+
+# Устанавливаем зависимости
+RUN npm install
+
+# Копируем остальной код приложения
 COPY . .
+
+# React-приложение по умолчанию запускается на порту 3000
 EXPOSE 3000
+
+# Команда для запуска сервера разработки
 CMD ["npm", "start"]
 --- END FILE: frontend/Dockerfile ---
 
@@ -14281,12 +14239,12 @@ CMD ["nginx", "-g", "daemon off;"]
     "react-dom": "^19.1.0",
     "react-hot-toast": "^2.5.2",
     "react-router-dom": "^6.25.1",
-    "react-scripts": "^5.0.1",
+    "react-scripts": "5.0.1",
     "socket.io-client": "^4.8.1",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "HOST=0.0.0.0 react-scripts start",
     "start:react": "react-scripts start",
     "build": "react-scripts build && npm run rename-sw",
     "test": "react-scripts test",
@@ -14318,7 +14276,6 @@ CMD ["nginx", "-g", "daemon off;"]
     "nth-check": "2.0.1"
   }
 }
-
 --- END FILE: frontend/package.json ---
 
 
