@@ -1,5 +1,5 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Tue Jun 24 03:12:33 EEST 2025
+PROJECT SNAPSHOT CREATED ON: Tue Jun 24 12:13:42 EEST 2025
 ===============================================
 
 
@@ -6184,7 +6184,7 @@ const adminNavItem = {
         { name: 'Post Management', icon: <DynamicFeedIcon />, path: '/admin/posts' },
         { name: 'Rank Management', icon: <ShieldIcon />, path: '/admin/ranks' },
         { name: 'Shop Management', icon: <StorefrontIcon />, path: '/admin/shop' },
-        { name: 'Custom Pages', icon: <ArticleIcon />, path: '/admin/pages' } 
+        { name: 'Custom Pages Management', icon: <ArticleIcon />, path: '/admin/pages' } 
     ],
 };
 
@@ -7448,20 +7448,6 @@ root.render(
     <App />
 
 );
-
-// frontend/src/index.jsx
-
-// ... ваш код с root.render(<App />);
-
-if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js').then(registration => {
-      console.log('SW registered: ', registration);
-    }).catch(registrationError => {
-      console.log('SW registration failed: ', registrationError);
-    });
-  });
-}
 
 --- END FILE: frontend/src/index.jsx ---
 
@@ -12517,37 +12503,6 @@ export const constructImageUrl = (relativePath) => {
 
 
 
---- START FILE: frontend/public/manifest.json ---
-
-{
-  "short_name": "FlameWall",
-  "name": "FlameWall Community",
-  "icons": [
-    {
-      "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
-    },
-    {
-      "src": "logo192.png",
-      "type": "image/png",
-      "sizes": "192x192"
-    },
-    {
-      "src": "logo512.png",
-      "type": "image/png",
-      "sizes": "512x512"
-    }
-  ],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#0D1117",
-  "background_color": "#0D1117"
-}
---- END FILE: frontend/public/manifest.json ---
-
-
-
 --- START FILE: frontend/public/robots.txt ---
 
 # https://www.robotstxt.org/robotstxt.html
@@ -12558,85 +12513,6 @@ Disallow:
 
 
 
---- START FILE: frontend/public/service-worker-prod.js ---
-
-// frontend/public/service-worker-prod.js
-
-// --- НОВАЯ ВЕРСИЯ КЕША! ЭТО САМЫЙ ВАЖНЫЙ ШАГ ---
-const CACHE_NAME = 'flamewall-cache-v6'; 
-
-// Файлы, которые кешируются при установке для работы оффлайн
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/favicon.ico',
-  '/logo192.png'
-];
-
-// Установка сервис-воркера
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
-      .then(() => self.skipWaiting())
-  );
-});
-
-// Активация и очистка старых кешей
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            // Удаляем все кеши со старыми версиями
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => self.clients.claim())
-  );
-});
-
-// Перехват сетевых запросов
-self.addEventListener('fetch', event => {
-  // Игнорируем запросы к API и сокетам, они всегда должны идти в сеть
-  if (event.request.url.includes('/api/') || event.request.url.includes('/socket.io/')) {
-    return;
-  }
-
-  // --- СТРАТЕГИЯ "NETWORK-FIRST" ДЛЯ HTML-СТРАНИЦ ---
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      // 1. Пытаемся пойти в сеть
-      fetch(event.request)
-        .then(response => {
-          // Если успешно, кешируем свежую копию и отдаем ее
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseToCache));
-          return response;
-        })
-        .catch(() => {
-          // 2. Если сети нет, отдаем из кеша то, что есть
-          return caches.match(event.request);
-        })
-    );
-    return;
-  }
-
-  // --- СТРАТЕГИЯ "CACHE-FIRST" ДЛЯ СТАТИКИ (JS, CSS, картинки) ---
-  event.respondWith(
-    caches.match(event.request).then(response => {
-      // Если есть в кеше - отдаем, если нет - идем в сеть
-      return response || fetch(event.request);
-    })
-  );
-});
---- END FILE: frontend/public/service-worker-prod.js ---
-
-
-
 --- START FILE: frontend/nginx/nginx.conf ---
 
 # root Flamewall/frontend/nginx/nginx.conf
@@ -12644,11 +12520,8 @@ server {
     listen 80;
     server_name flamewall.online;
 
-    # Явно включаем ETag для всех файлов
-    etag on;
-
     # Правила для статичных ассетов (JS, CSS, картинки)
-    # У них есть уникальный хэш в имени, поэтому их можно кешировать навсегда.
+    # Файлы с хэшем в имени можно безопасно кэшировать надолго.
     location ~* \.(?:css|js|jpg|jpeg|png|gif|svg|ico|webp|ttf|woff|woff2)$ {
         root /usr/share/nginx/html;
         expires 1y;
@@ -12656,20 +12529,14 @@ server {
     }
 
     # Правила для главной страницы и всех маршрутов React
+    # Запрещаем кэшировать index.html, чтобы пользователи всегда получали свежую "точку входа".
     location / {
         root   /usr/share/nginx/html;
         index  index.html;
         try_files $uri $uri/ /index.html;
 
-        # --- САМЫЕ АГРЕССИВНЫЕ ЗАГОЛОВКИ ДЛЯ ЗАПРЕТА КЕША ---
-        # Говорим "не хранить нигде и никогда"
         add_header Cache-Control 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0';
-        # Для старых браузеров
-        add_header Pragma 'no-cache';
-        # Говорим, что срок годности уже истек
         expires 0;
-        # Запрещаем кеширование в прокси-серверах
-        add_header 'Vary' 'Accept-Encoding';
     }
 }
 --- END FILE: frontend/nginx/nginx.conf ---
@@ -14463,9 +14330,10 @@ export default defineConfig({
   },
   "scripts": {
     "start": "vite",
-    "build": "vite build && npm run rename-sw",
+    "build": "vite build",
     "test": "vite test"
   },
+  
   "eslintConfig": {
     "extends": [
       "react-app",
@@ -14491,7 +14359,7 @@ export default defineConfig({
   },
   "overrides": {
     "nth-check": "2.0.1"
-  } 
+  }
 }
 --- END FILE: frontend/package.json ---
 
