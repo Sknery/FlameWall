@@ -1,5 +1,5 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Tue Jun 24 12:13:42 EEST 2025
+PROJECT SNAPSHOT CREATED ON: Tue Jun 24 13:33:44 EEST 2025
 ===============================================
 
 
@@ -4797,33 +4797,81 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { UsersService } from 'src/users/users.service';
 
 const generateUniqueFilename = (req, file, callback) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const extension = extname(file.originalname);
-    callback(null, `<span class="math-inline">\{uniqueSuffix\}</span>{extension}`);
+    callback(null, `${uniqueSuffix}${extension}`);
 };
 
 @ApiTags('Uploads')
-@Controller('uploads')
+@Controller()
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class UploadsController {
     private readonly logger = new Logger(UploadsController.name);
 
-    @Post('editor-image')
-    @ApiOperation({ summary: 'Upload an image from the Tiptap rich text editor' })
+    constructor(private readonly usersService: UsersService) {}
+
+    // --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+    // Меняем путь с 'uploads/editor-image' на 'media/editor-image', чтобы соответствовать фронтенду
+    @Post('media/editor-image') 
     @UseInterceptors(FileInterceptor('file', {
         storage: diskStorage({
-            destination: './uploads/content', // Новая общая папка для контента
+            destination: './uploads/content', // Эта папка уже создается нашим docker-compose
             filename: generateUniqueFilename,
         }),
     }))
-    uploadFile(@UploadedFile() file: Express.Multer.File, @Request() req) {
+    uploadEditorFile(@UploadedFile() file: Express.Multer.File, @Request() req) {
         this.logger.log(`User ID: ${req.user.userId} uploaded an image to content: ${file.filename}`);
-        // Возвращаем универсальный путь
+        // Путь для доступа через Nginx остается прежним, так как он смотрит в /uploads/content
         return { url: `/uploads/content/${file.filename}` };
+    }
+    
+    @Post('media/avatar')
+    @UseInterceptors(FileInterceptor('file', {
+        storage: diskStorage({
+            destination: './uploads/avatars',
+            filename: generateUniqueFilename,
+        }),
+        limits: { fileSize: 2 * 1024 * 1024 } // 2MB
+    }))
+    @ApiConsumes('multipart/form-data')
+    @ApiBody({
+      schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } },
+    })
+    async uploadAvatar(@UploadedFile() file: Express.Multer.File, @Request() req) {
+        const userId = req.user.userId;
+        const publicUrl = `/uploads/avatars/${file.filename}`;
+        this.logger.log(`User ID: ${userId} uploaded a new avatar: ${publicUrl}`);
+        
+        await this.usersService.updateAvatar(userId, publicUrl);
+        
+        return { url: publicUrl };
+    }
+
+    @Post('media/banner')
+    @UseInterceptors(FileInterceptor('file', {
+        storage: diskStorage({
+            destination: './uploads/banners',
+            filename: generateUniqueFilename,
+        }),
+        limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+    }))
+    @ApiConsumes('multipart/form-data')
+    @ApiBody({
+      schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } },
+    })
+    async uploadBanner(@UploadedFile() file: Express.Multer.File, @Request() req) {
+        const userId = req.user.userId;
+        const publicUrl = `/uploads/banners/${file.filename}`;
+        this.logger.log(`User ID: ${userId} uploaded a new banner: ${publicUrl}`);
+
+        await this.usersService.updateBanner(userId, publicUrl);
+
+        return { url: publicUrl };
     }
 }
 --- END FILE: backend/src/uploads/uploads.controller.ts ---
@@ -4836,7 +4884,7 @@ export class UploadsController {
 
 import { Module } from '@nestjs/common';
 import { UploadsController } from './uploads.controller';
-import { UsersModule } from 'src/users/users.module'; // UsersModule уже экспортирует UsersService
+import { UsersModule } from 'src/users/users.module'; // <-- Главное, чтобы этот импорт был
 
 @Module({
     imports: [UsersModule], // Импортируем UsersModule, чтобы получить доступ к UsersService
@@ -11818,14 +11866,18 @@ import EditIcon from '@mui/icons-material/Edit';
 import LinkIcon from '@mui/icons-material/Link';
 import { useNavigate } from 'react-router-dom';
 import { constructImageUrl } from '../utils/url';
-
+import toast from 'react-hot-toast';
 
 function SettingsPage() {
     const { authToken, updateAuthToken, user } = useAuth();
     const navigate = useNavigate();
-
+    
+    // Данные профиля
     const [profileData, setProfileData] = useState({ username: '', profile_slug: '', description: '' });
+    // Данные для смены пароля
     const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+
+    // Файлы и их превью
     const [avatarFile, setAvatarFile] = useState(null);
     const [avatarPreview, setAvatarPreview] = useState(null);
     const [bannerFile, setBannerFile] = useState(null);
@@ -11833,34 +11885,23 @@ function SettingsPage() {
     const avatarInputRef = useRef(null);
     const bannerInputRef = useRef(null);
     
+    // Состояния UI (загрузка, ошибки, успех)
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
+    const [profileError, setProfileError] = useState(''); // <-- ИСПОЛЬЗУЕМ ЭТУ ПЕРЕМЕННУЮ
     const [passwordError, setPasswordError] = useState('');
-    const [passwordSuccess, setPasswordSuccess] = useState('');
 
     useEffect(() => {
-        const fetchProfile = async () => {
-            if (!authToken) return;
-            try {
-                setLoading(true);
-                if (user) {
-                    setProfileData({
-                        username: user.username || '',
-                        profile_slug: user.profile_slug || '',
-                        description: user.description || '',
-                    });
-                    setAvatarPreview(user.pfp_url);
-                    setBannerPreview(user.banner_url);
-                }
-            } catch (err) {
-                setError('Failed to load profile data.');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchProfile();
-    }, [authToken, user]);
+        if (user) {
+            setProfileData({
+                username: user.username || '',
+                profile_slug: user.profile_slug || '',
+                description: user.description || '',
+            });
+            setAvatarPreview(user.pfp_url);
+            setBannerPreview(user.banner_url);
+            setLoading(false);
+        }
+    }, [user]);
 
     const handleProfileChange = (e) => setProfileData({ ...profileData, [e.target.name]: e.target.value });
     const handlePasswordChange = (e) => setPasswordData({ ...passwordData, [e.target.name]: e.target.value });
@@ -11877,62 +11918,60 @@ function SettingsPage() {
             setBannerPreview(previewUrl);
         }
     };
-
+    
     const handleProfileSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        setError('');
-        setSuccess('');
+        setProfileError(''); // <-- ИСПОЛЬЗУЕМ setProfileError
+        
         try {
-            const promises = [];
-            // --- ИЗМЕНЕНО: Добавлен префикс /api ---
-           promises.push(axios.post('/api/media/avatar', formData, { headers: { Authorization: `Bearer ${authToken}` } }));
-
+            // Сначала загружаем аватар, если он выбран
             if (avatarFile) {
                 const formData = new FormData();
                 formData.append('file', avatarFile);
-                // --- ИЗМЕНЕНО: Добавлен префикс /api ---
-                promises.push(axios.post('/api/media/avatar', formData, { headers: { Authorization: `Bearer ${authToken}` } }));
+                await axios.post('/api/media/avatar', formData, { headers: { Authorization: `Bearer ${authToken}` } });
             }
+
+            // Затем загружаем баннер, если он выбран
             if (bannerFile) {
                 const formData = new FormData();
                 formData.append('file', bannerFile);
-                // --- ИЗМЕНЕНО: Добавлен префикс /api ---
-                promises.push(axios.post('/api/media/banner', formData, { headers: { Authorization: `Bearer ${authToken}` } }));
+                await axios.post('/api/media/banner', formData, { headers: { Authorization: `Bearer ${authToken}` } });
             }
+            
+            // Наконец, обновляем текстовые данные профиля
+            const profileUpdateResponse = await axios.patch('/api/users/me', profileData, { headers: { Authorization: `Bearer ${authToken}` } });
 
-            const results = await Promise.all(promises);
-            const profileUpdateResponse = results[0];
-            if (profileUpdateResponse && profileUpdateResponse.data.access_token) {
-                updateAuthToken(profileUpdateResponse.data.access_token);
-            }
-            setSuccess('Profile saved successfully!');
-            setAvatarFile(null);
+            // Обновляем токен и данные пользователя в контексте
+            updateAuthToken(profileUpdateResponse.data.access_token);
+            toast.success('Profile updated successfully!');
+            setAvatarFile(null); 
             setBannerFile(null);
+
         } catch (err) {
             const message = err.response?.data?.message;
             const errorMessage = Array.isArray(message) ? message.join(', ') : message;
-            setError(errorMessage || 'Failed to update profile.');
+            setProfileError(errorMessage || 'Failed to update profile.'); // <-- ИСПОЛЬЗУЕМ setProfileError
+            toast.error(errorMessage || 'Failed to update profile.');
         } finally {
             setLoading(false);
         }
     };
-
+    
     const handlePasswordSubmit = async (e) => {
         e.preventDefault();
         if (passwordData.newPassword !== passwordData.confirmPassword) {
-            setPasswordError('New passwords do not match.'); return;
+            setPasswordError('New passwords do not match.');
+            return;
         }
         setLoading(true);
         setPasswordError('');
-        setPasswordSuccess('');
         try {
-            // --- ИЗМЕНЕНО: Добавлен префикс /api ---
             await axios.post('/api/auth/change-password', 
                 { currentPassword: passwordData.currentPassword, newPassword: passwordData.newPassword },
                 { headers: { Authorization: `Bearer ${authToken}` } }
             );
-            setPasswordSuccess('Password changed successfully!');
+            toast.success('Password changed successfully!');
             setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
         } catch (err) {
             setPasswordError(err.response?.data?.message || 'Failed to change password.');
@@ -11940,9 +11979,9 @@ function SettingsPage() {
             setLoading(false);
         }
     };
-
+    
     if (loading && !profileData.username) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>;
-
+    
     return (
         <Stack spacing={4}>
             <Typography level={{ xs: 'h2', sm: 'h1' }}>Account Settings</Typography>
@@ -11950,13 +11989,12 @@ function SettingsPage() {
             <Sheet variant="outlined" sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 'md' }}>
                 <form onSubmit={handleProfileSubmit}>
                     <Typography level={{ xs: 'h4', sm: 'h3' }} component="h2" sx={{ mb: 2 }}>Edit Profile</Typography>
-                    {error && <Alert color="danger" sx={{ mb: 2 }}>{error}</Alert>}
-                    {success && <Alert color="success" sx={{ mb: 2 }}>{success}</Alert>}
+                    {profileError && <Alert color="danger" sx={{ mb: 2 }}>{profileError}</Alert>}
                     <Stack spacing={3}>
-                        <FormControl>
+                         <FormControl>
                             <FormLabel>Profile Picture</FormLabel>
                             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
-                                <Avatar src={avatarPreview?.startsWith('blob:') ? avatarPreview : (avatarPreview ? constructImageUrl(avatarPreview): undefined)} sx={{ '--Avatar-size': '80px' }} />
+                                <Avatar src={constructImageUrl(avatarPreview)} sx={{ '--Avatar-size': '80px' }} />
                                 <Button startDecorator={<EditIcon />} variant="outlined" onClick={() => avatarInputRef.current.click()} sx={{ width: { xs: '100%', sm: 'auto' } }}>Upload</Button>
                                 <input type="file" accept="image/*" hidden ref={avatarInputRef} onChange={(e) => handleFileChange(e, 'avatar')} />
                             </Stack>
@@ -11964,7 +12002,7 @@ function SettingsPage() {
                         <FormControl>
                             <FormLabel>Profile Banner</FormLabel>
                             <AspectRatio ratio="16/5" sx={{ width: '100%', borderRadius: 'md', mb: 1, bgcolor: 'background.level1' }}>
-                                {bannerPreview ? <img src={bannerPreview?.startsWith('blob:') ? bannerPreview : constructImageUrl(bannerPreview)} alt="Banner"/> : <Box component="div" />}
+                                {bannerPreview ? <img src={constructImageUrl(bannerPreview)} alt="Banner"/> : <Box component="div" />}
                             </AspectRatio>
                             <Button startDecorator={<EditIcon />} variant="outlined" onClick={() => bannerInputRef.current.click()} sx={{ alignSelf: 'flex-start', width: { xs: '100%', sm: 'auto' } }}>Upload Banner</Button>
                             <input type="file" accept="image/*" hidden ref={bannerInputRef} onChange={(e) => handleFileChange(e, 'banner')} />
@@ -11976,13 +12014,13 @@ function SettingsPage() {
                         </FormControl>
                         <FormControl>
                             <FormLabel>Profile Slug (@your-name)</FormLabel>
-                            <Input name="profile_slug" value={profileData.profile_slug} onChange={handleProfileChange} />
+                            <Input name="profile_slug" value={profileData.profile_slug || ''} onChange={handleProfileChange} />
                         </FormControl>
                         <FormControl>
                             <FormLabel>Description</FormLabel>
-                            <Textarea name="description" value={profileData.description} onChange={handleProfileChange} minRows={3} />
+                            <Textarea name="description" value={profileData.description || ''} onChange={handleProfileChange} minRows={3} />
                         </FormControl>
-                        <Button type="submit" loading={loading} sx={{ mt: 1, alignSelf: { xs: 'center', sm: 'flex-start' }, width: { xs: '100%', sm: 'auto' } }}>Save All Changes</Button>
+                         <Button type="submit" loading={loading} sx={{ mt: 1, alignSelf: { xs: 'center', sm: 'flex-start' }, width: { xs: '100%', sm: 'auto' } }}>Save All Changes</Button>
                     </Stack>
                 </form>
             </Sheet>
@@ -12007,7 +12045,6 @@ function SettingsPage() {
                 <form onSubmit={handlePasswordSubmit}>
                     <Stack spacing={2}>
                         {passwordError && <Alert color="danger">{passwordError}</Alert>}
-                        {passwordSuccess && <Alert color="success">{passwordSuccess}</Alert>}
                         <FormControl required><FormLabel>Current Password</FormLabel><Input type="password" name="currentPassword" value={passwordData.currentPassword} onChange={handlePasswordChange} /></FormControl>
                         <FormControl required><FormLabel>New Password</FormLabel><Input type="password" name="newPassword" value={passwordData.newPassword} onChange={handlePasswordChange} /></FormControl>
                         <FormControl required><FormLabel>Confirm New Password</FormLabel><Input type="password" name="confirmPassword" value={passwordData.confirmPassword} onChange={handlePasswordChange} /></FormControl>
@@ -12610,9 +12647,14 @@ http {
         ssl_certificate /etc/letsencrypt/live/flamewall.xyz/fullchain.pem;
         ssl_certificate_key /etc/letsencrypt/live/flamewall.xyz/privkey.pem;
 
-        location /uploads/ {
-            alias /usr/share/nginx/html/uploads/;
-            expires 7d;
+          location /uploads/ {
+             # alias указывает на точное место, где лежат файлы внутри контейнера Nginx
+             alias /usr/share/nginx/html/uploads/;
+             # Эта директива пытается найти файл по запрошенному URI. Если не находит - отдает 404.
+             try_files $uri =404;
+             # Говорим браузерам, что эти файлы можно кэшировать
+             expires 7d;
+             add_header Cache-Control "public";
         }
 
         location /api/ {
@@ -13987,7 +14029,15 @@ services:
     volumes:
       # --- ИЗМЕНЕНИЕ 1: Подключаем именованный volume ---
       - uploads_data:/usr/src/app/uploads
-    command: sh -c "mkdir -p /usr/src/app/uploads && chmod -R 755 /usr/src/app/uploads && exec node dist/main"
+    command: |
+      sh -c "
+        mkdir -p /usr/src/app/uploads/avatars && \
+        mkdir -p /usr/src/app/uploads/banners && \
+        mkdir -p /usr/src/app/uploads/content && \
+        mkdir -p /usr/src/app/uploads/pages && \
+        chmod -R 755 /usr/src/app/uploads && \
+        exec node dist/main
+      "
     networks:
       - flamewall_net
     depends_on:
