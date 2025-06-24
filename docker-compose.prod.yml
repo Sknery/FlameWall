@@ -14,8 +14,7 @@ services:
     volumes:
       # --- ИЗМЕНЕНИЕ 1: Подключаем именованный volume ---
       - uploads_data:/usr/src/app/uploads
-    command: sh -c "mkdir -p /usr/src/app/uploads && chmod -R 755 /usr/src/app/uploads && exec node dist/main"
-    networks:
+    command: sh -c "mkdir -p /usr/src/app/uploads/avatars && mkdir -p /usr/src/app/uploads/banners && mkdir -p /usr/src/app/uploads/content && mkdir -p /usr/src/app/uploads/pages && chmod -R 755 /usr/src/app/uploads && exec node dist/main"    networks:
       - flamewall_net
     depends_on:
       - db
