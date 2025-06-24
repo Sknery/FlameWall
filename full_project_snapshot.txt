@@ -1,5 +1,5 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Tue Jun 24 02:41:36 EEST 2025
+PROJECT SNAPSHOT CREATED ON: Tue Jun 24 03:12:33 EEST 2025
 ===============================================
 
 
@@ -7449,16 +7449,17 @@ root.render(
 
 );
 
+// frontend/src/index.jsx
+
+// ... ваш код с root.render(<App />);
+
 if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
-  
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker-prod.js')
-      .then(registration => {
-        console.log('Service Worker registered for production: ', registration);
-      })
-      .catch(registrationError => {
-        console.log('Service Worker registration failed: ', registrationError);
-      });
+    navigator.serviceWorker.register('/service-worker.js').then(registration => {
+      console.log('SW registered: ', registration);
+    }).catch(registrationError => {
+      console.log('SW registration failed: ', registrationError);
+    });
   });
 }
 
@@ -12559,75 +12560,77 @@ Disallow:
 
 --- START FILE: frontend/public/service-worker-prod.js ---
 
-// ServiceWorker-Worker.js
-// Увеличиваем версию кеша. Это СИГНАЛ для браузера, что SW обновился.
-const CACHE_NAME = 'flamewall-cache-v4'; // Увеличиваем версию!
+// frontend/public/service-worker-prod.js
+
+// --- НОВАЯ ВЕРСИЯ КЕША! ЭТО САМЫЙ ВАЖНЫЙ ШАГ ---
+const CACHE_NAME = 'flamewall-cache-v6'; 
+
+// Файлы, которые кешируются при установке для работы оффлайн
 const urlsToCache = [
   '/',
   '/index.html',
-  '/manifest.json'
+  '/manifest.json',
+  '/favicon.ico',
+  '/logo192.png'
 ];
 
-// Установка: немедленно активируемся
+// Установка сервис-воркера
 self.addEventListener('install', event => {
-  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(urlsToCache))
+      .then(() => self.skipWaiting())
   );
 });
 
-// Активация: чистим старый кеш и берем контроль
+// Активация и очистка старых кешей
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
+            // Удаляем все кеши со старыми версиями
             return caches.delete(cacheName);
           }
         })
-      ).then(() => {
-        // --- ГЛАВНОЕ ИЗМЕНЕНИЕ ---
-        // После очистки кеша, принудительно перезагружаем все открытые вкладки сайта.
-        // Это гарантирует, что пользователь увидит новую версию.
-        return self.clients.claim().then(() => {
-            self.clients.matchAll().then(clients => {
-                clients.forEach(client => client.navigate(client.url));
-            });
-        });
-      });
-    })
+      );
+    }).then(() => self.clients.claim())
   );
 });
 
-// Перехват запросов: отдаем из кеша, если есть.
-// API запросы не кешируем.
+// Перехват сетевых запросов
 self.addEventListener('fetch', event => {
+  // Игнорируем запросы к API и сокетам, они всегда должны идти в сеть
   if (event.request.url.includes('/api/') || event.request.url.includes('/socket.io/')) {
     return;
   }
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Если есть в кеше, отдаем из кеша
-        if (response) {
+
+  // --- СТРАТЕГИЯ "NETWORK-FIRST" ДЛЯ HTML-СТРАНИЦ ---
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      // 1. Пытаемся пойти в сеть
+      fetch(event.request)
+        .then(response => {
+          // Если успешно, кешируем свежую копию и отдаем ее
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseToCache));
           return response;
-        }
-        // Иначе идем в сеть, получаем ответ, кладем в кеш и отдаем
-        return fetch(event.request).then(
-          networkResponse => {
-            if(!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-              return networkResponse;
-            }
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                cache.put(event.request, responseToCache);
-              });
-            return networkResponse;
-          }
-        );
-      })
+        })
+        .catch(() => {
+          // 2. Если сети нет, отдаем из кеша то, что есть
+          return caches.match(event.request);
+        })
+    );
+    return;
+  }
+
+  // --- СТРАТЕГИЯ "CACHE-FIRST" ДЛЯ СТАТИКИ (JS, CSS, картинки) ---
+  event.respondWith(
+    caches.match(event.request).then(response => {
+      // Если есть в кеше - отдаем, если нет - идем в сеть
+      return response || fetch(event.request);
+    })
   );
 });
 --- END FILE: frontend/public/service-worker-prod.js ---
@@ -12719,64 +12722,55 @@ http {
         listen 80;
         listen [::]:80;
         server_name flamewall.xyz www.flamewall.xyz;
-        location ~ /.well-known/acme-challenge/ { allow all; root /var/www/certbot; }
-        location / { return 301 https://$host$request_uri; }
+        location ~ /.well-known/acme-challenge/ {
+            allow all;
+            root /var/www/certbot;
+        }
+        location / {
+            return 301 https://$host$request_uri;
+        }
     }
 
     server {
         listen 443 ssl http2;
-        server_name flamewall.xyz www.flamewall.xyz; # И здесь тоже ваш домен
+        server_name flamewall.xyz www.flamewall.xyz;
 
-        # ... (настройки SSL остаются без изменений) ...
+        # --- ВОЗВРАЩАЕМ КРИТИЧЕСКИ ВАЖНУЮ СТРОКУ ---
+        # Эта строка - внутренний DNS-сервер Docker.
+        # Она нужна Nginx, чтобы находить другие контейнеры (backend, frontend).
+        resolver 127.0.0.11 valid=10s;
+
         ssl_certificate /etc/letsencrypt/live/flamewall.xyz/fullchain.pem;
         ssl_certificate_key /etc/letsencrypt/live/flamewall.xyz/privkey.pem;
 
-        # --- ГЛАВНОЕ ИЗМЕНЕНИЕ ЗДЕСЬ ---
-        # Правило для статики должно быть ДО правила для API
-        # Это гарантирует, что Nginx сначала проверит, не статика ли это.
         location /uploads/ {
-            # alias указывает на точный путь, где лежат файлы внутри контейнера Nginx.
-            # Трейлинг-слэш (/) в конце важен!
             alias /usr/share/nginx/html/uploads/;
             expires 7d;
         }
 
-        # Блок для обычных API запросов
         location /api/ {
-            set $backend_upstream http://backend:3000;
-            proxy_pass $backend_upstream; # Добавляем /api/ в конец
+            # proxy_pass будет работать, только если Nginx знает, кто такой 'backend'
+            proxy_pass http://backend:3000;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # Блок специально для WebSocket соединений
         location /socket.io/ {
-            set $backend_upstream http://backend:3000;
-            proxy_pass $backend_upstream;
+            proxy_pass http://backend:3000;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
             proxy_set_header Host $host;
-            proxy_cache_bypass $http_upgrade;
         }
 
-        # Блок для всего остального (фронтенд)
         location / {
-            set $frontend_upstream http://frontend:80;
-            proxy_pass $frontend_upstream;
+            proxy_pass http://frontend:80;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
-        }
-        
-        location /uploads/ {
-            alias /usr/share/nginx/html/uploads/;
-            access_log off;
-            expires 7d;
-            add_header Cache-Control "public";
         }
     }
 }
@@ -14469,7 +14463,7 @@ export default defineConfig({
   },
   "scripts": {
     "start": "vite",
-    "build": "vite build",
+    "build": "vite build && npm run rename-sw",
     "test": "vite test"
   },
   "eslintConfig": {
