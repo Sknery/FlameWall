@@ -1,5 +1,5 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Tue Jun 24 13:33:44 EEST 2025
+PROJECT SNAPSHOT CREATED ON: Ср 25 июн 2025 13:07:45 UTC
 ===============================================
 
 
@@ -110,16 +110,26 @@ export class AdminService {
 
 --- START FILE: backend/src/admin/dto/admin-update-user.dto.ts ---
 
-import { IsInt, IsOptional } from 'class-validator';
+// backend/src/admin/dto/admin-update-user.dto.ts
+import { IsInt, IsOptional, IsBoolean } from 'class-validator'; // Добавляем IsBoolean
 
 export class AdminUpdateUserDto {
   @IsOptional()
-  @IsInt({ message: 'Rank ID must be an integer.' }) // Убеждаемся, что это число
+  @IsInt({ message: 'Rank ID must be an integer.' })
   rank_id?: number;
 
   @IsOptional()
   @IsInt()
   reputation_count?: number;
+  
+  // --- НОВЫЕ ПОЛЯ ---
+  @IsOptional()
+  @IsBoolean()
+  is_verified_admin?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  is_verified_youtuber?: boolean;
 }
 --- END FILE: backend/src/admin/dto/admin-update-user.dto.ts ---
 
@@ -2707,6 +2717,29 @@ export class CreatePagesTable1750691690126 implements MigrationInterface {
 
 
 
+--- START FILE: backend/src/migrations/1750854037699-AddUserVerificationFlags.ts ---
+
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+export class AddUserVerificationFlags1750854037699 implements MigrationInterface {
+    name = 'AddUserVerificationFlags1750854037699'
+
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "users" ADD "is_verified_admin" boolean NOT NULL DEFAULT false`);
+        await queryRunner.query(`ALTER TABLE "users" ADD "is_verified_youtuber" boolean NOT NULL DEFAULT false`);
+    }
+
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "users" DROP COLUMN "is_verified_youtuber"`);
+        await queryRunner.query(`ALTER TABLE "users" DROP COLUMN "is_verified_admin"`);
+    }
+
+}
+
+--- END FILE: backend/src/migrations/1750854037699-AddUserVerificationFlags.ts ---
+
+
+
 --- START FILE: backend/src/news/dto/create-news.dto.ts ---
 
 import { IsNotEmpty, IsString, MinLength, MaxLength } from 'class-validator';
@@ -5193,6 +5226,13 @@ export class User {
   @Column({ name: 'rank_id', nullable: true })
   rank_id: number | null;
 
+  @Column({ type: 'boolean', default: false, name: 'is_verified_admin' })
+  is_verified_admin: boolean; // Флаг для админ-состава
+
+  @Column({ type: 'boolean', default: false, name: 'is_verified_youtuber' })
+  is_verified_youtuber: boolean; // Флаг для ютуберов
+
+
   async validatePassword(passwordToValidate: string): Promise<boolean> {
     if (!this.password_hash) return false;
     return bcrypt.compare(passwordToValidate, this.password_hash);
@@ -5221,6 +5261,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { FindAllUsersDto } from './dto/find-all-users.dto';
+import { FindAllPostsDto } from 'src/posts/dto/find-all-posts';
 
 const generateUniqueFilename = (req, file, callback) => {
   const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -5291,12 +5332,26 @@ export class UsersController {
     this.logger.log(`[UNLINK-MC] 🔗 User ID: ${userId} is unlinking their Minecraft account.`);
     return this.usersService.unlinkMinecraftAccount(userId);
   }
+
+  @Get(':identifier/posts')
+  @ApiOperation({ summary: "Get a user's posts with pagination" })
+  async getPostsForUser(
+    @Param('identifier') identifier: string,
+    @Query(new ValidationPipe({ transform: true, forbidNonWhitelisted: true })) query: FindAllPostsDto
+  ) {
+    // Сначала находим пользователя, чтобы получить его ID
+    const user = await this.usersService.findOne(identifier);
+    // Затем ищем посты по ID
+    return this.usersService.findPostsForUser(user.id, query);
+  }
 }
 --- END FILE: backend/src/users/users.controller.ts ---
 
 
 
 --- START FILE: backend/src/users/users.module.ts ---
+
+// backend/src/users/users.module.ts
 
 import { Module, Global } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -5305,11 +5360,12 @@ import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { RanksModule } from '../ranks/ranks.module';
 import { PendingCommand } from '../shop/entities/pending-command.entity';
+import { Post } from 'src/posts/entities/post.entity'; // [!code ++]
 
 @Global()
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, PendingCommand]),
+    TypeOrmModule.forFeature([User, PendingCommand, Post]), // [!code ++]
     RanksModule,
   ],
   providers: [UsersService],
@@ -5340,6 +5396,8 @@ import { Rank } from 'src/ranks/entities/rank.entity';
 import { ChatGateway } from 'src/chat/chat.gateway'; // <-- Убедитесь, что этот импорт есть
 import { PendingCommand } from 'src/shop/entities/pending-command.entity';
 import { EventEmitter2 } from '@nestjs/event-emitter'; // <-- Добавьте этот импорт
+import { Post } from 'src/posts/entities/post.entity'; // [!code ++]
+import { FindAllPostsDto } from 'src/posts/dto/find-all-posts';
 
 
 export type PublicUser = Omit<User, 'password_hash' | 'validatePassword' | 'deleted_at'>;
@@ -5358,6 +5416,8 @@ export class UsersService {
     private readonly eventEmitter: EventEmitter2,
     private jwtService: JwtService,
     private ranksService: RanksService,
+    @InjectRepository(Post)
+    private postsRepository: Repository<Post>,
   ) { }
 
   async create(createUserDto: CreateUserDto): Promise<PublicUser> {
@@ -5473,6 +5533,12 @@ export class UsersService {
     }
     if (dto.reputation_count !== undefined) {
       targetUser.reputation_count = dto.reputation_count;
+    }
+    if (dto.is_verified_admin !== undefined) {
+      targetUser.is_verified_admin = dto.is_verified_admin;
+    }
+    if (dto.is_verified_youtuber !== undefined) {
+      targetUser.is_verified_youtuber = dto.is_verified_youtuber;
     }
     const updatedUser = await this.usersRepository.save(targetUser);
     this.logger.log(`[ADMIN-UPDATE-SUCCESS] ✅ User ID: ${targetUserId} was successfully updated by Admin ID: ${actorId}.`);
@@ -5595,31 +5661,31 @@ export class UsersService {
   }
 
   async syncRankFromPlugin(minecraftUuid: string, rankSystemName: string): Promise<void> {
-        this.logger.verbose(`[RANK-SYNC] 🔄 Received rank sync from plugin. UUID: ${minecraftUuid}, Rank: ${rankSystemName}`);
-        const user = await this.usersRepository.findOne({ where: { minecraft_uuid: minecraftUuid }, relations: ['rank'] });
-        if (!user) return;
-        const rankFromGame = await this.ranksService.findRankBySystemName(rankSystemName);
-        if (!rankFromGame) {
-            this.logger.warn(`[RANK-SYNC-FAIL] ⚠️ Could not find a rank with system_name "${rankSystemName}" in the database.`);
-            return;
-        }
-        const currentWebsiteRank = user.rank;
-        if (currentWebsiteRank?.id === rankFromGame.id) return;
-        if (!currentWebsiteRank || rankFromGame.power_level > currentWebsiteRank.power_level) {
-            user.rank = rankFromGame;
-            await this.usersRepository.save(user);
-            this.logger.log(`[RANK-SYNC-UPDATE-SITE] ✅ User ID: ${user.id}. Game rank "${rankFromGame.name}" had higher priority.`);
-        } else {
-            this.logger.warn(`[RANK-SYNC-FIX] Mismatch for User ID: ${user.id}. Website: "${currentWebsiteRank.name}", Game: "${rankFromGame.name}". Website has priority.`);
-            if (currentWebsiteRank.command_template && user.minecraft_username) {
-                const fixCommand = currentWebsiteRank.command_template.replace('{username}', user.minecraft_username);
-                const pendingCommand = this.pendingCommandsRepository.create({ command: fixCommand });
-                await this.pendingCommandsRepository.save(pendingCommand);
-                this.eventEmitter.emit('command.queued');
-                this.logger.log(`[RANK-SYNC-FIX] ✅ Re-queued command to fix in-game rank: "${fixCommand}"`);
-            }
-        }
+    this.logger.verbose(`[RANK-SYNC] 🔄 Received rank sync from plugin. UUID: ${minecraftUuid}, Rank: ${rankSystemName}`);
+    const user = await this.usersRepository.findOne({ where: { minecraft_uuid: minecraftUuid }, relations: ['rank'] });
+    if (!user) return;
+    const rankFromGame = await this.ranksService.findRankBySystemName(rankSystemName);
+    if (!rankFromGame) {
+      this.logger.warn(`[RANK-SYNC-FAIL] ⚠️ Could not find a rank with system_name "${rankSystemName}" in the database.`);
+      return;
     }
+    const currentWebsiteRank = user.rank;
+    if (currentWebsiteRank?.id === rankFromGame.id) return;
+    if (!currentWebsiteRank || rankFromGame.power_level > currentWebsiteRank.power_level) {
+      user.rank = rankFromGame;
+      await this.usersRepository.save(user);
+      this.logger.log(`[RANK-SYNC-UPDATE-SITE] ✅ User ID: ${user.id}. Game rank "${rankFromGame.name}" had higher priority.`);
+    } else {
+      this.logger.warn(`[RANK-SYNC-FIX] Mismatch for User ID: ${user.id}. Website: "${currentWebsiteRank.name}", Game: "${rankFromGame.name}". Website has priority.`);
+      if (currentWebsiteRank.command_template && user.minecraft_username) {
+        const fixCommand = currentWebsiteRank.command_template.replace('{username}', user.minecraft_username);
+        const pendingCommand = this.pendingCommandsRepository.create({ command: fixCommand });
+        await this.pendingCommandsRepository.save(pendingCommand);
+        this.eventEmitter.emit('command.queued');
+        this.logger.log(`[RANK-SYNC-FIX] ✅ Re-queued command to fix in-game rank: "${fixCommand}"`);
+      }
+    }
+  }
 
   async unlinkMinecraftAccount(userId: number): Promise<{ user: PublicUser, access_token: string }> {
     const user = await this.usersRepository.findOneBy({ id: userId });
@@ -5659,23 +5725,47 @@ export class UsersService {
   }
 
   async updateRankFromGameEvent(minecraftUuid: string, newRankSystemName: string): Promise<void> {
-      const user = await this.usersRepository.findOneBy({ minecraft_uuid: minecraftUuid });
-      if (!user) return; // Пользователь не найден, нечего делать
+    const user = await this.usersRepository.findOneBy({ minecraft_uuid: minecraftUuid });
+    if (!user) return; // Пользователь не найден, нечего делать
 
-      const newRank = await this.ranksService.findRankBySystemName(newRankSystemName);
-      if (!newRank) {
-          this.logger.warn(`[EVENT-SYNC-FAIL] Rank "${newRankSystemName}" from game event not found in DB.`);
-          return;
-      }
+    const newRank = await this.ranksService.findRankBySystemName(newRankSystemName);
+    if (!newRank) {
+      this.logger.warn(`[EVENT-SYNC-FAIL] Rank "${newRankSystemName}" from game event not found in DB.`);
+      return;
+    }
 
-      // Обновляем ранг на сайте, доверяя событию от перехватчика
-      if (user.rank_id !== newRank.id) {
-          user.rank = newRank;
-          await this.usersRepository.save(user);
-          this.logger.log(`[EVENT-SYNC-SUCCESS] User ID ${user.id} rank updated to "${newRank.name}" based on in-game command event.`);
-      }
+    // Обновляем ранг на сайте, доверяя событию от перехватчика
+    if (user.rank_id !== newRank.id) {
+      user.rank = newRank;
+      await this.usersRepository.save(user);
+      this.logger.log(`[EVENT-SYNC-SUCCESS] User ID ${user.id} rank updated to "${newRank.name}" based on in-game command event.`);
+    }
   }
+  async findPostsForUser(userId: number, queryDto: FindAllPostsDto): Promise<{ data: any[], total: number }> {
+    const { page = 1, limit = 5 } = queryDto; // По умолчанию будем загружать по 5 постов
+    this.logger.verbose(`[DB-QUERY] 💾 Fetching posts for User ID: ${userId} with page: ${page}, limit: ${limit}`);
 
+    const queryBuilder = this.postsRepository.createQueryBuilder('post')
+      .leftJoinAndSelect('post.author', 'author')
+      .leftJoin('post.votes', 'votes')
+      .addSelect('COALESCE(SUM(votes.value), 0)', 'score')
+      .where('post.author_id = :userId', { userId })
+      .groupBy('post.id, author.id')
+      .orderBy('post.created_at', 'DESC')
+      .take(limit)
+      .skip((page - 1) * limit);
+
+    const [entities, total] = await queryBuilder.getManyAndCount();
+    const rawEntities = await queryBuilder.getRawMany();
+
+    const postsWithScores = entities.map(post => {
+      const rawPost = rawEntities.find(raw => raw.post_id === post.id);
+      return { ...post, score: rawPost ? parseInt(rawPost.score, 10) : 0 };
+    });
+
+    this.logger.verbose(`[DB-RESULT] 💾 Found ${total} total posts for user, returning ${postsWithScores.length}.`);
+    return { data: postsWithScores, total };
+  }
 }
 --- END FILE: backend/src/users/users.service.ts ---
 
@@ -6017,6 +6107,7 @@ import AdminCustomPages from './pages/AdminCustomPages';   // [!code ++]
 import AdminEditPage from './pages/AdminEditPage';         // [!code ++]
 import CustomPageView from './pages/CustomPageView';       // [!code ++]
 import axios from 'axios'; // <-- Убедитесь, что axios импортирован
+import UpdateNotification from './components/UpdateNotification';
 
 axios.defaults.baseURL = import.meta.env.VITE_API_BASE_URL;
 
@@ -6034,6 +6125,7 @@ function App() {
         <ChatProvider>
           <NotificationsProvider>
             <Router>
+              <UpdateNotification />
               <Toaster position="bottom-right" toastOptions={{ duration: 5000 }} />
               <Routes>
                 <Route path="/" element={<MainLayout />}>
@@ -6232,9 +6324,9 @@ const adminNavItem = {
         { name: 'Post Management', icon: <DynamicFeedIcon />, path: '/admin/posts' },
         { name: 'Rank Management', icon: <ShieldIcon />, path: '/admin/ranks' },
         { name: 'Shop Management', icon: <StorefrontIcon />, path: '/admin/shop' },
-        { name: 'Custom Pages Management', icon: <ArticleIcon />, path: '/admin/pages' } 
+        { name: 'Custom Page Editor', icon: <ArticleIcon />, path: '/admin/pages' } 
     ],
-};
+}; 
 
 
 const CollapsiblePushSidebar = ({ children }) => {
@@ -6247,8 +6339,6 @@ const CollapsiblePushSidebar = ({ children }) => {
     const { isLoggedIn, user, logout } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
 
-    // --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
-    // Проверяем права по power_level, а не по названию ранга. 800 - это уровень модератора.
     const isAdmin = user?.rank?.power_level >= 800;
 
     useEffect(() => {
@@ -6467,6 +6557,77 @@ const CollapsiblePushSidebar = ({ children }) => {
 
 export default CollapsiblePushSidebar;
 --- END FILE: frontend/src/components/CollapsiblePushSidebar.js ---
+
+
+
+--- START FILE: frontend/src/components/ConfirmationModal.js ---
+
+// frontend/src/components/ConfirmationModal.js
+import React from 'react';
+import { Modal, ModalDialog, Typography, Box, Button, Divider } from '@mui/joy';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+
+/**
+ * A reusable confirmation modal dialog.
+ * @param {object} props
+ * @param {boolean} props.open - Whether the modal is open.
+ * @param {function} props.onClose - Function to call when the modal is closed (e.g., by clicking the 'Cancel' button or outside).
+ * @param {function} props.onConfirm - Function to call when the confirmation button is clicked.
+ * @param {string} props.title - The title of the modal dialog.
+ * @param {string|React.ReactNode} props.content - The main text or content of the modal.
+ * @param {string} [props.confirmText='Confirm'] - The text for the confirmation button.
+ * @param {'primary'|'danger'|'success'|'warning'|'neutral'} [props.confirmColor='primary'] - The color of the confirmation button.
+ * @param {boolean} [props.loading=false] - If true, shows a loading spinner on the confirm button.
+ */
+function ConfirmationModal({
+  open,
+  onClose,
+  onConfirm,
+  title,
+  content,
+  confirmText = 'Confirm',
+  confirmColor = 'primary',
+  loading = false,
+}) {
+  return (
+    <Modal open={open} onClose={onClose}>
+      <ModalDialog
+        variant="outlined"
+        role="alertdialog"
+        sx={{ minWidth: { xs: 'calc(100% - 32px)', sm: 400 } }}
+      >
+        <Typography
+          component="h2"
+          level="h4"
+          startDecorator={<WarningAmberIcon />}
+          textColor={`${confirmColor}.500`}
+        >
+          {title}
+        </Typography>
+        <Divider sx={{ my: 2 }} />
+        <Typography textColor="text.secondary">{content}</Typography>
+        <Box
+          sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 3 }}
+        >
+          <Button variant="plain" color="neutral" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="solid"
+            color={confirmColor}
+            loading={loading}
+            onClick={onConfirm}
+          >
+            {confirmText}
+          </Button>
+        </Box>
+      </ModalDialog>
+    </Modal>
+  );
+}
+
+export default ConfirmationModal;
+--- END FILE: frontend/src/components/ConfirmationModal.js ---
 
 
 
@@ -6881,7 +7042,7 @@ const MenuBar = ({ editor }) => {
 
             } catch (error) {
                 console.error('Image upload failed:', error);
-                alert('Image upload failed!');
+                toast.error('Image upload failed!'); // [!code --] alert('Image upload failed!');
             }
         };
         input.click();
@@ -6996,6 +7157,273 @@ export const TiptapEditor = ({ content, onChange, ...props }) => {
     );
 };
 --- END FILE: frontend/src/components/TiptapEditor.js ---
+
+
+
+--- START FILE: frontend/src/components/UpdateNotification.js ---
+
+// frontend/src/components/UpdateNotification.js
+import React from 'react';
+import { useRegisterSW } from 'virtual:pwa-register/react';
+import { Alert, Button, CircularProgress, Link as JoyLink, Typography } from '@mui/joy';
+import InfoIcon from '@mui/icons-material/Info';
+
+function UpdateNotification() {
+  const {
+    offlineReady: [offlineReady, setOfflineReady],
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegistered(r) {
+      console.log('Service Worker registered:', r);
+    },
+    onRegisterError(error) {
+      console.error('Service Worker registration error:', error);
+    },
+  });
+
+  const close = () => {
+    setOfflineReady(false);
+    setNeedRefresh(false);
+  };
+
+  if (!needRefresh) {
+    return null; // Не показываем ничего, если обновление не нужно
+  }
+
+  return (
+    <Alert
+      variant="soft"
+      color="success"
+      startDecorator={<InfoIcon />}
+      endDecorator={
+        <Button
+          size="sm"
+          variant="solid"
+          color="success"
+          onClick={() => updateServiceWorker(true)}
+        >
+          Update
+        </Button>
+      }
+      sx={{
+        position: 'fixed',
+        bottom: '24px',
+        left: '24px',
+        zIndex: 9999,
+        boxShadow: 'lg',
+      }}
+    >
+      <div>
+        <Typography fontWeight="lg">New version available!</Typography>
+        <Typography level="body-sm">Click the button to update to the latest version.</Typography>
+      </div>
+    </Alert>
+  );
+}
+
+export default UpdateNotification;
+--- END FILE: frontend/src/components/UpdateNotification.js ---
+
+
+
+--- START FILE: frontend/src/components/UserPostsList.js ---
+
+// frontend/src/components/UserPostsList.js
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import {
+    Typography, List, ListItem, Sheet, Box, CircularProgress, Alert, Link as JoyLink, Divider
+} from '@mui/joy';
+import JoyPagination from './JoyPagination';
+import VoteButtons from './VoteButtons';
+
+// Вспомогательный компонент для превью поста (остается без изменений)
+const PostPreview = ({ htmlContent }) => {
+    const imagePlaceholder = ' - 🖼️ - ';
+    const contentWithPlaceholders = htmlContent.replace(/<img[^>]*>/g, imagePlaceholder);
+    const textContent = (() => {
+        const doc = new DOMParser().parseFromString(contentWithPlaceholders, 'text/html');
+        return doc.body.textContent || "";
+    })();
+    return (
+        <Typography
+            level="body-md"
+            sx={{
+                mb: 1,
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                wordBreak: 'break-word'
+            }}
+        >
+            {textContent.trim()}
+        </Typography>
+    );
+};
+
+
+function UserPostsList({ userId }) {
+    const [posts, setPosts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const { isLoggedIn, authToken } = useAuth();
+
+    const [page, setPage] = useState(1);
+    const [limit] = useState(5);
+    const [totalPages, setTotalPages] = useState(0);
+
+    const fetchPosts = useCallback(async () => {
+        if (!userId) return;
+        try {
+            setLoading(true);
+            setError(null);
+            const config = {
+                headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+                params: { page, limit }
+            };
+            const response = await axios.get(`/api/users/${userId}/posts`, config);
+            setPosts(response.data.data);
+            setTotalPages(Math.ceil(response.data.total / limit));
+        } catch (err) {
+            setError('Failed to load posts.');
+        } finally {
+            setLoading(false);
+        }
+    }, [userId, authToken, page, limit]);
+
+    useEffect(() => {
+        fetchPosts();
+    }, [fetchPosts]);
+
+    const handleVote = useCallback(async (postId, value) => {
+        if (!isLoggedIn) {
+            alert('Please log in to vote.');
+            return;
+        }
+        try {
+            await axios.post(`/api/votes/posts/${postId}`, { value }, { headers: { Authorization: `Bearer ${authToken}` } });
+            fetchPosts();
+        } catch (error) {
+            alert(error.response?.data?.message || 'Failed to vote.');
+            fetchPosts();
+        }
+    }, [isLoggedIn, authToken, fetchPosts]);
+
+
+    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}><CircularProgress /></Box>;
+    if (error) return <Alert color="danger" sx={{ my: 2 }}>{error}</Alert>;
+    if (posts.length === 0) {
+        return (
+            <Sheet variant="outlined" sx={{ p: 2, borderRadius: 'sm', textAlign: 'center' }}>
+                 <Typography sx={{ my: 2 }}>This user hasn't created any posts yet.</Typography>
+            </Sheet>
+        );
+    }
+
+    return (
+        <Box>
+            {/* [!code start] */}
+            {/* Оборачиваем весь список в Sheet, чтобы создать рамку и фон */}
+            <Sheet variant="outlined" sx={{ borderRadius: 'sm' }}>
+                <List sx={{ p: 0 }}>
+                    {posts.map((post, index) => (
+                        <React.Fragment key={post.id}>
+                            <ListItem>
+                                {/* Вместо Sheet внутри используем Box с отступами */}
+                                <Box sx={{ p: 2, flexGrow: 1 }}>
+                                    <JoyLink component={RouterLink} to={`/posts/${post.id}`} level="title-lg" sx={{ mb: 1, display: 'block' }}>
+                                        {post.title}
+                                    </JoyLink>
+                                    <PostPreview htmlContent={post.content} />
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'text.tertiary', mt: 1 }}>
+                                        <VoteButtons initialScore={post.score} currentUserVote={post.currentUserVote} onVote={(value) => handleVote(post.id, value)} disabled={!isLoggedIn} />
+                                        <Typography level="body-xs">{new Date(post.created_at).toLocaleDateString()}</Typography>
+                                    </Box>
+                                </Box>
+                            </ListItem>
+                            {/* Добавляем разделитель между элементами списка */}
+                            {index < posts.length - 1 && <Divider />}
+                        </React.Fragment>
+                    ))}
+                </List>
+            </Sheet>
+            {/* [!code end] */}
+
+            {totalPages > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                    <JoyPagination
+                        count={totalPages}
+                        page={page}
+                        onChange={(event, value) => setPage(value)}
+                    />
+                </Box>
+            )}
+        </Box>
+    );
+}
+
+export default UserPostsList;
+--- END FILE: frontend/src/components/UserPostsList.js ---
+
+
+
+--- START FILE: frontend/src/components/VerifiedIcons.js ---
+
+// frontend/src/components/VerifiedIcons.js
+import React from 'react';
+import { Tooltip, Box } from '@mui/joy';
+import ShieldIcon from '@mui/icons-material/Shield'; 
+
+// [!code focus start]
+// ШАГ 1: Импортируем SVG как обычный URL. БЕЗ "?react" и БЕЗ "{ ReactComponent }".
+import youtubeLogoUrl from '../assets/youtube-logo.svg';
+// [!code focus end]
+
+/**
+ * Компонент для отображения иконок верификации пользователя.
+ */
+function VerifiedIcons({ user, sx, size = '1em' }) {
+  if (!user || (!user.is_verified_admin && !user.is_verified_youtuber)) {
+    return null; 
+  }
+
+  return (
+    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, ...sx }}>
+      {user.is_verified_admin && (
+        <Tooltip title="Verified Administrator" variant="outlined" size="sm">
+          <ShieldIcon sx={{ fontSize: size, color: 'primary.300', verticalAlign: 'middle' }} />
+        </Tooltip>
+      )}
+      {user.is_verified_youtuber && (
+        <Tooltip title="Verified YouTuber" variant="outlined" size="sm">
+            {/* [!code focus start] */}
+            {/* ШАГ 2: Используем Box, который рендерит тег <img> и вставляет URL в src. */}
+            {/* Это самый надежный способ отобразить SVG. */}
+            <Box
+              component="img"
+              src={youtubeLogoUrl}
+              alt="Verified YouTuber"
+              sx={{
+                height: size, // Управляем размером через высоту
+                width: 'auto',
+                verticalAlign: 'middle', // Выравниваем по центру строки текста
+              }}
+            />
+            {/* [!code focus end] */}
+        </Tooltip>
+      )}
+    </Box>
+  );
+}
+
+export default VerifiedIcons;
+--- END FILE: frontend/src/components/VerifiedIcons.js ---
 
 
 
@@ -7684,8 +8112,8 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
-import ArticleIcon from '@mui/icons-material/Article';
-
+import ConfirmationModal from '../components/ConfirmationModal'; // [!code ++]
+import toast from 'react-hot-toast'; // [!code ++]
 
 function AdminCustomPages() {
     const { authToken } = useAuth();
@@ -7693,6 +8121,14 @@ function AdminCustomPages() {
     const [pages, setPages] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    // [!code start]
+    // --- СОСТОЯНИЯ ДЛЯ МОДАЛЬНОГО ОКНА ---
+    const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+    const [pageToDelete, setPageToDelete] = useState(null);
+    const [isActionLoading, setIsActionLoading] = useState(false);
+    // [!code end]
+
 
     const fetchPages = useCallback(async () => {
         setLoading(true);
@@ -7712,17 +8148,31 @@ function AdminCustomPages() {
         fetchPages();
     }, [fetchPages]);
 
-    const handleDelete = async (pageId) => {
-        if (!window.confirm('Are you sure you want to delete this page?')) return;
+    // [!code start]
+    // --- ОБНОВЛЁННАЯ ЛОГИКА УДАЛЕНИЯ ---
+    const handleOpenDeleteModal = (page) => {
+        setPageToDelete(page);
+        setConfirmModalOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!pageToDelete) return;
+        setIsActionLoading(true);
         try {
-            await axios.delete(`/api/admin/pages/${pageId}`, {
+            await axios.delete(`/api/admin/pages/${pageToDelete.id}`, {
                 headers: { Authorization: `Bearer ${authToken}` },
             });
-            fetchPages();
+            toast.success(`Page "${pageToDelete.title}" deleted successfully.`);
+            fetchPages(); // Обновляем список
         } catch (err) {
-            alert('Failed to delete page.');
+            toast.error('Failed to delete page.');
+        } finally {
+            setIsActionLoading(false);
+            setConfirmModalOpen(false);
+            setPageToDelete(null);
         }
     };
+    // [!code end]
 
     if (loading) return <CircularProgress />;
     if (error) return <Alert color="danger">{error}</Alert>;
@@ -7739,6 +8189,7 @@ function AdminCustomPages() {
                     Create Page
                 </Button>
             </Box>
+
             <Sheet variant="outlined" sx={{ borderRadius: 'sm', overflow: 'auto' }}>
                 <Table hoverRow>
                     <thead>
@@ -7759,11 +8210,10 @@ function AdminCustomPages() {
                                     </JoyLink>
                                 </td>
                                 <td>
-                                    {page.is_published ? (
-                                        <Chip color="success" size="sm">Published</Chip>
-                                    ) : (
-                                        <Chip color="neutral" size="sm">Draft</Chip>
-                                    )}
+                                    {page.is_published ?
+                                        (<Chip color="success" size="sm">Published</Chip>) :
+                                        (<Chip color="neutral" size="sm">Draft</Chip>)
+                                    }
                                 </td>
                                 <td>
                                     <Tooltip title="Edit">
@@ -7772,7 +8222,7 @@ function AdminCustomPages() {
                                         </IconButton>
                                     </Tooltip>
                                     <Tooltip title="Delete">
-                                        <IconButton size="sm" variant="soft" color="danger" onClick={() => handleDelete(page.id)}>
+                                        <IconButton size="sm" variant="soft" color="danger" onClick={() => handleOpenDeleteModal(page)}>
                                             <DeleteForeverIcon />
                                         </IconButton>
                                     </Tooltip>
@@ -7782,6 +8232,19 @@ function AdminCustomPages() {
                     </tbody>
                 </Table>
             </Sheet>
+
+            {/* [!code start] */}
+            <ConfirmationModal
+                open={confirmModalOpen}
+                onClose={() => setConfirmModalOpen(false)}
+                onConfirm={handleConfirmDelete}
+                title="Confirm Page Deletion"
+                content={`Are you sure you want to permanently delete the page "${pageToDelete?.title}"? This action cannot be undone.`}
+                confirmText="Delete"
+                confirmColor="danger"
+                loading={isActionLoading}
+            />
+            {/* [!code end] */}
         </Box>
     );
 }
@@ -7941,6 +8404,8 @@ export default AdminEditPage;
 
 --- START FILE: frontend/src/pages/AdminPage.js ---
 
+// frontend/src/pages/AdminPage.js
+
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
@@ -7950,7 +8415,8 @@ import {
     Stack, Tooltip,
     useTheme,
     Divider,
-    IconButton
+    IconButton,
+    Switch // [!code ++]
 } from '@mui/joy';
 import { useMediaQuery } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
@@ -7958,15 +8424,17 @@ import EditIcon from '@mui/icons-material/Edit';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import JoyPagination from '../components/JoyPagination';
+import ConfirmationModal from '../components/ConfirmationModal';
+import toast from 'react-hot-toast';
+import VerifiedIcons from '../components/VerifiedIcons'; // [!code ++]
 
-// --- Вспомогательная функция для определения цвета текста на цветном фоне ---
+// Вспомогательная функция для определения цвета текста на цветном фоне
 function isColorLight(hexColor) {
     if (!hexColor) return false;
     const hex = hexColor.replace('#', '');
     const r = parseInt(hex.substring(0, 2), 16);
     const g = parseInt(hex.substring(2, 4), 16);
     const b = parseInt(hex.substring(4, 6), 16);
-    // Формула для определения яркости
     const brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
     return brightness > 155;
 }
@@ -7981,28 +8449,34 @@ function AdminPage() {
     const [searchQuery, setSearchQuery] = useState('');
 
     const [page, setPage] = useState(1);
-    const [limit, setLimit] = useState(15); // Будем показывать по 15 пользователей
+    const [limit, setLimit] = useState(15);
     const [totalPages, setTotalPages] = useState(0);
-
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
+
+    // [!code focus start]
+    // --- НОВЫЕ СОСТОЯНИЯ ДЛЯ ПЕРЕКЛЮЧАТЕЛЕЙ В МОДАЛЬНОМ ОКНЕ ---
     const [selectedRankId, setSelectedRankId] = useState('');
+    const [isAdminVerified, setIsAdminVerified] = useState(false);
+    const [isYoutuberVerified, setIsYoutuberVerified] = useState(false);
+    // [!code focus end]
+
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [userToAction, setUserToAction] = useState(null);
+    const [actionType, setActionType] = useState('');
+    const [isActionLoading, setIsActionLoading] = useState(false);
     const fetchUsers = useCallback(async (query) => {
         setLoading(true);
         try {
             const config = {
                 headers: { Authorization: `Bearer ${authToken}` },
-                // Добавляем параметры пагинации в запрос
                 params: { search: query, page, limit },
             };
             const response = await axios.get(`/api/users`, config);
-
-            // Берем данные из поля 'data'
             setUsers(response.data.data);
-            // Рассчитываем общее количество страниц
             setTotalPages(Math.ceil(response.data.total / limit));
 
         } catch (err) {
@@ -8011,11 +8485,8 @@ function AdminPage() {
         } finally {
             setLoading(false);
         }
-        // Обновляем зависимости useCallback
     }, [authToken, page, limit]);
 
-
-    // --- ДОБАВЛЕНО: Функция для получения списка всех рангов ---
     const fetchRanks = useCallback(async () => {
         try {
             const config = { headers: { Authorization: `Bearer ${authToken}` } };
@@ -8023,66 +8494,81 @@ function AdminPage() {
             setRanks(response.data);
         } catch (err) {
             console.error("Failed to load ranks list", err);
-            // Можно показать отдельное уведомление об ошибке, если нужно
         }
     }, [authToken]);
 
 
     useEffect(() => {
-        // Запускаем загрузку пользователей и рангов
         fetchUsers(searchQuery);
         fetchRanks();
     }, [fetchUsers, fetchRanks, searchQuery]);
 
-
     const handleSearch = (event) => {
         if (event.key === 'Enter') {
-            setPage(1); // При новом поиске всегда сбрасываем на первую страницу
-            // Обновление searchQuery вызовет нужный useEffect
+            setPage(1);
         }
     };
 
-    const handleOpenModal = (user) => {
+    const handleOpenEditModal = (user) => {
         setSelectedUser(user);
-        // --- ИЗМЕНЕНО: Устанавливаем ID текущего ранга пользователя ---
+        // [!code focus start]
+        // --- ЗАПОЛНЯЕМ СОСТОЯНИЯ ДАННЫМИ ВЫБРАННОГО ПОЛЬЗОВАТЕЛЯ ---
         setSelectedRankId(user.rank?.id || '');
-        setIsModalOpen(true);
+        setIsAdminVerified(user.is_verified_admin || false);
+        setIsYoutuberVerified(user.is_verified_youtuber || false);
+        // [!code focus end]
+        setIsEditModalOpen(true);
     };
 
     const handleSaveChanges = async () => {
         if (!selectedUser) return;
         try {
             const config = { headers: { Authorization: `Bearer ${authToken}` } };
+            // [!code focus start]
+            // --- СОЗДАЕМ PAYLOAD СО ВСЕМИ ДАННЫМИ ИЗ МОДАЛЬНОГО ОКНА ---
+            const payload = {
+                rank_id: selectedRankId,
+                is_verified_admin: isAdminVerified,
+                is_verified_youtuber: isYoutuberVerified,
+            };
 
-            // Отправляем объект с правильным именем поля (rank_id) и правильным значением (числом ID)
             await axios.patch(
                 `/api/admin/users/${selectedUser.id}/update`,
-                { rank_id: selectedRankId },
+                payload, // Отправляем новый payload
                 config
             );
-
-            setIsModalOpen(false);
+            // [!code focus end]
+            toast.success(`User ${selectedUser.username} updated successfully!`);
+            setIsEditModalOpen(false);
             fetchUsers(searchQuery);
         } catch (err) {
-            // Улучшим вывод ошибок, чтобы видеть ответ от сервера
             const errorMessage = err.response?.data?.message || 'Failed to update user.';
-            alert(Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage);
+            toast.error(Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage);
             console.error(err);
         }
     };
 
-    const handleToggleBanStatus = async (user) => {
-        const action = user.is_banned ? 'unban' : 'ban';
-        if (!window.confirm(`Are you sure you want to ${action} ${user.username}?`)) {
-            return;
-        }
+    const handleOpenConfirmModal = (user, type) => {
+        setUserToAction(user);
+        setActionType(type);
+        setIsConfirmModalOpen(true);
+    };
+
+    const handleConfirmAction = async () => {
+        if (!userToAction || !actionType) return;
+        setIsActionLoading(true);
         try {
             const config = { headers: { Authorization: `Bearer ${authToken}` } };
-            await axios.post(`/api/admin/users/${user.id}/${action}`, {}, config);
+            await axios.post(`/api/admin/users/${userToAction.id}/${actionType}`, {}, config);
+            toast.success(`User ${userToAction.username} has been ${actionType}ned.`);
             fetchUsers(searchQuery);
         } catch (err) {
-            alert(`Failed to ${action} user.`);
+            toast.error(`Failed to ${actionType} user.`);
             console.error(err);
+        } finally {
+            setIsActionLoading(false);
+            setIsConfirmModalOpen(false);
+            setUserToAction(null);
         }
     };
 
@@ -8094,49 +8580,37 @@ function AdminPage() {
         <Sheet key={user.id} variant="outlined" sx={{ p: 2, borderRadius: 'sm' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
                 <Box>
-                    <Typography level="title-md">{user.username}</Typography>
+                    <Typography level="title-md" component="span">{user.username} <VerifiedIcons user={user} size="1.1em" /></Typography>
                     <Typography level="body-sm" textColor="text.tertiary">{user.email}</Typography>
                     <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                        {/* --- ИЗМЕНЕНО: Отображение ранга с цветом --- */}
                         {user.rank ? (
-                            <Chip
-                                size="sm"
-                                variant="soft"
-                                sx={{
-                                    backgroundColor: user.rank.display_color,
-                                    color: isColorLight(user.rank.display_color) ? '#000' : '#FFF'
-                                }}
-                            >
+                            <Chip size="sm" variant="soft" sx={{ backgroundColor: user.rank.display_color, color: isColorLight(user.rank.display_color) ? '#000' : '#FFF' }}>
                                 {user.rank.name}
                             </Chip>
                         ) : <Chip size="sm">No Rank</Chip>}
-
-                        {user.is_banned ? (
-                            <Chip size="sm" color="danger">Banned</Chip>
-                        ) : (
-                            <Chip size="sm" color="success">Active</Chip>
-                        )}
+                        {user.is_banned ? <Chip size="sm" color="danger">Banned</Chip> : <Chip size="sm" color="success">Active</Chip>}
                     </Stack>
                 </Box>
-                <Stack direction="column" spacing={0.5} sx={{ alignItems: 'flex-end' }}>
-                    <Tooltip title="Edit Rank" variant="outlined" size="sm">
-                        <IconButton size="sm" variant="plain" color="neutral" onClick={() => handleOpenModal(user)}>
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+                    <Tooltip title="Edit" variant="outlined" size="sm">
+                        <IconButton size="sm" variant="plain" color="neutral" onClick={() => handleOpenEditModal(user)}>
                             <EditIcon />
                         </IconButton>
                     </Tooltip>
-                    {user.is_banned ? (
-                        <Tooltip title="Unban User" variant="outlined" size="sm">
-                            <IconButton size="sm" variant="plain" color="success" onClick={() => handleToggleBanStatus(user)}>
-                                <CheckCircleOutlineIcon />
-                            </IconButton>
-                        </Tooltip>
-                    ) : (
-                        <Tooltip title="Ban User" variant="outlined" size="sm">
-                            <IconButton size="sm" variant="plain" color="danger" onClick={() => handleToggleBanStatus(user)}>
-                                <BlockIcon />
-                            </IconButton>
-                        </Tooltip>
-                    )}
+                    {user.is_banned ?
+                        (
+                            <Tooltip title="Unban User" variant="outlined" size="sm">
+                                <IconButton size="sm" variant="plain" color="success" onClick={() => handleOpenConfirmModal(user, 'unban')}>
+                                    <CheckCircleOutlineIcon />
+                                </IconButton>
+                            </Tooltip>
+                        ) : (
+                            <Tooltip title="Ban User" variant="outlined" size="sm">
+                                <IconButton size="sm" variant="plain" color="danger" onClick={() => handleOpenConfirmModal(user, 'ban')}>
+                                    <BlockIcon />
+                                </IconButton>
+                            </Tooltip>
+                        )}
                 </Stack>
             </Box>
             <Divider sx={{ my: 1.5 }} />
@@ -8146,16 +8620,12 @@ function AdminPage() {
             </Box>
         </Sheet>
     );
-
     return (
         <Box>
-            <Typography level="h1" component="h1" sx={{ mb: 3 }}>
-                User Management
-            </Typography>
-
+            <Typography level="h1" component="h1" sx={{ mb: 3 }}>User Management</Typography>
             <Input
                 sx={{ mb: 2, maxWidth: { xs: '100%', md: '400px' } }}
-                placeholder="Search by username or email and press Enter..."
+                placeholder="Search by username..."
                 startDecorator={<SearchIcon />}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -8163,22 +8633,14 @@ function AdminPage() {
             />
             {!loading && totalPages > 1 && (
                 <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-                    <JoyPagination
-                        count={totalPages}
-                        page={page}
-                        onChange={(event, value) => setPage(value)}
-                    />
+                    <JoyPagination count={totalPages} page={page} onChange={(event, value) => setPage(value)} />
                 </Box>
             )}
             {loading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                    <CircularProgress />
-                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
             ) : (
                 isMobile ? (
-                    <Stack spacing={1.5}>
-                        {users.map(user => renderUserCard(user))}
-                    </Stack>
+                    <Stack spacing={1.5}>{users.map(user => renderUserCard(user))}</Stack>
                 ) : (
                     <Sheet variant="outlined" sx={{ borderRadius: 'sm', overflow: 'auto' }}>
                         <Table hoverRow sx={{ '& thead th': { verticalAlign: 'middle' }, '& tbody td': { verticalAlign: 'middle' } }}>
@@ -8198,74 +8660,44 @@ function AdminPage() {
                                     <tr key={user.id}>
                                         <td>{user.id}</td>
                                         <td>
-                                            {/* --- ИЗМЕНЕНИЕ 1: Сокращение длинного текста --- */}
                                             <Tooltip title={user.username} variant="outlined" size="sm">
-                                                <Typography
-                                                    sx={{
-                                                        maxWidth: '150px',
-                                                        whiteSpace: 'nowrap',
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis'
-                                                    }}
-                                                >
-                                                    {user.username}
+                                                <Typography component="span" sx={{ maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {user.username} <VerifiedIcons user={user} />
                                                 </Typography>
                                             </Tooltip>
                                         </td>
                                         <td>
-                                            {/* --- ИЗМЕНЕНИЕ 1: Сокращение длинного текста --- */}
                                             <Tooltip title={user.email} variant="outlined" size="sm">
-                                                <Typography
-                                                    sx={{
-                                                        maxWidth: '200px',
-                                                        whiteSpace: 'nowrap',
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis'
-                                                    }}
-                                                >
+                                                <Typography sx={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                     {user.email}
                                                 </Typography>
                                             </Tooltip>
                                         </td>
                                         <td>
                                             {user.rank ? (
-                                                <Chip
-                                                    size="sm"
-                                                    variant="soft"
-                                                    sx={{
-                                                        backgroundColor: user.rank.display_color,
-                                                        color: isColorLight(user.rank.display_color) ? '#000' : '#FFF'
-                                                    }}
-                                                >
+                                                <Chip size="sm" variant="soft" sx={{ backgroundColor: user.rank.display_color, color: isColorLight(user.rank.display_color) ? '#000' : '#FFF' }}>
                                                     {user.rank.name}
                                                 </Chip>
                                             ) : <Chip size="sm">No Rank</Chip>}
                                         </td>
                                         <td>{user.reputation_count}</td>
+                                        <td>{user.is_banned ? <Chip size="sm" color="danger">Banned</Chip> : <Chip size="sm" color="success">Active</Chip>}</td>
                                         <td>
-                                            {user.is_banned ? (
-                                                <Chip size="sm" color="danger">Banned</Chip>
-                                            ) : (
-                                                <Chip size="sm" color="success">Active</Chip>
-                                            )}
-                                        </td>
-                                        <td>
-                                            {/* --- ИЗМЕНЕНИЕ 2: Кнопки заменены на иконки с подсказками --- */}
                                             <Stack direction="row" spacing={1}>
                                                 <Tooltip title="Edit" variant="outlined" size="sm">
-                                                    <IconButton size="sm" variant="outlined" color="neutral" onClick={() => handleOpenModal(user)}>
+                                                    <IconButton size="sm" variant="outlined" color="neutral" onClick={() => handleOpenEditModal(user)}>
                                                         <EditIcon />
                                                     </IconButton>
                                                 </Tooltip>
                                                 {user.is_banned ? (
                                                     <Tooltip title="Unban" variant="outlined" size="sm">
-                                                        <IconButton size="sm" variant="soft" color="success" onClick={() => handleToggleBanStatus(user)}>
+                                                        <IconButton size="sm" variant="soft" color="success" onClick={() => handleOpenConfirmModal(user, 'unban')}>
                                                             <CheckCircleOutlineIcon />
                                                         </IconButton>
                                                     </Tooltip>
                                                 ) : (
                                                     <Tooltip title="Ban" variant="outlined" size="sm">
-                                                        <IconButton size="sm" variant="soft" color="danger" onClick={() => handleToggleBanStatus(user)}>
+                                                        <IconButton size="sm" variant="soft" color="danger" onClick={() => handleOpenConfirmModal(user, 'ban')}>
                                                             <BlockIcon />
                                                         </IconButton>
                                                     </Tooltip>
@@ -8281,34 +8713,59 @@ function AdminPage() {
             )}
             {totalPages > 1 && (
                 <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                    <JoyPagination
-                        count={totalPages}
-                        page={page}
-                        onChange={(event, value) => setPage(value)}
-                    />
+                    <JoyPagination count={totalPages} page={page} onChange={(event, value) => setPage(value)} />
                 </Box>
             )}
-            <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)}>
+
+            {/* [!code focus start] */}
+            <Modal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)}>
                 <ModalDialog>
                     <ModalClose />
                     <Typography level="h4">Edit User: {selectedUser?.username}</Typography>
-                    <FormControl sx={{ mt: 2 }}>
-                        <FormLabel>Rank</FormLabel>
-                        {/* --- ИЗМЕНЕНО: Динамический Select --- */}
-                        <Select
-                            value={selectedRankId}
-                            onChange={(e, newValue) => setSelectedRankId(newValue)}
-                        >
-                            {ranks.map(rank => (
-                                <Option key={rank.id} value={rank.id}>{rank.name}</Option>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    <Button sx={{ mt: 3 }} onClick={handleSaveChanges}>
-                        Save Changes
-                    </Button>
+
+                    <Stack spacing={2} sx={{ mt: 2 }}>
+                        <FormControl>
+                            <FormLabel>Rank</FormLabel>
+                            <Select value={selectedRankId} onChange={(e, newValue) => setSelectedRankId(newValue)}>
+                                {ranks.map(rank => (<Option key={rank.id} value={rank.id}>{rank.name}</Option>))}
+                            </Select>
+                        </FormControl>
+
+                        <Divider sx={{ my: 1 }} />
+                        <Typography level="title-md">Verification Status</Typography>
+
+                        <FormControl orientation="horizontal" sx={{ justifyContent: 'space-between' }}>
+                            <FormLabel>Admin/Moderator</FormLabel>
+                            <Switch
+                                checked={isAdminVerified}
+                                onChange={(event) => setIsAdminVerified(event.target.checked)}
+                            />
+                        </FormControl>
+
+                        <FormControl orientation="horizontal" sx={{ justifyContent: 'space-between' }}>
+                            <FormLabel>YouTuber/Partner</FormLabel>
+                            <Switch
+                                checked={isYoutuberVerified}
+                                onChange={(event) => setIsYoutuberVerified(event.target.checked)}
+                            />
+                        </FormControl>
+                    </Stack>
+
+                    <Button sx={{ mt: 3 }} onClick={handleSaveChanges}>Save Changes</Button>
                 </ModalDialog>
             </Modal>
+            {/* [!code focus end] */}
+
+            <ConfirmationModal
+                open={isConfirmModalOpen}
+                onClose={() => setIsConfirmModalOpen(false)}
+                onConfirm={handleConfirmAction}
+                title={`Confirm ${actionType}`}
+                content={`Are you sure you want to ${actionType} the user "${userToAction?.username}"?`}
+                confirmText={actionType === 'ban' ? 'Ban' : 'Unban'}
+                confirmColor={actionType === 'ban' ? 'danger' : 'success'}
+                loading={isActionLoading}
+            />
         </Box>
     );
 }
@@ -8335,8 +8792,9 @@ import { useMediaQuery } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
-// --- ШАГ 1: Импортируем наш компонент пагинации ---
 import JoyPagination from '../components/JoyPagination';
+import toast from 'react-hot-toast';
+import ConfirmationModal from '../components/ConfirmationModal'; // [!code ++]
 
 function AdminPostsPage() {
     const { authToken } = useAuth();
@@ -8348,12 +8806,17 @@ function AdminPostsPage() {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-    // --- ШАГ 2: Добавляем состояния для пагинации ---
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(15);
     const [totalPages, setTotalPages] = useState(0);
 
-    // --- ШАГ 3: Обновляем функцию загрузки данных ---
+    // [!code start]
+    // --- СОСТОЯНИЯ ДЛЯ МОДАЛЬНОГО ОКНА ---
+    const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+    const [postToDelete, setPostToDelete] = useState(null);
+    const [isActionLoading, setIsActionLoading] = useState(false);
+    // [!code end]
+
     const fetchPosts = useCallback(async (query) => {
         setLoading(true);
         try {
@@ -8368,18 +8831,15 @@ function AdminPostsPage() {
                 },
             };
             const response = await axios.get('/api/posts', config);
-
-            // Правильно обрабатываем новый ответ от API
             setPosts(response.data.data);
             setTotalPages(Math.ceil(response.data.total / limit));
-
         } catch (err) {
             setError('Failed to load post data.');
             console.error(err);
         } finally {
             setLoading(false);
         }
-    }, [authToken, page, limit]); // Добавляем page и limit в зависимости
+    }, [authToken, page, limit]);
 
     useEffect(() => {
         fetchPosts(searchQuery);
@@ -8387,24 +8847,37 @@ function AdminPostsPage() {
 
     const handleSearch = (event) => {
         if (event.key === 'Enter') {
-            setPage(1); // Сбрасываем на первую страницу при поиске
+            setPage(1);
             fetchPosts(searchQuery);
         }
     };
 
-    const handleDeletePost = async (postId) => {
-        if (!window.confirm('Are you sure you want to permanently delete this post?')) return;
+    // [!code start]
+    // --- НОВЫЕ ФУНКЦИИ ДЛЯ МОДАЛЬНОГО ОКНА ---
+    const handleOpenDeleteModal = (post) => {
+        setPostToDelete(post);
+        setConfirmModalOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!postToDelete) return;
+        setIsActionLoading(true);
         try {
-            await axios.delete(`/api/posts/${postId}`, {
+            await axios.delete(`/api/posts/${postToDelete.id}`, {
                 headers: { Authorization: `Bearer ${authToken}` },
             });
-            // Перезагружаем данные для текущей страницы
-            fetchPosts(searchQuery);
+            toast.success('Post successfully deleted.');
+            fetchPosts(searchQuery); // Перезагружаем данные
         } catch (err) {
-            alert('Failed to delete the post.');
+            toast.error('Failed to delete the post.');
             console.error(err);
+        } finally {
+            setIsActionLoading(false);
+            setConfirmModalOpen(false);
+            setPostToDelete(null);
         }
     };
+    // [!code end]
 
     const handleEditPost = (postId) => {
         navigate(`/posts/${postId}/edit`);
@@ -8418,13 +8891,7 @@ function AdminPostsPage() {
         <Sheet key={post.id} variant="outlined" sx={{ p: 2, borderRadius: 'sm' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
                 <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                    <Link
-                        component={RouterLink}
-                        to={`/posts/${post.id}`}
-                        level="title-md"
-                        overlay
-                        sx={{ wordBreak: 'break-word' }}
-                    >
+                    <Link component={RouterLink} to={`/posts/${post.id}`} level="title-md" overlay sx={{ wordBreak: 'break-word' }}>
                         {post.title}
                     </Link>
                     <Typography level="body-sm" textColor="text.tertiary" sx={{ mt: 0.5 }}>
@@ -8438,7 +8905,7 @@ function AdminPostsPage() {
                         </IconButton>
                     </Tooltip>
                     <Tooltip title="Delete Post" variant="outlined" size="sm">
-                        <IconButton size="sm" variant="plain" color="danger" onClick={() => handleDeletePost(post.id)}>
+                        <IconButton size="sm" variant="plain" color="danger" onClick={() => handleOpenDeleteModal(post)}>
                             <DeleteForeverIcon />
                         </IconButton>
                     </Tooltip>
@@ -8449,10 +8916,7 @@ function AdminPostsPage() {
 
     return (
         <Box>
-            <Typography level="h1" component="h1" sx={{ mb: 3 }}>
-                Post Management
-            </Typography>
-
+            <Typography level="h1" component="h1" sx={{ mb: 3 }}>Post Management</Typography>
             <Input
                 sx={{ mb: 2, maxWidth: { xs: '100%', md: '400px' } }}
                 placeholder="Search by title and press Enter..."
@@ -8463,23 +8927,15 @@ function AdminPostsPage() {
             />
             {!loading && totalPages > 1 && (
                 <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-                    <JoyPagination
-                        count={totalPages}
-                        page={page}
-                        onChange={(event, value) => setPage(value)}
-                    />
+                    <JoyPagination count={totalPages} page={page} onChange={(event, value) => setPage(value)} />
                 </Box>
             )}
             {loading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                    <CircularProgress />
-                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
             ) : (
                 <>
                     {isMobile ? (
-                        <Stack spacing={1.5}>
-                            {posts.map(post => renderPostCard(post))}
-                        </Stack>
+                        <Stack spacing={1.5}>{posts.map(post => renderPostCard(post))}</Stack>
                     ) : (
                         <Sheet variant="outlined" sx={{ borderRadius: 'sm', overflow: 'auto' }}>
                             <Table hoverRow sx={{ tableLayout: 'fixed' }}>
@@ -8511,7 +8967,7 @@ function AdminPostsPage() {
                                                         </IconButton>
                                                     </Tooltip>
                                                     <Tooltip title="Delete Post" variant="outlined" size="sm">
-                                                        <IconButton size="sm" variant="soft" color="danger" onClick={() => handleDeletePost(post.id)}>
+                                                        <IconButton size="sm" variant="soft" color="danger" onClick={() => handleOpenDeleteModal(post)}>
                                                             <DeleteForeverIcon />
                                                         </IconButton>
                                                     </Tooltip>
@@ -8523,19 +8979,25 @@ function AdminPostsPage() {
                             </Table>
                         </Sheet>
                     )}
-
-                    {/* --- ШАГ 4: Добавляем компонент пагинации --- */}
                     {totalPages > 1 && (
                         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                            <JoyPagination
-                                count={totalPages}
-                                page={page}
-                                onChange={(event, value) => setPage(value)}
-                            />
+                            <JoyPagination count={totalPages} page={page} onChange={(event, value) => setPage(value)} />
                         </Box>
                     )}
                 </>
             )}
+            {/* [!code start] */}
+            <ConfirmationModal
+                open={confirmModalOpen}
+                onClose={() => setConfirmModalOpen(false)}
+                onConfirm={handleConfirmDelete}
+                title="Confirm Deletion"
+                content={`Are you sure you want to permanently delete the post "${postToDelete?.title}"? This action cannot be undone.`}
+                confirmText="Delete"
+                confirmColor="danger"
+                loading={isActionLoading}
+            />
+            {/* [!code end] */}
         </Box>
     );
 }
@@ -8560,7 +9022,8 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import AddIcon from '@mui/icons-material/Add';
-import ShieldIcon from '@mui/icons-material/Shield';
+import toast from 'react-hot-toast';
+import ConfirmationModal from '../components/ConfirmationModal';
 
 // Вспомогательная функция для цвета текста на чипах
 function isColorLight(hexColor) {
@@ -8579,19 +9042,25 @@ function AdminRanksPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    // Состояния для модального окна миграции
+    const [isMigrationModalOpen, setIsMigrationModalOpen] = useState(false);
     const [rankToDelete, setRankToDelete] = useState(null);
     const [migrationRankId, setMigrationRankId] = useState('');
-
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    
+    // Состояния для модального окна создания/редактирования
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingRank, setEditingRank] = useState(null);
-    const [formData, setFormData] = useState({ name: '', system_name: '', power_level: 10, display_color: '#808080', command_template: '', command_template_remove: '' }); const [modalError, setModalError] = useState('');
+    const [formData, setFormData] = useState({ name: '', system_name: '', power_level: 10, display_color: '#808080', command_template: '', command_template_remove: '' });
+    const [modalError, setModalError] = useState('');
+
+    // Состояния для модального окна подтверждения
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [isActionLoading, setIsActionLoading] = useState(false);
 
     const fetchRanks = useCallback(async () => {
         setLoading(true);
         try {
             const response = await axios.get('/api/ranks', { headers: { Authorization: `Bearer ${authToken}` } });
-            // Ответ отсортирован по power_level на бэкенде, что и задает их порядок
             setRanks(response.data);
         } catch (err) {
             setError('Failed to load ranks data.');
@@ -8604,50 +9073,33 @@ function AdminRanksPage() {
         fetchRanks();
     }, [fetchRanks]);
 
-    const handleOpenModal = (rank = null) => {
+    const handleOpenEditModal = (rank = null) => {
         setModalError('');
         if (rank) {
             setEditingRank(rank);
-            // Добавляем новые поля при редактировании
             setFormData({
                 name: rank.name,
                 system_name: rank.system_name,
                 power_level: rank.power_level,
                 display_color: rank.display_color,
-                command_template: rank.command_template || '', // || '' на случай, если значение null
+                command_template: rank.command_template || '',
                 command_template_remove: rank.command_template_remove || ''
             });
         } else {
             setEditingRank(null);
-            // Сбрасываем новые поля при создании нового ранга
-            setFormData({
-                name: '',
-                system_name: '',
-                power_level: 10,
-                display_color: '#808080',
-                command_template: '',
-                command_template_remove: ''
-            });
+            setFormData({ name: '', system_name: '', power_level: 10, display_color: '#808080', command_template: '', command_template_remove: '' });
         }
-        setIsModalOpen(true);
+        setIsEditModalOpen(true);
     };
 
-    const handleCloseModal = () => {
-        setIsModalOpen(false);
-    };
+    const handleCloseEditModal = () => setIsEditModalOpen(false);
 
     const handleFormChange = (e) => {
         const { name, value } = e.target;
-
-        // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-        // Если мы меняем поле 'power_level', преобразуем его в число
         if (name === 'power_level') {
-            // parseInt(value, 10) преобразует строку в число.
-            // Если поле пустое, сохраняем пустую строку, чтобы пользователь мог стирать значение.
             const numericValue = value === '' ? '' : parseInt(value, 10);
             setFormData(prev => ({ ...prev, [name]: numericValue }));
         } else {
-            // Для всех остальных полей оставляем как есть
             setFormData(prev => ({ ...prev, [name]: value }));
         }
     };
@@ -8655,50 +9107,45 @@ function AdminRanksPage() {
     const handleSaveRank = async (event) => {
         event.preventDefault();
         setModalError('');
-
-        // Проверка, чтобы не создавать ранги сильнее модератора
         const isCustomRank = !editingRank || editingRank.is_removable;
-
-        // Применяем ограничение ТОЛЬКО для пользовательских рангов
         if (isCustomRank && formData.power_level >= 800) {
             setModalError('Power level must be less than 800 for custom ranks.');
             return;
         }
-
         const apiCall = editingRank
             ? axios.patch(`/api/ranks/${editingRank.id}`, formData, { headers: { Authorization: `Bearer ${authToken}` } })
             : axios.post('/api/ranks', formData, { headers: { Authorization: `Bearer ${authToken}` } });
-
         try {
             await apiCall;
             fetchRanks();
-            handleCloseModal();
+            handleCloseEditModal();
         } catch (err) {
             setModalError(err.response?.data?.message || 'An error occurred.');
         }
     };
 
-    const handleDeleteRank = async (rank) => {
-        if (!window.confirm(`Are you sure you want to delete the rank "${rank.name}"? This cannot be undone.`)) {
-            return;
-        }
+    const handleOpenDeleteConfirm = (rank) => {
+        setRankToDelete(rank);
+        setIsConfirmModalOpen(true);
+    };
 
+    const handleConfirmDelete = async () => {
+        if (!rankToDelete) return;
+        setIsActionLoading(true);
         try {
-            // Первая попытка: простое удаление
-            await axios.delete(`/api/ranks/${rank.id}`, { headers: { Authorization: `Bearer ${authToken}` } });
-            // Если успешно, обновляем список
+            await axios.delete(`/api/ranks/${rankToDelete.id}`, { headers: { Authorization: `Bearer ${authToken}` } });
+            toast.success(`Rank "${rankToDelete.name}" was deleted.`);
             fetchRanks();
         } catch (err) {
-            // Если бэкенд вернул ошибку "ранг используется" (409)
             if (err.response && err.response.status === 409) {
-                // Открываем модальное окно для выбора миграции
-                setRankToDelete(rank);
-                setModalError(err.response.data.message); // Показываем сообщение от API
-                setIsDeleteModalOpen(true);
+                setModalError(err.response.data.message);
+                setIsMigrationModalOpen(true);
             } else {
-                // Другая ошибка
-                alert(err.response?.data?.message || 'Failed to delete rank.');
+                toast.error(err.response?.data?.message || 'Failed to delete rank.');
             }
+        } finally {
+            setIsActionLoading(false);
+            setIsConfirmModalOpen(false);
         }
     };
 
@@ -8707,22 +9154,18 @@ function AdminRanksPage() {
             setModalError('You must select a rank to migrate users to.');
             return;
         }
-
         try {
-            // Вторая попытка: удаление с указанием migrationRankId в теле запроса
             await axios.delete(`/api/ranks/${rankToDelete.id}`, {
                 headers: { Authorization: `Bearer ${authToken}` },
-                data: { migrationRankId: Number(migrationRankId) } // axios для DELETE требует тело в поле data
+                data: { migrationRankId: Number(migrationRankId) }
             });
-
-            // Успех! Закрываем окно и обновляем данные
-            setIsDeleteModalOpen(false);
+            toast.success('Rank deleted and users migrated successfully.');
+            setIsMigrationModalOpen(false);
             setRankToDelete(null);
             setMigrationRankId('');
             setModalError('');
             fetchRanks();
         } catch (err) {
-            // Показываем ошибку внутри модального окна
             setModalError(err.response?.data?.message || 'An error occurred during migration.');
         }
     };
@@ -8734,11 +9177,8 @@ function AdminRanksPage() {
         <Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography level="h1" component="h1">Rank Management</Typography>
-                <Button startDecorator={<AddIcon />} onClick={() => handleOpenModal()}>
-                    Create Rank
-                </Button>
+                <Button startDecorator={<AddIcon />} onClick={() => handleOpenEditModal()}>Create Rank</Button>
             </Box>
-
             <Sheet variant="outlined" sx={{ borderRadius: 'sm', overflow: 'auto' }}>
                 <Table hoverRow>
                     <thead>
@@ -8755,32 +9195,20 @@ function AdminRanksPage() {
                         {ranks.map((rank) => (
                             <tr key={rank.id}>
                                 <td>{rank.id}</td>
-                                <td>
-                                    <Chip
-                                        size="lg"
-                                        variant="soft"
-                                        sx={{ bgcolor: rank.display_color, border: '1px solid rgba(0,0,0,0.2)' }}
-                                    />
-                                </td>
+                                <td><Chip size="lg" variant="soft" sx={{ bgcolor: rank.display_color, border: '1px solid rgba(0,0,0,0.2)' }} /></td>
                                 <td>{rank.name}</td>
                                 <td>{rank.system_name}</td>
                                 <td>{rank.power_level}</td>
                                 <td>
                                     <Stack direction="row" spacing={1}>
                                         <Tooltip title="Edit Rank" variant="outlined" size="sm">
-                                            <IconButton size="sm" color="neutral" onClick={() => handleOpenModal(rank)}>
+                                            <IconButton size="sm" color="neutral" onClick={() => handleOpenEditModal(rank)}>
                                                 <EditIcon />
                                             </IconButton>
                                         </Tooltip>
                                         <Tooltip title="Delete Rank" variant="outlined" size="sm">
-                                            <Box> {/* Обертка для Tooltip, чтобы он работал на disabled кнопке */}
-                                                <IconButton
-                                                    size="sm"
-                                                    color="danger"
-                                                    // --- ИЗМЕНЕНО: передаем весь объект rank, а не только id ---
-                                                    onClick={() => handleDeleteRank(rank)}
-                                                    disabled={!rank.is_removable}
-                                                >
+                                            <Box>
+                                                <IconButton size="sm" color="danger" onClick={() => handleOpenDeleteConfirm(rank)} disabled={!rank.is_removable}>
                                                     <DeleteForeverIcon />
                                                 </IconButton>
                                             </Box>
@@ -8793,7 +9221,7 @@ function AdminRanksPage() {
                 </Table>
             </Sheet>
 
-            <Modal open={isModalOpen} onClose={handleCloseModal}>
+            <Modal open={isEditModalOpen} onClose={handleCloseEditModal}>
                 <ModalDialog>
                     <ModalClose />
                     <Typography level="h4">{editingRank ? 'Edit Rank' : 'Create New Rank'}</Typography>
@@ -8806,9 +9234,7 @@ function AdminRanksPage() {
                             <FormControl required disabled={editingRank && !editingRank.is_removable}>
                                 <FormLabel>System Name</FormLabel>
                                 <Input name="system_name" value={formData.system_name} onChange={handleFormChange} required />
-                                <FormHelperText>
-                                    Имя для связи с игрой (например, 'vip'). Маленькие буквы, без пробелов.
-                                </FormHelperText>
+                                <FormHelperText>Name for in-game linking (e.g., 'vip'). Lowercase, no spaces.</FormHelperText>
                             </FormControl>
                             <FormControl disabled={editingRank && !editingRank.is_removable}>
                                 <FormLabel>Power Level</FormLabel>
@@ -8817,28 +9243,13 @@ function AdminRanksPage() {
                             </FormControl>
                             <FormControl>
                                 <FormLabel>Command Template (for issuing)</FormLabel>
-                                <Input
-                                    name="command_template"
-                                    value={formData.command_template}
-                                    onChange={handleFormChange}
-                                    placeholder="e.g., lp user {username} parent set vip"
-                                />
-                                <FormHelperText>
-                                    Use {'{username}'} as a placeholder. Can be empty.
-                                </FormHelperText>
+                                <Input name="command_template" value={formData.command_template} onChange={handleFormChange} placeholder="e.g., lp user {username} parent set vip" />
+                                <FormHelperText>Use {'{username}'} as a placeholder. Can be empty.</FormHelperText>
                             </FormControl>
-
                             <FormControl>
                                 <FormLabel>Command Template (for removal)</FormLabel>
-                                <Input
-                                    name="command_template_remove"
-                                    value={formData.command_template_remove}
-                                    onChange={handleFormChange}
-                                    placeholder="e.g., lp user {username} parent remove vip"
-                                />
-                                <FormHelperText>
-                                    This command is executed when rank is removed.
-                                </FormHelperText>
+                                <Input name="command_template_remove" value={formData.command_template_remove} onChange={handleFormChange} placeholder="e.g., lp user {username} parent remove vip" />
+                                <FormHelperText>This command is executed when rank is removed.</FormHelperText>
                             </FormControl>
                             <FormControl>
                                 <FormLabel>Display Color</FormLabel>
@@ -8850,43 +9261,38 @@ function AdminRanksPage() {
                     </form>
                 </ModalDialog>
             </Modal>
-            <Modal open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)}>
+            
+            <Modal open={isMigrationModalOpen} onClose={() => setIsMigrationModalOpen(false)}>
                 <ModalDialog>
                     <ModalClose />
                     <Typography level="h4">Delete Rank: {rankToDelete?.name}</Typography>
                     <Stack spacing={2} sx={{ mt: 2 }}>
-                        <Alert color="warning">
-                            {modalError || `The rank "${rankToDelete?.name}" is currently in use. To delete it, please select a new rank to which all current members will be migrated.`}
-                        </Alert>
-
+                        <Alert color="warning">{modalError || `The rank "${rankToDelete?.name}" is currently in use. To delete it, please select a new rank to which all current members will be migrated.`}</Alert>
                         <FormControl>
                             <FormLabel>Migrate Users To</FormLabel>
-                            <Select
-                                placeholder="Select a new rank..."
-                                value={migrationRankId}
-                                onChange={(e, newValue) => setMigrationRankId(newValue)}
-                            >
-                                {ranks
-                                    .filter(r => r.id !== rankToDelete?.id) // Нельзя мигрировать на удаляемый ранг
-                                    .map(rank => (
-                                        <Option key={rank.id} value={rank.id}>
-                                            {rank.name} (Power: {rank.power_level})
-                                        </Option>
-                                    ))
-                                }
+                            <Select placeholder="Select a new rank..." value={migrationRankId} onChange={(e, newValue) => setMigrationRankId(newValue)}>
+                                {ranks.filter(r => r.id !== rankToDelete?.id).map(rank => (
+                                    <Option key={rank.id} value={rank.id}>{rank.name} (Power: {rank.power_level})</Option>
+                                ))}
                             </Select>
                         </FormControl>
-
-                        <Button
-                            color="danger"
-                            onClick={handleConfirmDeleteWithMigration}
-                            disabled={!migrationRankId}
-                        >
+                        <Button color="danger" onClick={handleConfirmDeleteWithMigration} disabled={!migrationRankId}>
                             Confirm Deletion and Migrate Users
                         </Button>
                     </Stack>
                 </ModalDialog>
             </Modal>
+            
+            <ConfirmationModal
+                open={isConfirmModalOpen}
+                onClose={() => setIsConfirmModalOpen(false)}
+                onConfirm={handleConfirmDelete}
+                title="Confirm Deletion"
+                content={`Are you sure you want to delete the rank "${rankToDelete?.name}"? This action cannot be undone.`}
+                confirmText="Delete"
+                confirmColor="danger"
+                loading={isActionLoading}
+            />
         </Box>
     );
 }
@@ -8907,17 +9313,21 @@ import { Link as RouterLink } from 'react-router-dom';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
-
-// Нам понадобится метод для получения ВСЕХ товаров, а не только активных.
-// Для этого нужно будет создать соответствующий эндпоинт на бэкенде,
-// но пока будем использовать существующий.
-// В идеале: GET /api/shop/all (защищенный для админов).
+import toast from 'react-hot-toast'; // [!code ++]
+import ConfirmationModal from '../components/ConfirmationModal'; // [!code ++]
 
 function AdminShopPage() {
     const { authToken } = useAuth();
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    // [!code start]
+    // --- СОСТОЯНИЯ ДЛЯ МОДАЛЬНОГО ОКНА ---
+    const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState(null);
+    const [isActionLoading, setIsActionLoading] = useState(false);
+    // [!code end]
 
     const fetchAllItems = useCallback(async () => {
         setLoading(true);
@@ -8938,20 +9348,34 @@ function AdminShopPage() {
     useEffect(() => {
         fetchAllItems();
     }, [fetchAllItems]);
-    
-    // TODO: Логика для удаления товара
-    const handleDelete = async (itemId) => {
-        if (!window.confirm('Are you sure you want to delete this item?')) return;
+
+
+    // [!code start]
+    // --- ОБНОВЛЁННАЯ ЛОГИКА УДАЛЕНИЯ ---
+    const handleOpenDeleteModal = (item) => {
+        setItemToDelete(item);
+        setConfirmModalOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete) return;
+        setIsActionLoading(true);
         try {
-            await axios.delete(`/api/shop/${itemId}`, {
+            await axios.delete(`/api/shop/${itemToDelete.item_id}`, {
                 headers: { Authorization: `Bearer ${authToken}` },
             });
-            // Обновляем список после удаления
+            toast.success(`Item "${itemToDelete.name}" deleted successfully.`);
             fetchAllItems();
         } catch (err) {
-            alert('Failed to delete item.');
+            toast.error('Failed to delete item.');
+        } finally {
+            setIsActionLoading(false);
+            setConfirmModalOpen(false);
+            setItemToDelete(null);
         }
     };
+    // [!code end]
+
 
     if (loading) return <CircularProgress />;
     if (error) return <Alert color="danger">{error}</Alert>;
@@ -8962,12 +9386,13 @@ function AdminShopPage() {
                 <Typography level="h2">Shop Management</Typography>
                 <Button
                     component={RouterLink}
-                    to="/admin/shop/new" // Ссылка на будущую страницу создания товара
+                    to="/admin/shop/new"
                     startDecorator={<AddIcon />}
                 >
                     Create Item
                 </Button>
             </Box>
+
             <Sheet variant="outlined" sx={{ borderRadius: 'sm', overflow: 'auto' }}>
                 <Table hoverRow>
                     <thead>
@@ -8986,8 +9411,8 @@ function AdminShopPage() {
                                 <td>{item.name}</td>
                                 <td>{item.price} coins</td>
                                 <td>
-                                    {item.is_active ? 
-                                        <Chip color="success" size="sm">Active</Chip> : 
+                                    {item.is_active ?
+                                        <Chip color="success" size="sm">Active</Chip> :
                                         <Chip color="danger" size="sm">Inactive</Chip>
                                     }
                                 </td>
@@ -8998,7 +9423,7 @@ function AdminShopPage() {
                                         </IconButton>
                                     </Tooltip>
                                     <Tooltip title="Delete">
-                                        <IconButton size="sm" variant="soft" color="danger" onClick={() => handleDelete(item.item_id)}>
+                                        <IconButton size="sm" variant="soft" color="danger" onClick={() => handleOpenDeleteModal(item)}>
                                             <DeleteForeverIcon />
                                         </IconButton>
                                     </Tooltip>
@@ -9008,6 +9433,19 @@ function AdminShopPage() {
                     </tbody>
                 </Table>
             </Sheet>
+
+            {/* [!code start] */}
+            <ConfirmationModal
+                open={confirmModalOpen}
+                onClose={() => setConfirmModalOpen(false)}
+                onConfirm={handleConfirmDelete}
+                title="Confirm Item Deletion"
+                content={`Are you sure you want to permanently delete the item "${itemToDelete?.name}"?`}
+                confirmText="Delete"
+                confirmColor="danger"
+                loading={isActionLoading}
+            />
+            {/* [!code end] */}
         </Box>
     );
 }
@@ -9696,7 +10134,7 @@ function CustomPageView() {
     if (error) return <Alert color="danger" sx={{ mt: 2 }}>{error}</Alert>;
     if (!page) return null;
 
-  return (
+    return (
         <Box>
             <Typography level="h1">{page.title}</Typography>
             <Divider sx={{ my: 2 }} />
@@ -9711,7 +10149,7 @@ function CustomPageView() {
                     lineHeight: 1.3,
                 },
                 // СТРОКИ С 'fontSize' ДЛЯ ЗАГОЛОВКОВ УДАЛЕНЫ
-                
+
                 // Стили для параграфов и списков
                 '& p, & li': {
                     fontFamily: 'var(--joy-font-family-body)',
@@ -9721,13 +10159,22 @@ function CustomPageView() {
                     marginBottom: '1rem',
                 },
 
+                '& img': {
+                    maxWidth: '100%',      // Картинка не будет шире родительского контейнера
+                    height: 'auto',         // Высота будет подстраиваться автоматически для сохранения пропорций
+                    display: 'block',       // Убираем лишние отступы под картинкой
+                    margin: '1.5rem 0',   // Добавляем вертикальные отступы
+                    borderRadius: 'var(--joy-radius-md)', // Скругляем углы, как у других элементов
+                    boxShadow: 'var(--joy-shadow-md)',    // Добавляем легкую тень
+                },
+
                 // ... остальные стили (для ссылок, картинок и т.д.) остаются без изменений ...
             }}>
                 <div dangerouslySetInnerHTML={{ __html: page.content }} />
             </Box>
         </Box>
     );
-} 
+}
 
 export default CustomPageView;
 --- END FILE: frontend/src/pages/CustomPageView.js ---
@@ -10669,6 +11116,8 @@ import { Link as RouterLink } from 'react-router-dom';
 import ThumbUpOffAltIcon from '@mui/icons-material/ThumbUpOffAlt';
 import { constructImageUrl } from '../utils/url';
 import CircleIcon from '@mui/icons-material/Circle';
+import UserPostsList from '../components/UserPostsList'; // [!code ++]
+import VerifiedIcons from '../components/VerifiedIcons';
 
 // Вспомогательная функция для определения цвета текста
 function isColorLight(hexColor) {
@@ -10756,8 +11205,10 @@ function MyProfilePage() {
                         }}
                     />
                     <Box sx={{ textAlign: { xs: 'center', sm: 'left' }, flexGrow: 1 }}>
-                        <Typography level="h2" component="h1">{profile.username}</Typography>
-                        {profile.profile_slug && (<Typography level="body-md" textColor="text.tertiary">@{profile.profile_slug}</Typography>)}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography level="h2" component="h1">{profile.username}</Typography>
+                            <VerifiedIcons user={profile} />
+                        </Box>                        {profile.profile_slug && (<Typography level="body-md" textColor="text.tertiary">@{profile.profile_slug}</Typography>)}
 
                         <Stack direction="row" spacing={1} sx={{ mt: 0.5, justifyContent: { xs: 'center', sm: 'flex-start' }, flexWrap: 'wrap', gap: 1 }}>
                             {profile.rank && <Chip sx={{ backgroundColor: profile.rank.display_color, color: isColorLight(profile.rank.display_color) ? '#000' : '#FFF' }}>{profile.rank.name}</Chip>}
@@ -10789,6 +11240,12 @@ function MyProfilePage() {
                     {profile.description || 'No description provided.'}
                 </Typography>
             </Sheet>
+            <Box sx={{ mt: 4 }}>
+                <Typography level="h2" component="h2" sx={{ mb: 2 }}>
+                    My Posts
+                </Typography>
+                <UserPostsList userId={profile.id} />
+            </Box>
         </Box>
     );
 }
@@ -11146,41 +11603,23 @@ import BlockIcon from '@mui/icons-material/Block';
 import JoyPagination from '../components/JoyPagination';
 import VoteButtons from '../components/VoteButtons';
 import { constructImageUrl } from '../utils/url';
+import toast from 'react-hot-toast'; // [!code ++]
+import ConfirmationModal from '../components/ConfirmationModal'; // [!code ++]
 
-const stripHtml = (html) => {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  return doc.body.textContent || "";
-};
-
+// ... (Компонент PostPreview без изменений)
 const PostPreview = ({ htmlContent }) => {
-  // 1. Создаем "заглушку" для картинки с пробелами для отступов.
   const imagePlaceholder = ' - 🖼️ - ';
-
-  // 2. В исходной HTML-строке заменяем все теги <img> на нашу заглушку.
-  //    Регулярное выражение /<img[^>]*>/g находит все теги <img>, включая их атрибуты.
   const contentWithPlaceholders = htmlContent.replace(/<img[^>]*>/g, imagePlaceholder);
-
-  // 3. Теперь, как и раньше, очищаем от *оставшихся* HTML-тегов.
-  //    Наши заглушки-эмодзи сохранятся, так как они являются обычным текстом.
   const textContent = (() => {
     const doc = new DOMParser().parseFromString(contentWithPlaceholders, 'text/html');
     return doc.body.textContent || "";
   })();
-
   return (
     <Typography 
         level="body-md" 
-        sx={{ 
-            mb: 2, 
-            display: '-webkit-box', 
-            WebkitLineClamp: 3, 
-            WebkitBoxOrient: 'vertical', 
-            overflow: 'hidden', 
-            textOverflow: 'ellipsis', 
-            wordBreak: 'break-word' 
-        }}
+        sx={{ mb: 2, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', wordBreak: 'break-word' }}
     >
-      {textContent.trim()} {/* Добавим .trim() чтобы убрать лишние пробелы в начале/конце */}
+      {textContent.trim()}
     </Typography>
   );
 };
@@ -11195,12 +11634,19 @@ function PostsPage() {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-    // Состояния для пагинации
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
     const [totalPages, setTotalPages] = useState(0);
+    
+    // [!code start]
+    // --- СОСТОЯНИЯ ДЛЯ УНИВЕРСАЛЬНОГО МОДАЛЬНОГО ОКНА ---
+    const [modalOpen, setModalOpen] = useState(false);
+    const [modalContent, setModalContent] = useState({ title: '', content: '', onConfirm: null });
+    const [isActionLoading, setIsActionLoading] = useState(false);
+    // [!code end]
 
     const fetchPosts = useCallback(async () => {
+        // ... (логика без изменений)
         try {
             setLoading(true);
             setError(null);
@@ -11209,11 +11655,8 @@ function PostsPage() {
                 params: { page, limit }
             };
             const response = await axios.get('/api/posts', config);
-
-            // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ ЗДЕСЬ ---
-            setPosts(response.data.data); // Берем массив из поля 'data'
+            setPosts(response.data.data);
             setTotalPages(Math.ceil(response.data.total / limit));
-
         } catch (err) {
             setError('Failed to load posts. Please try again later.');
         } finally {
@@ -11226,37 +11669,73 @@ function PostsPage() {
     }, [fetchPosts]);
 
     const handleVote = useCallback(async (postId, value) => {
-        if (!isLoggedIn) { alert('Please log in to vote.'); return; }
+        // ... (логика без изменений)
+        if (!isLoggedIn) { toast.error('Please log in to vote.'); return; }
         try {
             await axios.post(`/api/votes/posts/${postId}`, { value }, { headers: { Authorization: `Bearer ${authToken}` } });
-            // Вместо полной перезагрузки, можно было бы обновлять состояние локально,
-            // но для простоты пока оставим fetchPosts()
             fetchPosts();
         } catch (error) {
-            alert(error.response?.data?.message || 'Failed to vote.');
+            toast.error(error.response?.data?.message || 'Failed to vote.');
             fetchPosts();
         }
     }, [isLoggedIn, authToken, fetchPosts]);
 
-    const handleDeletePost = useCallback(async (postIdToDelete) => {
-        if (!window.confirm('Are you sure you want to permanently delete this post?')) return;
-        try {
-            await axios.delete(`/api/posts/${postIdToDelete}`, { headers: { Authorization: `Bearer ${authToken}` } });
-            fetchPosts(); // Перезагружаем посты после удаления
-        } catch (err) {
-            alert(err.response?.data?.message || 'Failed to delete post.');
-        }
-    }, [authToken, fetchPosts]);
+    // [!code start]
+    // --- ОБНОВЛЁННАЯ ЛОГИКА УДАЛЕНИЯ И БАНА ---
 
-    const handleBanUser = useCallback(async (author) => {
-        if (!author || !window.confirm(`Are you sure you want to ban ${author.username}?`)) return;
+    // 1. Функции, которые готовят и открывают модальное окно
+    const openDeleteModal = (post) => {
+        setModalContent({
+            title: 'Confirm Post Deletion',
+            content: `Are you sure you want to permanently delete the post "${post.title}"?`,
+            confirmText: 'Delete',
+            confirmColor: 'danger',
+            onConfirm: () => confirmDeletePost(post.id) // Передаем функцию для выполнения
+        });
+        setModalOpen(true);
+    };
+
+    const openBanModal = (author) => {
+        if (!author) return;
+        setModalContent({
+            title: 'Confirm Ban',
+            content: `Are you sure you want to ban the user "${author.username}"? This will prevent them from logging in.`,
+            confirmText: 'Ban User',
+            confirmColor: 'danger',
+            onConfirm: () => confirmBanUser(author.id, author.username)
+        });
+        setModalOpen(true);
+    };
+
+    // 2. Функции, которые выполняют действие после подтверждения
+    const confirmDeletePost = async (postId) => {
+        setIsActionLoading(true);
         try {
-            await axios.post(`/api/admin/users/${author.id}/ban`, {}, { headers: { Authorization: `Bearer ${authToken}` } });
-            alert(`User ${author.username} has been banned.`);
+            await axios.delete(`/api/posts/${postId}`, { headers: { Authorization: `Bearer ${authToken}` } });
+            toast.success('Post deleted successfully.');
+            fetchPosts(); // Обновляем список
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to ban user.');
+            toast.error(err.response?.data?.message || 'Failed to delete post.');
+        } finally {
+            setIsActionLoading(false);
+            setModalOpen(false);
         }
-    }, [authToken]);
+    };
+    
+    const confirmBanUser = async (userId, username) => {
+        setIsActionLoading(true);
+        try {
+            await axios.post(`/api/admin/users/${userId}/ban`, {}, { headers: { Authorization: `Bearer ${authToken}` } });
+            toast.success(`User ${username} has been banned.`);
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to ban user.');
+        } finally {
+            setIsActionLoading(false);
+            setModalOpen(false);
+        }
+    };
+    // [!code end]
+
 
     if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
     if (error) return <Alert color="danger" sx={{ mt: 2 }}>{error}</Alert>;
@@ -11276,36 +11755,25 @@ function PostsPage() {
 
             {!loading && totalPages > 1 && (
                 <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-                    <JoyPagination
-                        count={totalPages}
-                        page={page}
-                        onChange={(event, value) => setPage(value)}
-                    />
+                    <JoyPagination count={totalPages} page={page} onChange={(event, value) => setPage(value)} />
                 </Box>
             )}
+            
             <List sx={{ borderRadius: 'sm', p: 0, bgcolor: 'background.body', border: '1px solid', borderColor: 'divider' }}>
                 {posts.map((post) => {
                     const canManagePost = isLoggedIn && (currentUser?.id === post.author?.id || isAdmin);
-
                     return (
                         <ListItem key={post.id} sx={{ '&:not(:last-of-type)': { borderBottom: '1px solid', borderColor: 'divider' }, p: 0 }}>
                             <Sheet sx={{ p: { xs: 1.5, sm: 2 }, flexGrow: 1, bgcolor: 'transparent' }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
                                         {post.author ? (<JoyLink component={RouterLink} to={`/users/${post.author.profile_slug || post.author.id}`}><Avatar src={constructImageUrl(post.author.pfp_url)}>{post.author.username.charAt(0)}</Avatar></JoyLink>) : (<Avatar>?</Avatar>)}
-                                         <Typography level="title-md" sx={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                                            {/* И ссылка на автора ТОЛЬКО на его имени. Убираем overlay */}
+                                        <Typography level="title-md" sx={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                                             {post.author ? (
-                                                <JoyLink 
-                                                    component={RouterLink} 
-                                                    to={`/users/${post.author.profile_slug || post.author.id}`} 
-                                                    sx={{ color: post.author.rank?.display_color }}
-                                                    // Важно! Предотвращаем "всплытие" клика до родительской ссылки
-                                                    onClick={(e) => e.stopPropagation()}
-                                                >
+                                                <JoyLink component={RouterLink} to={`/users/${post.author.profile_slug || post.author.id}`} sx={{ color: post.author.rank?.display_color }} onClick={(e) => e.stopPropagation()}>
                                                     {post.author.username}
                                                 </JoyLink>
-                                            ) : ( 'Anonymous' )}
+                                            ) : ('Anonymous')}
                                         </Typography>
                                     </Box>
                                     {canManagePost && (
@@ -11314,23 +11782,20 @@ function PostsPage() {
                                                 <MenuButton slots={{ root: IconButton }} slotProps={{ root: { variant: 'plain', color: 'neutral', size: 'sm' } }}><MoreVertIcon /></MenuButton>
                                                 <Menu size="sm">
                                                     <MenuItem onClick={() => navigate(`/posts/${post.id}/edit`)}><EditIcon /> Edit</MenuItem>
-                                                    <MenuItem color="danger" onClick={() => handleDeletePost(post.id)}><DeleteForeverIcon /> Delete</MenuItem>
-                                                    {isAdmin && currentUser?.id !== post.author?.id && (<MenuItem color="danger" onClick={() => handleBanUser(post.author)}><BlockIcon /> Ban Author</MenuItem>)}
+                                                    <MenuItem color="danger" onClick={() => openDeleteModal(post)}><DeleteForeverIcon /> Delete</MenuItem>
+                                                    {isAdmin && currentUser?.id !== post.author?.id && (<MenuItem color="danger" onClick={() => openBanModal(post.author)}><BlockIcon /> Ban Author</MenuItem>)}
                                                 </Menu>
                                             </Dropdown>
                                         </Box>
                                     )}
                                 </Box>
-
                                 <JoyLink component={RouterLink} to={`/posts/${post.id}`} level="h4" fontWeight="lg" sx={{ '&:hover': { textDecoration: 'underline' }, mb: 1, color: 'text.primary', wordBreak: 'break-word' }}>
                                     {post.title}
                                 </JoyLink>
-
                                 <PostPreview htmlContent={post.content} />
-
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'text.tertiary' }}>
                                     <VoteButtons initialScore={post.score} currentUserVote={post.currentUserVote} onVote={(value) => handleVote(post.id, value)} disabled={!isLoggedIn} />
-                                    <Typography level="яbody-xs">{new Date(post.created_at).toLocaleDateString()}</Typography>
+                                    <Typography level="body-xs">{new Date(post.created_at).toLocaleDateString()}</Typography>
                                 </Box>
                             </Sheet>
                         </ListItem>
@@ -11340,13 +11805,22 @@ function PostsPage() {
 
             {totalPages > 1 && (
                 <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                    <JoyPagination
-                        count={totalPages}
-                        page={page}
-                        onChange={(event, value) => setPage(value)}
-                    />
+                    <JoyPagination count={totalPages} page={page} onChange={(event, value) => setPage(value)} />
                 </Box>
             )}
+
+            {/* [!code start] */}
+            <ConfirmationModal
+                open={modalOpen}
+                onClose={() => setModalOpen(false)}
+                onConfirm={modalContent.onConfirm}
+                title={modalContent.title}
+                content={modalContent.content}
+                confirmText={modalContent.confirmText}
+                confirmColor={modalContent.confirmColor}
+                loading={isActionLoading}
+            />
+            {/* [!code end] */}
         </Box>
     );
 }
@@ -11377,7 +11851,9 @@ import MailIcon from '@mui/icons-material/Mail';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { constructImageUrl } from '../utils/url';
 import CircleIcon from '@mui/icons-material/Circle';
-
+import UserPostsList from '../components/UserPostsList'; // [!code ++]
+import ConfirmationModal from '../components/ConfirmationModal'; // [!code ++]
+import VerifiedIcons from '../components/VerifiedIcons';
 
 function isColorLight(hexColor) {
     if (!hexColor) return false;
@@ -11401,6 +11877,13 @@ function PublicProfilePage() {
     const [error, setError] = useState(null);
     const [friendship, setFriendship] = useState({ status: 'loading' });
     const isAdmin = currentUser && ['ADMIN', 'MODERATOR', 'OWNER'].includes(currentUser.rank);
+
+    const [modalOpen, setModalOpen] = useState(false);
+    const [modalContent, setModalContent] = useState({ title: '', content: '', onConfirm: null });
+    const [isActionLoading, setIsActionLoading] = useState(false);
+
+
+
     const fetchProfileAndStatus = useCallback(async () => {
         setLoading(true); setError(null);
         try {
@@ -11420,21 +11903,75 @@ function PublicProfilePage() {
         } catch (err) { setError('Failed to load user profile.'); } finally { setLoading(false); }
     }, [userId, authToken, isLoggedIn, currentUser?.id]);
     useEffect(() => { fetchProfileAndStatus(); }, [fetchProfileAndStatus]);
-    const handleAction = async (action) => {
+    const handleAction = async (action, needsConfirmation = false) => {
+        if (needsConfirmation) {
+            let modalDetails = {};
+            if (action === 'remove') {
+                modalDetails = {
+                    title: 'Remove Friend',
+                    content: `Are you sure you want to remove ${profile.username} from your friends?`,
+                    confirmText: 'Remove',
+                    confirmColor: 'danger',
+                    onConfirm: () => confirmAction(action),
+                };
+            } else if (action === 'block') {
+                modalDetails = {
+                    title: 'Block User',
+                    content: `Are you sure you want to block ${profile.username}? You will no longer see their posts or comments, and they won't be able to contact you.`,
+                    confirmText: 'Block',
+                    confirmColor: 'danger',
+                    onConfirm: () => confirmAction(action),
+                };
+            }
+            setModalContent(modalDetails);
+            setModalOpen(true);
+        } else {
+            // Для действий, не требующих подтверждения, вызываем сразу
+            confirmAction(action);
+        }
+    };
+
+    const confirmAction = async (action) => {
         const config = { headers: { Authorization: `Bearer ${authToken}` } };
+        setIsActionLoading(true);
         try {
             switch (action) {
-                case 'add': await axios.post(`/api/friendships/requests`, { receiverId: profile.id }, config); break;
-                case 'accept': await axios.patch(`/api/friendships/requests/${friendship.requestId}/accept`, {}, config); break;
-                case 'reject': case 'cancel': await axios.delete(`/api/friendships/requests/${friendship.requestId}`, config); break;
-                case 'remove': await axios.delete(`/api/friendships/${friendship.friendshipId}`, config); break;
-                case 'block': await axios.post(`/api/friendships/block/${profile.id}`, {}, config); break;
-                case 'unblock': await axios.delete(`/api/friendships/block/${profile.id}`, config); break;
+                case 'add':
+                    await axios.post(`/api/friendships/requests`, { receiverId: profile.id }, config);
+                    toast.success('Friend request sent!');
+                    break;
+                case 'accept':
+                    await axios.patch(`/api/friendships/requests/${friendship.requestId}/accept`, {}, config);
+                    toast.success('Friend request accepted!');
+                    break;
+                case 'reject':
+                case 'cancel':
+                    await axios.delete(`/api/friendships/requests/${friendship.requestId}`, config);
+                    toast.success('Request cancelled.');
+                    break;
+                case 'remove':
+                    await axios.delete(`/api/friendships/${friendship.friendshipId}`, config);
+                    toast.success('Friend removed.');
+                    break;
+                case 'block':
+                    await axios.post(`/api/friendships/block/${profile.id}`, {}, config);
+                    toast.success('User blocked.');
+                    break;
+                case 'unblock':
+                    await axios.delete(`/api/friendships/block/${profile.id}`, config);
+                    toast.success('User unblocked.');
+                    break;
                 default: break;
             }
-            fetchProfileAndStatus();
-        } catch (err) { alert(err.response?.data?.message || 'An error occurred.'); }
+            fetchProfileAndStatus(); // Обновляем статус после любого действия
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'An error occurred.');
+        } finally {
+            setIsActionLoading(false);
+            setModalOpen(false);
+        }
     };
+
     const handleToggleBanStatus = async () => {
         if (!profile) return;
         const action = profile.is_banned ? 'unban' : 'ban';
@@ -11526,8 +12063,10 @@ function PublicProfilePage() {
                         }}
                     />
                     <Box sx={{ textAlign: { xs: 'center', sm: 'left' }, flexGrow: 1 }}>
-                        <Typography level="h2" component="h1">{profile.username}</Typography>
-                        {profile.profile_slug && (<Typography level="body-md" textColor="text.tertiary">@{profile.profile_slug}</Typography>)}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography level="h2" component="h1">{profile.username}</Typography>
+                            <VerifiedIcons user={profile} />
+                        </Box>                        {profile.profile_slug && (<Typography level="body-md" textColor="text.tertiary">@{profile.profile_slug}</Typography>)}
 
                         <Stack direction="row" spacing={1} sx={{ mt: 0.5, justifyContent: { xs: 'center', sm: 'flex-start' }, flexWrap: 'wrap', gap: 1 }}>
                             {profile.rank && <Chip sx={{ backgroundColor: profile.rank.display_color, color: isColorLight(profile.rank.display_color) ? '#000' : '#FFF' }}>{profile.rank.name}</Chip>}
@@ -11564,6 +12103,22 @@ function PublicProfilePage() {
                     {profile.description || 'No description provided.'}
                 </Typography>
             </Sheet>
+            <Box sx={{ mt: 4 }}>
+                <Typography level="h2" component="h2" sx={{ mb: 2 }}>
+                    Posts by {profile.username}
+                </Typography>
+                <UserPostsList userId={profile.id} />
+            </Box>
+            <ConfirmationModal
+                open={modalOpen}
+                onClose={() => setModalOpen(false)}
+                onConfirm={modalContent.onConfirm}
+                title={modalContent.title}
+                content={modalContent.content}
+                confirmText={modalContent.confirmText}
+                confirmColor={modalContent.confirmColor}
+                loading={isActionLoading}
+            />
         </Box>
     );
 }
@@ -12166,7 +12721,6 @@ import { useParams, useNavigate, NavLink, Link as RouterLink } from 'react-route
 import axios from 'axios';
 import {
     Typography, CircularProgress, Alert, Box, Sheet, Divider, Avatar, List, ListItem, ListItemDecorator, ListItemContent, Textarea, Button, Link as JoyLink, IconButton, Dropdown, Menu, MenuButton, MenuItem,
-    // --- ИЗМЕНЕНО: Добавляем хуки и Stack ---
     useTheme, Stack
 } from '@mui/joy';
 import { useMediaQuery } from '@mui/material';
@@ -12179,25 +12733,29 @@ import BlockIcon from '@mui/icons-material/Block';
 import { useAuth } from '../context/AuthContext';
 import VoteButtons from '../components/VoteButtons';
 import { constructImageUrl } from '../utils/url';
+import toast from 'react-hot-toast';
+import ConfirmationModal from '../components/ConfirmationModal';
+import VerifiedIcons from '../components/VerifiedIcons';
 
 function SinglePostPage() {
     const { postId } = useParams();
     const navigate = useNavigate();
     const { isLoggedIn, user: currentUser, authToken } = useAuth();
 
-    // --- ИЗМЕНЕНО: Определяем тип устройства ---
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
     const [post, setPost] = useState(null);
     const [loading, setLoading] = useState(true);
-    // ... (остальные состояния без изменений)
     const [error, setError] = useState(null);
     const [newCommentContent, setNewCommentContent] = useState('');
     const [isSubmittingComment, setIsSubmittingComment] = useState(false);
     const [editingCommentId, setEditingCommentId] = useState(null);
     const [editedContent, setEditedContent] = useState('');
 
+    const [modalOpen, setModalOpen] = useState(false);
+    const [modalContent, setModalContent] = useState({ title: '', content: '', onConfirm: null });
+    const [isActionLoading, setIsActionLoading] = useState(false);
 
     const fetchPost = useCallback(async () => {
         try {
@@ -12215,37 +12773,89 @@ function SinglePostPage() {
 
     useEffect(() => { if (postId) fetchPost(); }, [postId, fetchPost]);
 
-    // --- ИЗМЕНЕНО: Исправлен путь к API ---
-    const handleBanUser = async (userToBan) => {
-        if (!userToBan || !window.confirm(`Are you sure you want to ban ${userToBan.username}?`)) return;
+    const openBanModal = (userToBan) => {
+        if (!userToBan) return;
+        setModalContent({
+            title: 'Confirm Ban',
+            content: `Are you sure you want to ban ${userToBan.username}?`,
+            confirmText: 'Ban User',
+            confirmColor: 'danger',
+            onConfirm: () => confirmBanUser(userToBan)
+        });
+        setModalOpen(true);
+    };
+
+    const openDeletePostModal = () => {
+        setModalContent({
+            title: 'Confirm Post Deletion',
+            content: 'Are you sure you want to permanently delete this post?',
+            confirmText: 'Delete Post',
+            confirmColor: 'danger',
+            onConfirm: confirmDeletePost
+        });
+        setModalOpen(true);
+    };
+
+    const openDeleteCommentModal = (commentId) => {
+        setModalContent({
+            title: 'Confirm Comment Deletion',
+            content: 'Are you sure you want to delete this comment?',
+            confirmText: 'Delete',
+            confirmColor: 'danger',
+            onConfirm: () => confirmDeleteComment(commentId)
+        });
+        setModalOpen(true);
+    };
+
+    const confirmBanUser = async (userToBan) => {
+        setIsActionLoading(true);
         try {
             await axios.post(`/api/admin/users/${userToBan.id}/ban`, {}, { headers: { Authorization: `Bearer ${authToken}` } });
-            alert(`${userToBan.username} has been banned.`);
+            toast.success(`${userToBan.username} has been banned.`);
         } catch (err) {
-            alert('Failed to ban user.');
+            toast.error('Failed to ban user.');
+        } finally {
+            setIsActionLoading(false);
+            setModalOpen(false);
         }
     };
 
-    // ... (остальные обработчики без изменений) ...
+    const confirmDeletePost = async () => {
+        setIsActionLoading(true);
+        try {
+            await axios.delete(`/api/posts/${postId}`, { headers: { Authorization: `Bearer ${authToken}` } });
+            toast.success('Post deleted.');
+            navigate('/posts');
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to delete the post.');
+            setIsActionLoading(false);
+            setModalOpen(false);
+        }
+    };
+
+    const confirmDeleteComment = async (commentId) => {
+        setIsActionLoading(true);
+        try {
+            await axios.delete(`/api/comments/${commentId}`, { headers: { Authorization: `Bearer ${authToken}` } });
+            toast.success('Comment deleted.');
+            fetchPost();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to delete comment.');
+        } finally {
+            setIsActionLoading(false);
+            setModalOpen(false);
+        }
+    };
+    
     const handleVote = useCallback(async (targetType, targetId, value) => {
-        if (!isLoggedIn) { alert('Please log in to vote.'); return; }
+        if (!isLoggedIn) { toast.error('Please log in to vote.'); return; }
         try {
             await axios.post(`/api/votes/${targetType}s/${targetId}`, { value }, { headers: { Authorization: `Bearer ${authToken}` } });
             fetchPost();
         } catch (error) {
-            alert(error.response?.data?.message || 'Failed to vote.'); fetchPost();
+            toast.error(error.response?.data?.message || 'Failed to vote.'); fetchPost();
         }
     }, [isLoggedIn, authToken, fetchPost]);
-
-    const handleDeletePost = async () => {
-        if (!window.confirm('Are you sure you want to permanently delete this post?')) return;
-        try {
-            await axios.delete(`/api/posts/${postId}`, { headers: { Authorization: `Bearer ${authToken}` } });
-            navigate('/posts');
-        } catch (error) {
-            alert(error.response?.data?.message || 'Failed to delete the post.');
-        }
-    };
 
     const handleCommentSubmit = async (event) => {
         event.preventDefault();
@@ -12256,7 +12866,7 @@ function SinglePostPage() {
             setPost(prev => ({ ...prev, comments: [...prev.comments, response.data] }));
             setNewCommentContent('');
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to submit comment.');
+            toast.error(err.response?.data?.message || 'Failed to submit comment.');
         } finally {
             setIsSubmittingComment(false);
         }
@@ -12272,17 +12882,7 @@ function SinglePostPage() {
             setPost(prev => ({ ...prev, comments: prev.comments.map(c => c.id === editingCommentId ? response.data : c) }));
             handleCancelEdit();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to update comment.');
-        }
-    };
-
-    const handleDeleteComment = async (commentId) => {
-        if (!window.confirm('Are you sure you want to delete this comment?')) return;
-        try {
-            await axios.delete(`/api/comments/${commentId}`, { headers: { Authorization: `Bearer ${authToken}` } });
-            setPost(prev => ({ ...prev, comments: prev.comments.filter(c => c.id !== commentId) }));
-        } catch (err) {
-            alert(err.response?.data?.message || 'Failed to delete comment.');
+            toast.error(err.response?.data?.message || 'Failed to update comment.');
         }
     };
 
@@ -12291,25 +12891,28 @@ function SinglePostPage() {
     if (!post) return <Typography>Post not found.</Typography>;
 
     const canManagePost = isLoggedIn && currentUser?.id === post?.author?.id;
-    const isAdmin = currentUser && ['ADMIN', 'MODERATOR', 'OWNER'].includes(currentUser.rank);
+    const isAdmin = currentUser && ['ADMIN', 'MODERATOR', 'OWNER'].includes(currentUser.rank.name);
 
     return (
         <Box>
-            {/* --- ИЗМЕНЕНО: Адаптивная кнопка "Назад" --- */}
             <Button variant="plain" startDecorator={<ArrowBackIcon />} onClick={() => navigate('/posts')} sx={{ mb: 2, ml: -1 }}>
                 {!isMobile && 'Back to All Posts'}
             </Button>
-
             <Sheet variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 'md', mb: 4 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                     {post.author ? <JoyLink component={RouterLink} to={`/users/${post.author.profile_slug || post.author.id}`}><Avatar src={constructImageUrl(post.author?.pfp_url)}>{post.author.username.charAt(0)}</Avatar></JoyLink> : <Avatar>?</Avatar>}
                     <Box sx={{ flexGrow: 1 }}>
-                        <Typography level="title-md">
+                        <Typography level="title-md" component="span">
                             {post.author ? (
-                                // --- ИЗМЕНЕНИЕ 1: Цвет ника автора поста ---
-                                <JoyLink component={RouterLink} to={`/users/${post.author.profile_slug || post.author.id}`} sx={{ color: post.author.rank?.display_color }}>
-                                    {post.author.username}
-                                </JoyLink>
+                                <Typography level="title-sm" component="span">
+                                    <JoyLink component={RouterLink} to={`/users/${post.author.profile_slug || post.author.id}`} sx={{ color: post.author.rank?.display_color }}>
+                                        {post.author.username}
+                                    </JoyLink>
+                                    {/* [!code focus start] */}
+                                    {/* ИСПРАВЛЕНО: используем `post.author`, а не `comment.author` */}
+                                    <VerifiedIcons user={post.author} sx={{ ml: 0.5 }} />
+                                    {/* [!code focus end] */}
+                                </Typography>
                             ) : 'Anonymous'}
                         </Typography>
                         <Typography level="body-xs">Posted on {new Date(post.created_at).toLocaleDateString()}</Typography>
@@ -12320,56 +12923,18 @@ function SinglePostPage() {
                                 <MenuButton slots={{ root: IconButton }} slotProps={{ root: { variant: 'plain', color: 'neutral' } }}><MoreVertIcon /></MenuButton>
                                 <Menu>
                                     {canManagePost && <MenuItem onClick={() => navigate(`/posts/${post.id}/edit`)}><EditIcon /> Edit Post</MenuItem>}
-                                    {(canManagePost || isAdmin) && <MenuItem color="danger" onClick={handleDeletePost}><DeleteForeverIcon /> Delete Post</MenuItem>}
-                                    {isAdmin && !canManagePost && <MenuItem color="danger" onClick={() => handleBanUser(post.author)}><BlockIcon /> Ban Author</MenuItem>}
+                                    {(canManagePost || isAdmin) && <MenuItem color="danger" onClick={openDeletePostModal}><DeleteForeverIcon /> Delete Post</MenuItem>}
+                                    {isAdmin && !canManagePost && <MenuItem color="danger" onClick={() => openBanModal(post.author)}><BlockIcon /> Ban Author</MenuItem>}
                                 </Menu>
                             </Dropdown>
                         </Box>
                     )}
                 </Box>
-
-                <h1
-                    style={{
-                        fontFamily: 'var(--joy-font-family-display)',
-                        color: 'var(--joy-palette-text-primary)',
-                        fontWeight: 'var(--joy-font-weight-bold)', // Используем переменную темы для жирности
-                        fontSize: '2rem',  // Надежный размер, эквивалент ~32px
-                        lineHeight: 1.3,
-                        wordBreak: 'break-all',
-                        margin: '0 0 16px 0'
-                    }}
-                >
+                <h1 style={{ fontFamily: 'var(--joy-font-family-display)', color: 'var(--joy-palette-text-primary)', fontWeight: 'var(--joy-font-weight-bold)', fontSize: '2rem', lineHeight: 1.3, wordBreak: 'break-all', margin: '0 0 16px 0' }}>
                     {post.title}
                 </h1>
-
-                {/* --- ИЗМЕНЕНИЕ 2: Добавляем перенос для контента --- */}
-                <Box
-                    dangerouslySetInnerHTML={{ __html: post.content }}
-                    sx={{
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                        mb: 3,
-                        // Здесь можно скопировать все те же стили для h1, p, img, что и в CustomPageView.js,
-                        // чтобы посты и страницы выглядели одинаково.
-                        '& h1, & h2, & h3, & h4': {
-                            fontFamily: 'var(--joy-font-family-display)',
-                            color: 'var(--joy-palette-text-primary)',
-                            margin: '1.5rem 0 1rem 0',
-                            fontWeight: 'var(--joy-font-weight-lg)',
-                            lineHeight: 1.3,
-                        },
-                        '& p, & li': {
-                            fontFamily: 'var(--joy-font-family-body)',
-                            color: 'var(--joy-palette-text-secondary)',
-                            lineHeight: 1.7,
-                            marginBottom: '1rem',
-                        },
-                        '& a': { color: 'var(--joy-palette-primary-300)' },
-                        '& img': { maxWidth: '100%', height: 'auto', borderRadius: 'var(--joy-radius-md)' }
-                    }}
-                />
-
-                <VoteButtons initialLikes={post.likes} initialDislikes={post.dislikes} currentUserVote={post.currentUserVote} onVote={(value) => handleVote('post', post.id, value)} disabled={!isLoggedIn} />
+                <Box dangerouslySetInnerHTML={{ __html: post.content }} sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', mb: 3, '& h1, & h2, & h3, & h4': { fontFamily: 'var(--joy-font-family-display)', color: 'var(--joy-palette-text-primary)', margin: '1.5rem 0 1rem 0', fontWeight: 'var(--joy-font-weight-lg)', lineHeight: 1.3 }, '& p, & li': { fontFamily: 'var(--joy-font-family-body)', color: 'var(--joy-palette-text-secondary)', lineHeight: 1.7, marginBottom: '1rem' }, '& a': { color: 'var(--joy-palette-primary-300)' }, '& img': { maxWidth: '100%', height: 'auto', borderRadius: 'var(--joy-radius-md)' } }} />
+                <VoteButtons initialScore={post.score} currentUserVote={post.currentUserVote} onVote={(value) => handleVote('post', post.id, value)} disabled={!isLoggedIn} />
             </Sheet>
 
             <Box>
@@ -12382,7 +12947,7 @@ function SinglePostPage() {
                 ) : (<Typography sx={{ mb: 3 }}>Please <JoyLink component={NavLink} to="/login">log in</JoyLink> to leave a comment.</Typography>)}
 
                 <List sx={{ borderRadius: 'sm', p: 0, border: '1px solid', borderColor: 'divider' }}>
-                    {post.comments?.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).map((comment, index) => {
+                    {post.comments?.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).map((comment) => {
                         const canManageComment = isLoggedIn && (currentUser?.id === comment?.author?.id || isAdmin);
                         const isEditing = editingCommentId === comment.id;
                         return (
@@ -12390,20 +12955,25 @@ function SinglePostPage() {
                                 <ListItemDecorator sx={{ mr: { xs: 1, sm: 2 } }}>{comment.author ? <JoyLink component={RouterLink} to={`/users/${comment.author.profile_slug || comment.author.id}`}><Avatar src={constructImageUrl(comment.author?.pfp_url)} /> </JoyLink> : <Avatar />}</ListItemDecorator>
                                 <ListItemContent>
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <Typography level="title-sm">
+                                        <Typography level="title-sm" component="span">
                                             {comment.author ? (
-                                                // --- ИЗМЕНЕНИЕ 2: Цвет ника автора комментария ---
-                                                <JoyLink component={RouterLink} to={`/users/${comment.author.profile_slug || comment.author.id}`} sx={{ color: comment.author.rank?.display_color }}>
-                                                    {comment.author.username}
-                                                </JoyLink>
+                                                <Typography level="title-md" component="span">
+                                                    <JoyLink component={RouterLink} to={`/users/${comment.author.profile_slug || comment.author.id}`} sx={{ color: comment.author.rank?.display_color }}>
+                                                        {comment.author.username}
+                                                    </JoyLink>
+                                                    {/* [!code focus start] */}
+                                                    {/* Здесь мы правильно используем `comment.author` */}
+                                                    <VerifiedIcons user={comment.author} sx={{ ml: 0.5 }} />
+                                                    {/* [!code focus end] */}
+                                                </Typography>
                                             ) : 'Anonymous'}
                                         </Typography>
                                         {canManageComment && !isEditing && (
                                             <Dropdown><MenuButton slots={{ root: IconButton }} slotProps={{ root: { variant: 'plain', color: 'neutral', size: 'sm' } }}><MoreVertIcon /></MenuButton>
                                                 <Menu size="sm">
                                                     {currentUser?.id === comment?.author?.id && <MenuItem onClick={() => handleEditClick(comment)}><EditIcon /> Edit</MenuItem>}
-                                                    <MenuItem onClick={() => handleDeleteComment(comment.id)} color="danger"><DeleteForeverIcon /> Delete</MenuItem>
-                                                    {isAdmin && currentUser?.id !== comment?.author?.id && <MenuItem color="danger" onClick={() => handleBanUser(comment.author)}><BlockIcon /> Ban Author</MenuItem>}
+                                                    <MenuItem onClick={() => openDeleteCommentModal(comment.id)} color="danger"><DeleteForeverIcon /> Delete</MenuItem>
+                                                    {isAdmin && currentUser?.id !== comment?.author?.id && <MenuItem color="danger" onClick={() => openBanModal(comment.author)}><BlockIcon /> Ban Author</MenuItem>}
                                                 </Menu>
                                             </Dropdown>
                                         )}
@@ -12413,7 +12983,7 @@ function SinglePostPage() {
                                             <Textarea minRows={2} value={editedContent} onChange={(e) => setEditedContent(e.target.value)} sx={{ mb: 1 }} />
                                             <Stack direction="row" spacing={1}><Button type="submit" size="sm">Save</Button><Button size="sm" variant="outlined" color="neutral" onClick={handleCancelEdit}>Cancel</Button></Stack>
                                         </Box>
-                                    ) : (<Typography level="body-md" sx={{ mt: 0.5, mb: 1.5, whiteSpace: 'pre-wrap' }}>{comment.content}</Typography>)}
+                                    ) : (<Typography level="body-md" sx={{ mt: 0.5, mb: 1.5, whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{__html: comment.content}} />)}
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <VoteButtons initialScore={comment.score} currentUserVote={comment.currentUserVote} onVote={(value) => handleVote('comment', comment.id, value)} disabled={!isLoggedIn} />
                                         <Typography level="body-xs" sx={{ color: 'text.tertiary' }}>{new Date(comment.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</Typography>
@@ -12424,6 +12994,16 @@ function SinglePostPage() {
                     })}
                 </List>
             </Box>
+            <ConfirmationModal
+                open={modalOpen}
+                onClose={() => setModalOpen(false)}
+                onConfirm={modalContent.onConfirm}
+                title={modalContent.title}
+                content={modalContent.content}
+                confirmText={modalContent.confirmText}
+                confirmColor={modalContent.confirmColor}
+                loading={isActionLoading}
+            />
         </Box>
     );
 }
@@ -13901,10 +14481,10 @@ permissions:
 # --- DOCKER & DATABASE CONFIG ---
 # Замени пароли на свои, сгенерированные (например, в менеджере паролей)
 POSTGRES_USER=flamewall_user
-POSTGRES_PASSWORD=your_strong_and_secret_db_password
+POSTGRES_PASSWORD=taOE5dznW2hPB1xhNeVQ
 POSTGRES_DB=flamewall
-PGADMIN_DEFAULT_EMAIL=admin@your_domain.com
-PGADMIN_DEFAULT_PASSWORD=your_strong_and_secret_pgadmin_password
+PGADMIN_DEFAULT_EMAIL=letsplayfrommax14@gmail.com
+PGADMIN_DEFAULT_PASSWORD=Hh3pgQJC7K6BxfDtJOnU
 
 # --- BACKEND (NESTJS) CONFIG ---
 # Эти переменные будут использоваться сервисом 'backend' в docker-compose
@@ -13926,9 +14506,7 @@ JWT_EXPIRATION_TIME=30d # Токен будет действителен 30 дн
 # Эти переменные будут использоваться при сборке фронтенда
 # ВАЖНО: На VPS эти переменные используются только во время сборки Docker-образа.
 # В локальной разработке они используются сервером Vite/React.
-PORT=5173 # Внутренний порт, на котором запускается фронтенд-сервер
-
-
+PORT=5173 # Внутренний порт, на котором запускается фронтенд-сервер 
 --- END FILE: .env ---
 
 
@@ -14206,19 +14784,65 @@ CMD ["nginx", "-g", "daemon off;"]
 // frontend/vite.config.js
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa'; // <-- ДОБАВЛЯЕМ ЭТОТ ИМПОРТ
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
-  // Добавляем эту секцию
+  plugins: [
+    react(), // <-- Первый плагин, после него ставим запятую
+
+    // --- ДОБАВЛЯЕМ ВТОРОЙ ПЛАГИН СО ВСЕЙ ЕГО КОНФИГУРАЦИЕЙ ---
+    VitePWA({
+      injectRegister: 'auto',
+      registerType: 'autoUpdate',
+      manifest: {
+        name: 'FlameWall',
+        short_name: 'FlameWall',
+        description: 'Your ultimate gaming community.',
+        theme_color: '#121212',
+        background_color: '#121212',
+        display: 'standalone',
+        scope: '/',
+        start_url: '/',
+        icons: [
+          { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+        ],
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 },
+              networkTimeoutSeconds: 3,
+            },
+          },
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'pages-cache',
+              networkTimeoutSeconds: 3,
+            },
+          }
+        ],
+      },
+    })
+    // ---------------------------------------------------------
+  ],
+  // ... и здесь ваши существующие секции esbuild и server ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ
   esbuild: {
     loader: 'jsx',
-    include: /src\/.*\.jsx?$/, // применять jsx-loader ко всем .js и .jsx файлам в папке src
+    include: /src\/.*\.jsx?$/,
     exclude: [],
   },
   server: {
-    host: true, 
-    port: 3000, 
+    host: true,
+    port: 3000,
     watch: {
       usePolling: true,
     },
@@ -14376,14 +15000,14 @@ export default defineConfig({
     "react-hot-toast": "^2.5.2",
     "react-router-dom": "^6.25.1",
     "socket.io-client": "^4.8.1",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "workbox-window": "^7.3.0"
   },
   "scripts": {
     "start": "vite",
     "build": "vite build",
     "test": "vite test"
   },
-  
   "eslintConfig": {
     "extends": [
       "react-app",
@@ -14405,12 +15029,14 @@ export default defineConfig({
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "nodemon": "^3.1.10",
-    "vite": "^5.4.0"
+    "vite": "^5.4.0",
+    "vite-plugin-pwa": "^1.0.0"
   },
   "overrides": {
     "nth-check": "2.0.1"
   }
 }
+
 --- END FILE: frontend/package.json ---
 
 
