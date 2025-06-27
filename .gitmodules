@@ -1,9 +1,9 @@
 [submodule "backend"]
     path = backend
     url = git@github.com:Sknery/flamewall-backend.git
-[submodule "frontend"]
-    path = frontend
-    url = git@github.com:Sknery/flamewall-frontend.git
 [submodule "FlameWallBridge"]
     path = FlameWallBridge
     url = git@github.com:Sknery/flamewall-plugin.git
+[submodule "frontend"]
+	path = frontend
+	url = https://github.com/Sknery/flamewall-frontend.git
