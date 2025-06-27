@@ -12,7 +12,8 @@ DIRS_TO_EXPORT=(
     "frontend/public"
     "frontend/nginx"
     "nginx"
-    "FlameWallBridge/src" # <-- ДОБАВЛЕНО: Папка с исходниками плагина
+    "FlameWallProxyBridge/src" # <-- ДОБАВЛЕНО: Папка с исходниками плагина
+    "FlameWallSpigotHelper/src"
 )
 
 # Список отдельных файлов, которые нужно добавить
@@ -27,7 +28,8 @@ FILES_TO_EXPORT=(
     "frontend/vite.config.js"
     "backend/package.json"
     "frontend/package.json"
-    "FlameWallBridge/pom.xml" # <-- ДОБАВЛЕНО: Файл конфигурации Maven для плагина
+    "FlameWallProxyBridge/pom.xml" # <-- ДОБАВЛЕНО: Файл конфигурации Maven для плагина
+    "FlameWallSpigotHelper/pom.xml"
 )
 
 # --- ЛОГИКА СКРИПТА (без изменений) ---

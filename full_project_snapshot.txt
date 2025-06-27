@@ -1,5 +1,5 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Чт 26 июн 2025 12:16:58 UTC
+PROJECT SNAPSHOT CREATED ON: Пт 27 июн 2025 16:12:33 UTC
 ===============================================
 
 
@@ -1022,7 +1022,13 @@ class InGameMessageDto {
   content: string;
 }
 
-@WebSocketGateway({ cors: { origin: '*' } })
+@WebSocketGateway({
+  cors: {
+    origin: /.*/, // Разрешаем ВСЕ источники с помощью регулярного выражения
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+})
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
@@ -2252,7 +2258,7 @@ export class FriendshipsService {
   //  private readonly usersService: UsersService,
   ) { }
 
-  async sendRequest(requesterId: number, receiverId: number): Promise<Friendship> {
+ async sendRequest(requesterId: number, receiverId: number): Promise<Friendship> {
     if (requesterId === receiverId) {
       this.logger.warn(`[REQ-SEND-FAIL] ⚠️ User ID: ${requesterId} tried to send a friend request to themselves.`);
       throw new ForbiddenException('You cannot send a friend request to yourself.');
@@ -2262,7 +2268,6 @@ export class FriendshipsService {
       this.usersRepository.findOneBy({ id: requesterId }),
       this.usersRepository.findOneBy({ id: receiverId }),
     ]);
-
     if (!receiver || !requester) {
       this.logger.error(`[REQ-SEND-FAIL] ❌ User not found. Requester: ${requesterId}, Receiver: ${receiverId}`);
       throw new NotFoundException(`User not found.`);
@@ -2274,7 +2279,6 @@ export class FriendshipsService {
         { requester_id: receiverId, receiver_id: requesterId },
       ],
     });
-
     if (existingFriendship) {
       this.logger.warn(`[REQ-SEND-FAIL] ⚠️ Conflict: Friendship/request already exists between User ID: ${requesterId} and User ID: ${receiverId}.`);
       throw new ConflictException('A friendship request already exists or you are already friends.');
@@ -2282,12 +2286,17 @@ export class FriendshipsService {
 
     const newRequest = this.friendshipsRepository.create({ requester_id: requesterId, receiver_id: receiverId, status: FriendStatuses.PENDING });
     const savedRequest = await this.friendshipsRepository.save(newRequest);
-
     this.logger.log(`[REQ-SEND-SUCCESS] ✅ User ID: ${requesterId} sent a friend request to User ID: ${receiverId}. Friendship ID: ${savedRequest.id}`);
+    
+    // <<< --- ВОТ ИСПРАВЛЕНИЕ --- >>>
+    // Генерируем универсальное событие, которое поймает NotificationsService
+    this.eventEmitter.emit('friendship.requested', { requester: requester, receiver: receiver });
+    
+    // Событие для игры тоже можно оставить, если оно где-то используется
     this.eventEmitter.emit('friendship.requested.ingame', { requester: requester, receiver: receiver, requestId: savedRequest.id } );
     
     return savedRequest;
-  }
+}
 
   async getPendingRequests(userId: number): Promise<Friendship[]> {
     this.logger.verbose(`[GET] 🔎 Fetching pending friend requests for User ID: ${userId}`);
@@ -9728,7 +9737,6 @@ function AdminPage() {
             // --- СОЗДАЕМ PAYLOAD СО ВСЕМИ ДАННЫМИ ИЗ МОДАЛЬНОГО ОКНА ---
             const payload = {
                 rank_id: selectedRankId,
-                is_verified_admin: isAdminVerified,
                 is_verified_youtuber: isYoutuberVerified,
             };
 
@@ -14594,43 +14602,67 @@ http {
 
 
 
---- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/ApiClient.java ---
+--- START FILE: FlameWallProxyBridge/src/main/java/com/flamewall/Main.java ---
 
-package com.flamewall.bridge;
+package com.flamewall;
 
+//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
+// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
+public class Main {
+    public static void main(String[] args) {
+        //TIP Press <shortcut actionId="ShowIntentionActions"/> with your caret at the highlighted text
+        // to see how IntelliJ IDEA suggests fixing it.
+        System.out.printf("Hello and welcome!");
+
+        for (int i = 1; i <= 5; i++) {
+            //TIP Press <shortcut actionId="Debug"/> to start debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
+            // for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.
+            System.out.println("i = " + i);
+        }
+    }
+}
+--- END FILE: FlameWallProxyBridge/src/main/java/com/flamewall/Main.java ---
+
+
+
+--- START FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/ApiClient.java ---
+
+// src/main/java/com/flamewall/proxybridge/ApiClient.java
+package com.flamewall.proxybridge;
+
+import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.proxy.ProxyServer;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import okhttp3.*;
-import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.slf4j.Logger;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.List;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 
 public class ApiClient {
 
-    private final BridgePlugin plugin;
+    private final FlameWallProxyBridge plugin;
+    private final ProxyServer server;
+    private final Logger logger;
     private final OkHttpClient httpClient;
     private final String baseUrl;
     private final String apiKey;
 
-    public ApiClient(BridgePlugin plugin) {
+    public ApiClient(FlameWallProxyBridge plugin, ProxyServer server, Logger logger) {
         this.plugin = plugin;
+        this.server = server;
+        this.logger = logger;
         this.httpClient = new OkHttpClient();
-        this.baseUrl = plugin.getConfig().getString("api-base-url", "http://localhost:3000");
-        this.apiKey = plugin.getConfig().getString("plugin-secret-key");
-    }
 
-    // --- МЕТОДЫ ДЛЯ СИСТЕМЫ ДРУЗЕЙ ---
+        this.baseUrl = "http://localhost:3001"; // Убедись, что здесь порт 3001!
+        this.apiKey = "your_super_long_and_random_plugin_secret_key";
+    }
 
     public void sendFriendRequest(Player sender, String receiverName) {
         try {
@@ -14645,7 +14677,7 @@ public class ApiClient {
                     .build();
             httpClient.newCall(request).enqueue(new HttpCallback(sender, "Friend request sent to " + receiverName + "!"));
         } catch (JSONException e) {
-            handlePluginError(sender, "Could not create JSON body for friend request", e);
+            handlePluginError(sender, "Could not create JSON for friend request", e);
         }
     }
 
@@ -14662,7 +14694,7 @@ public class ApiClient {
                     .build();
             httpClient.newCall(request).enqueue(new HttpCallback(sender, friendToRemoveName + " has been removed from your friends list."));
         } catch (JSONException e) {
-            handlePluginError(sender, "Could not create JSON body for friend removal", e);
+            handlePluginError(sender, "Could not create JSON for friend removal", e);
         }
     }
 
@@ -14679,170 +14711,93 @@ public class ApiClient {
             }
 
             @Override
-            public void onResponse(@NotNull Call call, @NotNull Response response) {
+            public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
                 if (!response.isSuccessful()) {
                     handleApiError(sender, response);
                     return;
                 }
                 try (ResponseBody responseBody = response.body()) {
-                    String responseString = responseBody.string();
-                    JSONArray friendsArray = new JSONArray(responseString);
-                    runOnMainThread(() -> {
-                        sender.sendMessage(ChatColor.GOLD + "--- Your Friends (" + friendsArray.length() + ") ---");
+                    JSONArray friendsArray = new JSONArray(responseBody.string());
+                    server.getScheduler().buildTask(plugin, () -> {
+                        sender.sendMessage(Component.text("--- Your Friends (" + friendsArray.length() + ") ---").color(NamedTextColor.GOLD));
                         if (friendsArray.length() == 0) {
-                            sender.sendMessage(ChatColor.GRAY + "Your friends list is empty. Use /flame friend add <player>");
+                            sender.sendMessage(Component.text("Your friends list is empty. Use /flame friend add <player>").color(NamedTextColor.GRAY));
                         } else {
                             for (int i = 0; i < friendsArray.length(); i++) {
+                                //  <<< --- ВОТ ИСПРАВЛЕНИЕ --- >>>
                                 try {
-                                    sender.sendMessage(ChatColor.AQUA + "- " + friendsArray.getString(i));
+                                    sender.sendMessage(Component.text("- " + friendsArray.getString(i)).color(NamedTextColor.AQUA));
                                 } catch (JSONException e) {
-                                    plugin.getLogger().warning("Could not get friend name at index " + i + ": " + e.getMessage());
+                                    logger.warn("Could not get friend name from JSON array at index " + i, e);
                                 }
+                                // <<< --- КОНЕЦ ИСПРАВЛЕНИЯ --- >>>
                             }
                         }
-                    });
-                } catch (IOException | JSONException e) {
-                    plugin.getLogger().severe("Failed to parse friends list JSON from API: " + e.getMessage());
-                    runOnMainThread(() -> sender.sendMessage(ChatColor.RED + "Error: Could not read response from the website."));
-                } finally {
-                    response.close();
-                }
-            }
-        });
-    }
-
-    // --- МЕТОДЫ ДЛЯ МАГАЗИНА ---
-
-    public void fetchAndExecutePendingCommands() {
-        if (apiKey == null || apiKey.isEmpty()) {
-            plugin.getLogger().warning("Cannot fetch pending commands: plugin-secret-key is not set.");
-            return;
-        }
-
-        Request request = new Request.Builder()
-                .url(baseUrl + "/api/shop/pending-commands")
-                .header("x-api-key", apiKey)
-                .get()
-                .build();
-
-        httpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NotNull Call call, @NotNull IOException e) {
-                plugin.getLogger().warning("Could not fetch pending commands from website: " + e.getMessage());
-            }
-
-            @Override
-            public void onResponse(@NotNull Call call, @NotNull Response response) {
-                if (!response.isSuccessful()) {
-                    plugin.getLogger().warning("Failed to fetch pending commands, API response code: " + response.code());
-                    response.close();
-                    return;
-                }
-                try (ResponseBody responseBody = response.body()) {
-                    String responseString = responseBody.string();
-                    JSONArray commands = new JSONArray(responseString);
-                    if (commands.length() == 0) return;
-
-                    plugin.getLogger().info("Found " + commands.length() + " pending command(s) from website. Executing...");
-                    List<Integer> executedIds = new ArrayList<>();
-
-                    for (int i = 0; i < commands.length(); i++) {
-                        JSONObject cmdObj = commands.getJSONObject(i);
-                        final String commandStr = cmdObj.getString("command");
-                        final int commandId = cmdObj.getInt("id");
-
-                        Bukkit.getScheduler().runTask(plugin, () -> {
-                            plugin.getLogger().info("Executing command ID " + commandId + ": " + commandStr);
-                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), commandStr);
-                            Pattern pattern = Pattern.compile("user\\s+(\\S+)");
-                            Matcher matcher = pattern.matcher(commandStr);
-                            if (matcher.find()) {
-                                String playerName = matcher.group(1);
-                                // Используем getOfflinePlayer, так как игрок может быть не в сети
-                                OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(playerName);
-
-                                // Запускаем синхронизацию для этого игрока с небольшой задержкой,
-                                // чтобы дать время команде полностью примениться.
-                                new BukkitRunnable() {
-                                    @Override
-                                    public void run() {
-                                        plugin.getLogger().info("Triggering immediate rank sync for " + playerName + " after command execution.");
-                                        plugin.getPlayerListener().syncSinglePlayer(targetPlayer);
-                                    }
-                                }.runTaskLater(plugin, 20L); // 20 тиков = 1 секунда
-                            }
-                        });
-                        executedIds.add(commandId);
-                    }
-
-                    if (!executedIds.isEmpty()) {
-                        clearExecutedCommands(executedIds);
-                    }
+                    }).schedule();
                 } catch (Exception e) {
-                    plugin.getLogger().severe("Failed to process pending commands: " + e.getMessage());
-                } finally {
-                    response.close();
+                    logger.error("Failed to parse friends list JSON from API", e);
+                    runOnMainThread(() -> sender.sendMessage(Component.text("Error: Could not read response from the website.").color(NamedTextColor.RED)));
                 }
             }
         });
     }
 
-    private void clearExecutedCommands(List<Integer> ids) {
+    public void acceptFriendRequest(Player sender, int requestId) {
         try {
             JSONObject jsonBody = new JSONObject();
-            jsonBody.put("commandIds", new JSONArray(ids));
+            jsonBody.put("responderUuid", sender.getUniqueId().toString());
+            jsonBody.put("requestId", requestId);
             RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
-
             Request request = new Request.Builder()
-                    .url(baseUrl + "/api/shop/clear-pending-commands")
+                    .url(baseUrl + "/api/friendships/from-plugin/accept")
                     .header("x-api-key", apiKey)
                     .post(body)
                     .build();
-
-            httpClient.newCall(request).enqueue(new Callback() {
-                @Override public void onFailure(@NotNull Call call, @NotNull IOException e) {
-                    plugin.getLogger().warning("Failed to confirm executed commands to website: " + e.getMessage());
-                }
-                @Override public void onResponse(@NotNull Call call, @NotNull Response response) {
-                    if (response.isSuccessful()) {
-                        plugin.getLogger().info("Successfully confirmed execution of " + ids.size() + " command(s).");
-                    }
-                    response.close();
-                }
-            });
-        } catch (Exception e) {
-            plugin.getLogger().severe("Failed to build request for clearing executed commands: " + e.getMessage());
+            httpClient.newCall(request).enqueue(new HttpCallback(sender, "Friend request accepted!"));
+        } catch (JSONException e) {
+            handlePluginError(sender, "Could not create JSON for accepting friend request", e);
         }
     }
 
-
-    // --- ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ---
+    public void denyFriendRequest(Player sender, int requestId) {
+        try {
+            JSONObject jsonBody = new JSONObject();
+            jsonBody.put("responderUuid", sender.getUniqueId().toString());
+            jsonBody.put("requestId", requestId);
+            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
+            Request request = new Request.Builder()
+                    .url(baseUrl + "/api/friendships/from-plugin/deny")
+                    .header("x-api-key", apiKey)
+                    .post(body)
+                    .build();
+            httpClient.newCall(request).enqueue(new HttpCallback(sender, "Friend request denied."));
+        } catch (JSONException e) {
+            handlePluginError(sender, "Could not create JSON for denying friend request", e);
+        }
+    }
 
     private void runOnMainThread(Runnable task) {
-        Bukkit.getScheduler().runTask(plugin, task);
+        server.getScheduler().buildTask(plugin, task).schedule();
     }
 
     private void handlePluginError(Player sender, String logMessage, Exception e) {
-        plugin.getLogger().severe(logMessage + ": " + e.getMessage());
-        runOnMainThread(() -> sender.sendMessage(ChatColor.RED + "An internal plugin error occurred."));
+        logger.error(logMessage, e);
+        runOnMainThread(() -> sender.sendMessage(Component.text("An internal plugin error occurred.").color(NamedTextColor.RED)));
     }
 
     private void handleApiFailure(Player player, IOException e) {
-        plugin.getLogger().severe("Failed to send API request: " + e.getMessage());
-        runOnMainThread(() -> player.sendMessage(ChatColor.RED + "Error: Could not connect to the website API."));
+        logger.error("Failed to send API request", e);
+        runOnMainThread(() -> player.sendMessage(Component.text("Error: Could not connect to the website API.").color(NamedTextColor.RED)));
     }
 
     private void handleApiError(Player player, Response response) {
         try (ResponseBody responseBody = response.body()) {
-            String errorBody = responseBody.string();
-            JSONObject errorJson = new JSONObject(errorBody);
+            JSONObject errorJson = new JSONObject(responseBody.string());
             String message = errorJson.optString("message", "An unknown error occurred (" + response.code() + ")");
-            runOnMainThread(() -> player.sendMessage(ChatColor.RED + "Error: " + message));
-        } catch (IOException | JSONException e) {
-            plugin.getLogger().warning("Could not parse error response from API. Body was not valid JSON or network error occurred.");
-            runOnMainThread(() -> player.sendMessage(ChatColor.RED + "An unknown error occurred while processing the server response."));
-        } finally {
-            if (response != null) response.close();
+            runOnMainThread(() -> player.sendMessage(Component.text("Error: " + message).color(NamedTextColor.RED)));
+        } catch (Exception e) {
+            logger.warn("Could not parse error response from API.", e);
+            runOnMainThread(() -> player.sendMessage(Component.text("An unknown error occurred while processing the server response.").color(NamedTextColor.RED)));
         }
     }
 
@@ -14863,389 +14818,144 @@ public class ApiClient {
         @Override
         public void onResponse(@NotNull Call call, @NotNull Response response) {
             if (response.isSuccessful()) {
-                runOnMainThread(() -> sender.sendMessage(ChatColor.GREEN + successMessage));
+                runOnMainThread(() -> sender.sendMessage(Component.text(successMessage).color(NamedTextColor.GREEN)));
             } else {
                 handleApiError(sender, response);
             }
         }
     }
 
-    public void acceptFriendRequest(Player player, int requestId) {
-        try {
-            JSONObject jsonBody = new JSONObject();
-            jsonBody.put("responderUuid", player.getUniqueId().toString());
-            jsonBody.put("requestId", requestId);
-            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
+    public void fetchAndExecutePendingCommands() {
+        Request request = new Request.Builder()
+                .url(baseUrl + "/api/shop/pending-commands")
+                .header("x-api-key", apiKey)
+                .get()
+                .build();
 
-            Request request = new Request.Builder()
-                    .url(baseUrl + "/api/friendships/from-plugin/accept")
-                    .header("x-api-key", apiKey)
-                    .post(body)
-                    .build();
-
-            httpClient.newCall(request).enqueue(new HttpCallback(player, "Friend request accepted!"));
-        } catch (JSONException e) {
-            handlePluginError(player, "Could not create JSON for accepting friend request", e);
-        }
-    }
-
-    // --- НОВЫЙ МЕТОД ---
-    public void denyFriendRequest(Player player, int requestId) {
-        try {
-            JSONObject jsonBody = new JSONObject();
-            jsonBody.put("responderUuid", player.getUniqueId().toString());
-            jsonBody.put("requestId", requestId);
-            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
-
-            Request request = new Request.Builder()
-                    .url(baseUrl + "/api/friendships/from-plugin/deny")
-                    .header("x-api-key", apiKey)
-                    .post(body)
-                    .build();
-
-            httpClient.newCall(request).enqueue(new HttpCallback(player, "Friend request denied."));
-        } catch (JSONException e) {
-            handlePluginError(player, "Could not create JSON for denying friend request", e);
-        }
-    }
-}
---- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/ApiClient.java ---
-
-
-
---- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/BridgePlugin.java ---
-
-package com.flamewall.bridge;
-
-import io.socket.client.IO;
-import io.socket.client.Socket;
-import net.md_5.bungee.api.chat.ClickEvent;
-import net.md_5.bungee.api.chat.HoverEvent;
-import net.md_5.bungee.api.chat.TextComponent;
-import net.md_5.bungee.api.chat.hover.content.Text;
-import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.net.URI;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.Map; // <-- ДОБАВЛЕНО
-import java.util.concurrent.ConcurrentHashMap; // <-- ДОБАВЛЕНО
-public final class BridgePlugin extends JavaPlugin {
-
-    private Socket socket;
-    private ApiClient apiClient;
-    private PrivateMessageManager messageManager;
-    private List<String> commandPatterns; // <-- Используем простой List<String>
-    private PlayerConnectionListener playerListener; // Храним экземпляр слушателя
-    private final Map<UUID, Map<String, Integer>> pendingRequests = new ConcurrentHashMap<>();
-
-    @Override
-    public void onEnable() {
-        getLogger().info("FlameWallBridge is enabling...");
-        this.saveDefaultConfig();
-        this.reloadConfig();
-
-        // Инициализация компонентов
-        this.messageManager = new PrivateMessageManager();
-        this.apiClient = new ApiClient(this);
-        this.playerListener = new PlayerConnectionListener(this);
-
-        // --- ИСПРАВЛЕНИЕ: Правильно загружаем паттерны в поле класса ---
-        this.commandPatterns = getConfig().getStringList("intercept-commands");
-        getLogger().info("Loaded " + this.commandPatterns.size() + " command patterns to intercept.");
-
-        // Регистрация команд
-        FlameCommand flameCommand = new FlameCommand(this);
-        getCommand("flame").setExecutor(flameCommand);
-        getCommand("flame").setTabCompleter(flameCommand);
-        getCommand("link").setExecutor(new LinkCommand(this));
-
-        // Регистрация слушателя событий
-        Bukkit.getPluginManager().registerEvents(this.playerListener, this);
-
-        // Подключение к веб-серверу и запуск планировщика
-        connectToWebSocket();
-        // startPendingCommandScheduler();
-    }
-
-
-    @Override
-    public void onDisable() {
-        if (socket != null && socket.connected()) {
-            socket.disconnect();
-        }
-        getLogger().info("FlameWallBridge has been disabled.");
-    }
-
-    /**
-     * Запускает повторяющуюся задачу для проверки отложенных покупок в магазине.
-     */
-    private void startPendingCommandScheduler() {
-        long interval = getConfig().getLong("shop.check-interval-seconds", 300) * 20L;
-        new BukkitRunnable() {
+        httpClient.newCall(request).enqueue(new Callback() {
             @Override
-            public void run() {
-                if (socket != null && socket.connected()) {
-                    apiClient.fetchAndExecutePendingCommands();
+            public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                logger.warn("Could not fetch pending commands from website: " + e.getMessage());
+            }
+
+            @Override
+            public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
+                if (!response.isSuccessful()) {
+                    logger.warn("Failed to fetch pending commands, API response code: " + response.code());
+                    response.close();
+                    return;
+                }
+                try (ResponseBody body = response.body()) {
+                    JSONArray commands = new JSONArray(body.string());
+                    if (commands.length() > 0) {
+                        logger.info("Found " + commands.length() + " pending command(s) from website. Processing...");
+                        plugin.processPendingCommands(commands);
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to process pending commands", e);
                 }
             }
-        }.runTaskTimerAsynchronously(this, 200L, interval); // Начать через 10 сек, повторять каждые 5 мин
+        });
     }
-
-    /**
-     * Устанавливает и настраивает соединение с WebSocket-сервером.
-     */
-    private void connectToWebSocket() {
+    public void clearExecutedCommands(List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
         try {
-            // --- ШАГ 1: Подготовка адреса и ключа ---
-            String url = getConfig().getString("api-base-url", "http://localhost:3001");
-            URI serverUri = URI.create(url);
+            JSONObject jsonBody = new JSONObject();
+            jsonBody.put("commandIds", new JSONArray(ids));
+            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
 
-            String apiKey = getConfig().getString("plugin-secret-key");
-            if (apiKey == null || apiKey.isEmpty()) {
-                getLogger().severe("CRITICAL: plugin-secret-key is not set in config.yml! Plugin will not work correctly.");
-                return;
-            }
-
-            // --- ШАГ 2: Создание опций подключения с заголовками ---
-            Map<String, List<String>> headers = new HashMap<>();
-            headers.put("x-api-key", Collections.singletonList(apiKey));
-            IO.Options options = IO.Options.builder()
-                    .setExtraHeaders(headers)
+            Request request = new Request.Builder()
+                    .url(baseUrl + "/api/shop/clear-pending-commands")
+                    .header("x-api-key", apiKey)
+                    .post(body)
                     .build();
 
-            // --- ШАG 3: Создание сокета с готовыми опциями ---
-            socket = IO.socket(serverUri, options);
-
-            // --- ШАГ 4: Навешиваем все обработчики событий ---
-            socket.on(Socket.EVENT_CONNECT, args -> {
-                getLogger().info("Successfully connected to the website backend!");
-                // Сразу после подключения проверяем, нет ли ожидающих покупок
-                apiClient.fetchAndExecutePendingCommands();
-            });
-
-            socket.on(Socket.EVENT_DISCONNECT, args -> getLogger().warning("Disconnected from website backend. Reason: " + (args.length > 0 ? args[0] : "N/A")));
-            socket.on(Socket.EVENT_CONNECT_ERROR, args -> getLogger().severe("Connection error: " + (args.length > 0 ? args[0] : "Unknown error")));
-
-            socket.on("incomingFriendRequest", args -> handleEvent("incomingFriendRequest", args, this::handleIncomingFriendRequest));
-            socket.on("linkStatus", args -> handleEvent("linkStatus", args, this::handleBackendMessage));
-            socket.on("webPrivateMessage", args -> handleEvent("webPrivateMessage", args, this::handleWebMessage));
-            socket.on("executeShopCommand", args -> handleEvent("executeShopCommand", args, this::handleShopCommand));
-
-            socket.on("shop:new-command", args -> {
-                getLogger().info("<<<<<<<<<<<<<<<<<<< SIGNAL RECEIVED! WebSocket IS WORKING! >>>>>>>>>>>>>>>>>>>>");
-                apiClient.fetchAndExecutePendingCommands();
-            });
-            // --- ШАГ 5: Подключаемся ---
-            socket.connect();
-            getLogger().info("Attempting to connect to website backend at " + url + "...");
-
-        } catch (Exception e) {
-            getLogger().severe("Failed to initialize WebSocket connection: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * Безопасный обработчик событий от сокета.
-     */
-    private void handleEvent(String eventName, Object[] args, java.util.function.Consumer<JSONObject> handler) {
-        if (args.length > 0 && args[0] instanceof JSONObject) {
-            handler.accept((JSONObject) args[0]);
-        } else {
-            getLogger().warning("Received malformed '" + eventName + "' event from backend.");
-        }
-    }
-
-    /**
-     * Обрабатывает личные сообщения, пришедшие с сайта.
-     */
-    private void handleWebMessage(JSONObject data) {
-        Bukkit.getScheduler().runTask(this, () -> {
-            if (!getConfig().getBoolean("display-web-messages-in-game", true)) return;
-            try {
-                Player recipientPlayer = Bukkit.getPlayer(UUID.fromString(data.getString("recipientUuid")));
-                if (recipientPlayer != null && recipientPlayer.isOnline()) {
-                    String senderUsername = data.getString("senderUsername");
-                    String content = data.getString("content");
-
-                    TextComponent messageComponent = new TextComponent(ChatColor.GRAY + "[WEB] " + senderUsername + " » " + content);
-                    messageComponent.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/flame msg " + senderUsername + " "));
-                    messageComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(ChatColor.AQUA + "Click to reply to " + senderUsername)));
-                    recipientPlayer.spigot().sendMessage(messageComponent);
+            // Отправляем запрос и логируем результат, не дожидаясь ответа
+            httpClient.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                    logger.warn("Failed to confirm executed commands to website: " + e.getMessage());
                 }
-            } catch (Exception e) {
-                getLogger().warning("Could not parse webPrivateMessage: " + e.getMessage());
-            }
-        });
-    }
 
-    /**
-     * Обрабатывает ответ от сайта о статусе привязки аккаунта.
-     */
-    private void handleBackendMessage(JSONObject data) {
-        Bukkit.getScheduler().runTask(this, () -> {
-            try {
-                Player player = Bukkit.getPlayer(UUID.fromString(data.getString("minecraftUuid")));
-                if (player != null && player.isOnline()) {
-                    if (data.getBoolean("success")) {
-                        player.sendMessage(ChatColor.GREEN + "Success! Your account is now linked to the website profile: " + data.getString("websiteUsername"));
-                        // Сразу после привязки синхронизируем ранг
-                        playerListener.syncSinglePlayer(player);
+                @Override
+                public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
+                    if (response.isSuccessful()) {
+                        logger.info("Successfully confirmed execution of " + ids.size() + " command(s).");
                     } else {
-                        player.sendMessage(ChatColor.RED + "Linking failed: " + data.getString("error"));
+                        logger.warn("Failed to confirm executed commands, API response code: " + response.code());
                     }
+                    response.close();
                 }
-            } catch (JSONException e) {
-                getLogger().warning("Could not parse linkStatus message: " + e.getMessage());
-            }
-        });
-    }
-
-    /**
-     * Обрабатывает команду на выдачу товара из магазина (мгновенная покупка).
-     */
-    private void handleShopCommand(JSONObject data) {
-        try {
-            String command = data.getString("command");
-            getLogger().info("Executing immediate shop command from website: " + command);
-            Bukkit.getScheduler().runTask(this, () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command));
+            });
         } catch (Exception e) {
-            getLogger().warning("Could not parse executeShopCommand: " + e.getMessage());
+            logger.error("Failed to build request for clearing executed commands", e);
         }
     }
-
-    /**
-     * Отправляет данные на бэкенд через WebSocket.
-     */
-    public void sendJsonPayload(String eventName, JSONObject payload) {
-        if (socket != null && socket.connected()) {
-            socket.emit(eventName, payload);
-        } else {
-            getLogger().warning("WebSocket is not connected. Cannot send data for event: " + eventName);
-        }
-    }
-
-    private void handleIncomingFriendRequest(JSONObject data) {
-        Bukkit.getScheduler().runTask(this, () -> {
-            try {
-                String requesterName = data.getString("requesterName");
-                UUID receiverUuid = UUID.fromString(data.getString("receiverUuid"));
-                int requestId = data.getInt("requestId"); // <-- Получаем ID запроса
-
-                Player receiverPlayer = Bukkit.getPlayer(receiverUuid);
-                if (receiverPlayer != null && receiverPlayer.isOnline()) {
-
-                    // --- ПЕРЕВЕДЕНО НА АНГЛИЙСКИЙ ---
-                    pendingRequests.computeIfAbsent(receiverUuid, k -> new HashMap<>()).put(requesterName.toLowerCase(), requestId);
-
-                    receiverPlayer.sendMessage("§e------------------------------------------");
-                    receiverPlayer.sendMessage("§6[!] §ePlayer §f" + requesterName + "§e wants to add you as a friend!");
-
-                    // Создаем кликабельные кнопки
-                    TextComponent acceptButton = new TextComponent("§a[ACCEPT]");
-                    acceptButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/flame friend accept " + requesterName));
-                    acceptButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text("§aClick to accept the friend request")));
-
-                    TextComponent denyButton = new TextComponent("§c[DENY]");
-                    denyButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/flame friend deny " + requesterName));
-                    denyButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text("§cClick to deny the friend request")));
-
-                    TextComponent message = new TextComponent("    ");
-                    message.addExtra(acceptButton);
-                    message.addExtra("    "); // Пробел между кнопками
-                    message.addExtra(denyButton);
-
-                    receiverPlayer.spigot().sendMessage(message);
-                    receiverPlayer.sendMessage("§e------------------------------------------");
-                }
-
-            } catch(Exception e) {
-                getLogger().warning("Could not parse incomingFriendRequest: " + e.getMessage());
-            }
-        });
-    }
-
-    // Геттеры для доступа из других классов
-    public ApiClient getApiClient() { return apiClient; }
-    public PrivateMessageManager getMessageManager() { return messageManager; }
-    public List<String> getCommandPatterns() { return commandPatterns; }
-    public Map<UUID, Map<String, Integer>> getPendingRequests() {
-        return pendingRequests;
-    }
-    public PlayerConnectionListener getPlayerListener() { return playerListener; }
 }
---- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/BridgePlugin.java ---
+--- END FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/ApiClient.java ---
 
 
 
---- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/FlameCommand.java ---
+--- START FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/command/FlameCommand.java ---
 
-package com.flamewall.bridge;
+package com.flamewall.proxybridge.command;
 
-import me.clip.placeholderapi.PlaceholderAPI;
-import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
-import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import com.flamewall.proxybridge.ApiClient;
+import com.flamewall.proxybridge.FlameWallProxyBridge;
+import com.flamewall.proxybridge.manager.PrivateMessageManager;
+import com.velocitypowered.api.command.SimpleCommand;
+import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.proxy.ProxyServer;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.json.JSONObject;
-import org.bukkit.scheduler.BukkitRunnable; // <-- ИСПРАВЛЕНИЕ
+import org.slf4j.Logger;
 
-import java.util.*; // <-- ИСПРАВЛЕНИЕ
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-public class FlameCommand implements CommandExecutor, TabCompleter {
+public class FlameCommand implements SimpleCommand {
 
-    private final BridgePlugin plugin;
+    private final FlameWallProxyBridge plugin;
+    private final PrivateMessageManager messageManager;
+    private final ApiClient apiClient;
+    private final ProxyServer server;
+    private final Logger logger;
 
-    public FlameCommand(BridgePlugin plugin) {
+    public FlameCommand(FlameWallProxyBridge plugin, ProxyServer server, Logger logger, PrivateMessageManager messageManager) {
         this.plugin = plugin;
+        this.server = server;
+        this.logger = logger;
+        this.messageManager = messageManager;
+        this.apiClient = plugin.getApiClient();
     }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("This command can only be used by a player.");
-            return true;
+    public void execute(final Invocation invocation) {
+        if (!(invocation.source() instanceof Player)) {
+            invocation.source().sendMessage(Component.text("This command can only be used by a player.").color(NamedTextColor.RED));
+            return;
         }
-        Player player = (Player) sender;
+
+        Player player = (Player) invocation.source();
+        String[] args = invocation.arguments();
 
         if (args.length == 0) {
             sendHelpMessage(player);
-            return true;
+            return;
         }
 
         String subCommand = args[0].toLowerCase();
         String[] subArgs = Arrays.copyOfRange(args, 1, args.length);
-
-        if (subCommand.equals("sync-ranks")) {
-            handleSyncRanksCommand(sender, subArgs);
-            return true;
-        }
-
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("This command can only be used by a player.");
-            return true;
-        }
 
         switch (subCommand) {
             case "msg":
@@ -15262,470 +14972,584 @@ public class FlameCommand implements CommandExecutor, TabCompleter {
                 sendHelpMessage(player);
                 break;
         }
-        return true;
-    }
-
-    private void handleSyncRanksCommand(CommandSender sender, String[] args) {
-        if (!sender.hasPermission("flamewall.admin.sync")) {
-            sender.sendMessage(ChatColor.RED + "You do not have permission to use this command.");
-            return;
-        }
-        if (args.length == 0) {
-            sender.sendMessage(ChatColor.RED + "Usage: /flame sync-ranks <online|all>");
-            return;
-        }
-        String mode = args[0].toLowerCase();
-        if ("online".equals(mode)) {
-            syncOnlinePlayers(sender);
-        } else if ("all".equals(mode)) {
-            syncAllPlayers(sender);
-        } else {
-            sender.sendMessage(ChatColor.RED + "Unknown mode. Use 'online' or 'all'.");
-        }
-    }
-
-    private void syncOnlinePlayers(CommandSender sender) {
-        sender.sendMessage(ChatColor.YELLOW + "Starting rank synchronization for all ONLINE players...");
-        int syncedCount = 0;
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            syncSinglePlayer(player);
-            syncedCount++;
-        }
-        sender.sendMessage(ChatColor.GREEN + "Synchronization complete! Sent data for " + syncedCount + " players.");
-    }
-
-    private void syncAllPlayers(CommandSender sender) {
-        sender.sendMessage(ChatColor.GOLD + "Starting FULL rank synchronization. This may take a while. Check the console for progress...");
-
-        final Queue<OfflinePlayer> playerQueue = new LinkedList<>(Arrays.asList(Bukkit.getOfflinePlayers()));
-        final int totalPlayers = playerQueue.size();
-        final int batchSize = plugin.getConfig().getInt("sync-settings.batch-size", 50);
-        final long delayTicks = plugin.getConfig().getLong("sync-settings.delay-ticks", 10);
-
-        new BukkitRunnable() {
-            private int processedCount = 0;
-            @Override
-            public void run() {
-                if (playerQueue.isEmpty()) {
-                    sender.sendMessage(ChatColor.GREEN + "Full synchronization complete! Processed " + totalPlayers + " players.");
-                    plugin.getLogger().info("Full rank synchronization finished.");
-                    this.cancel();
-                    return;
-                }
-
-                if (processedCount > 0 && processedCount % 500 == 0) { // Лог каждые 500 игроков
-                    plugin.getLogger().info("Sync progress: " + processedCount + " / " + totalPlayers);
-                }
-
-                for (int i = 0; i < batchSize && !playerQueue.isEmpty(); i++) {
-                    OfflinePlayer offlinePlayer = playerQueue.poll();
-                    if (offlinePlayer != null) {
-                        syncSinglePlayer(offlinePlayer);
-                        processedCount++;
-                    }
-                }
-            }
-        }.runTaskTimerAsynchronously(plugin, 0L, delayTicks);
-    }
-
-    public void syncSinglePlayer(OfflinePlayer player) {
-        if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
-            String rankPlaceholder = plugin.getConfig().getString("rank-sync.placeholder");
-            if (rankPlaceholder == null || rankPlaceholder.isEmpty()) return;
-
-            String rankName = PlaceholderAPI.setPlaceholders(player, rankPlaceholder);
-            try {
-                JSONObject payload = new JSONObject();
-                payload.put("minecraftUuid", player.getUniqueId().toString());
-                payload.put("rankName", rankName);
-                plugin.sendJsonPayload("player:sync-rank", payload);
-            } catch (Exception e) {
-                plugin.getLogger().warning("Error syncing rank for " + player.getName() + ": " + e.getMessage());
-            }
-        }
-    }
-
-    private void handleMessageCommand(Player sender, String[] args) {
-        if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /flame msg <player> <message>");
-            return;
-        }
-        String recipientName = args[0];
-        String message = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
-
-        if (sender.getName().equalsIgnoreCase(recipientName)) {
-            sender.sendMessage(ChatColor.RED + "You cannot send a message to yourself.");
-            return;
-        }
-        sendMessage(sender, recipientName, message);
-    }
-
-    private void handleReplyCommand(Player sender, String[] args) {
-        if (args.length < 1) {
-            sender.sendMessage(ChatColor.RED + "Usage: /flame reply <message>");
-            return;
-        }
-        UUID recipientUuid = plugin.getMessageManager().getReplyTarget(sender);
-        if (recipientUuid == null) {
-            sender.sendMessage(ChatColor.RED + "There is no one to reply to.");
-            return;
-        }
-        Player recipientPlayer = Bukkit.getPlayer(recipientUuid);
-        if (recipientPlayer == null || !recipientPlayer.isOnline()) {
-            sender.sendMessage(ChatColor.RED + "The player you are replying to has gone offline.");
-            return;
-        }
-        String message = String.join(" ", args);
-        sendMessage(sender, recipientPlayer.getName(), message);
     }
 
     private void handleFriendCommand(Player player, String[] args) {
         if (args.length == 0) {
-            player.sendMessage(ChatColor.RED + "Usage: /flame friend <add|remove|list>");
+            player.sendMessage(Component.text("Usage: /flame friend <add|remove|list|accept|deny>").color(NamedTextColor.RED));
             return;
         }
         String action = args[0].toLowerCase();
         String[] actionArgs = Arrays.copyOfRange(args, 1, args.length);
 
         switch(action) {
-            case "add":
+            case "add": {
                 if (actionArgs.length < 1) {
-                    player.sendMessage(ChatColor.RED + "Usage: /flame friend add <player>");
+                    player.sendMessage(Component.text("Usage: /flame friend add <player>").color(NamedTextColor.RED));
                     return;
                 }
-                String targetName = actionArgs[0];
-                if (player.getName().equalsIgnoreCase(targetName)) {
-                    player.sendMessage(ChatColor.RED + "You cannot add yourself as a friend.");
+                if (player.getUsername().equalsIgnoreCase(actionArgs[0])) {
+                    player.sendMessage(Component.text("You cannot add yourself as a friend.").color(NamedTextColor.RED));
                     return;
                 }
-                plugin.getApiClient().sendFriendRequest(player, targetName);
+                apiClient.sendFriendRequest(player, actionArgs[0]);
                 break;
-
-            case "remove":
+            }
+            case "remove": {
                 if (actionArgs.length < 1) {
-                    player.sendMessage(ChatColor.RED + "Usage: /flame friend remove <player>");
+                    player.sendMessage(Component.text("Usage: /flame friend remove <player>").color(NamedTextColor.RED));
                     return;
                 }
-                plugin.getApiClient().removeFriend(player, actionArgs[0]);
+                apiClient.removeFriend(player, actionArgs[0]);
                 break;
-
-            case "list":
-                plugin.getApiClient().getFriendsList(player);
+            }
+            case "list": {
+                apiClient.getFriendsList(player);
                 break;
-
+            }
             case "accept": {
                 if (actionArgs.length < 1) {
-                    player.sendMessage(ChatColor.RED + "Usage: /flame friend accept <player>");
+                    player.sendMessage(Component.text("Usage: /flame friend accept <player>").color(NamedTextColor.RED));
                     return;
                 }
                 String requesterName = actionArgs[0].toLowerCase();
                 Map<String, Integer> playerRequests = plugin.getPendingRequests().get(player.getUniqueId());
 
                 if (playerRequests == null || !playerRequests.containsKey(requesterName)) {
-                    player.sendMessage(ChatColor.RED + "You don't have a friend request from " + actionArgs[0] + ".");
+                    player.sendMessage(Component.text("You don't have a friend request from " + actionArgs[0] + ".").color(NamedTextColor.RED));
                     return;
                 }
                 int requestId = playerRequests.remove(requesterName);
-                plugin.getApiClient().acceptFriendRequest(player, requestId);
+                apiClient.acceptFriendRequest(player, requestId);
                 break;
             }
             case "deny": {
                 if (actionArgs.length < 1) {
-                    player.sendMessage(ChatColor.RED + "Usage: /flame friend deny <player>");
+                    player.sendMessage(Component.text("Usage: /flame friend deny <player>").color(NamedTextColor.RED));
                     return;
                 }
                 String requesterName = actionArgs[0].toLowerCase();
                 Map<String, Integer> playerRequests = plugin.getPendingRequests().get(player.getUniqueId());
 
                 if (playerRequests == null || !playerRequests.containsKey(requesterName)) {
-                    player.sendMessage(ChatColor.RED + "You don't have a friend request from " + actionArgs[0] + ".");
+                    player.sendMessage(Component.text("You don't have a friend request from " + actionArgs[0] + ".").color(NamedTextColor.RED));
                     return;
                 }
                 int requestId = playerRequests.remove(requesterName);
-                plugin.getApiClient().denyFriendRequest(player, requestId);
+                apiClient.denyFriendRequest(player, requestId);
                 break;
             }
-
-            // TODO: В будущем добавить accept, deny
             default:
-                player.sendMessage(ChatColor.RED + "Unknown friend command. Use: add, remove, list.");
+                player.sendMessage(Component.text("Unknown friend command. Use: add, remove, list, accept, deny.").color(NamedTextColor.RED));
                 break;
         }
     }
 
-    private void sendMessage(Player sender, String recipientName, String content) {
+    private void handleMessageCommand(Player sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Component.text("Usage: /flame msg <player> <message>").color(NamedTextColor.RED));
+            return;
+        }
+        String recipientName = args[0];
+        String message = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
+
+        if (sender.getUsername().equalsIgnoreCase(recipientName)) {
+            sender.sendMessage(Component.text("You cannot send a message to yourself.").color(NamedTextColor.RED));
+            return;
+        }
+
+        sendMessage(sender, recipientName, message);
+    }
+
+    private void handleReplyCommand(Player sender, String[] args) {
+        if (args.length < 1) {
+            sender.sendMessage(Component.text("Usage: /flame reply <message>").color(NamedTextColor.RED));
+            return;
+        }
+        UUID recipientUuid = messageManager.getReplyTarget(sender);
+        if (recipientUuid == null) {
+            sender.sendMessage(Component.text("There is no one to reply to.").color(NamedTextColor.RED));
+            return;
+        }
+
+        Optional<Player> recipientOpt = server.getPlayer(recipientUuid);
+        if (recipientOpt.isEmpty()) {
+            sender.sendMessage(Component.text("The player you are replying to has gone offline.").color(NamedTextColor.RED));
+            return;
+        }
+
+        String message = String.join(" ", args);
+        sendMessage(sender, recipientOpt.get().getUsername(), message);
+    }
+
+    private void sendMessage(Player sender, String recipientUsername, String content) {
         try {
             JSONObject payload = new JSONObject();
             payload.put("senderUuid", sender.getUniqueId().toString());
-            payload.put("recipientUsername", recipientName);
+            payload.put("recipientUsername", recipientUsername);
             payload.put("content", content);
             plugin.sendJsonPayload("inGamePrivateMessage", payload);
-            sender.sendMessage(ChatColor.GRAY + "To " + recipientName + ": " + ChatColor.WHITE + content);
 
-            Player recipientPlayer = Bukkit.getPlayer(recipientName);
-            if (recipientPlayer != null) {
-                plugin.getMessageManager().setLastPartner(sender, recipientPlayer);
-            }
+            Component prefix = Component.text()
+                    .append(Component.text("[", NamedTextColor.DARK_GRAY))
+                    .append(Component.text("Me", NamedTextColor.AQUA))
+                    .append(Component.text(" -> ", NamedTextColor.GRAY))
+                    .append(Component.text(recipientUsername, NamedTextColor.AQUA))
+                    .append(Component.text("] ", NamedTextColor.DARK_GRAY))
+                    .build();
+
+            Component messageBody = Component.text(content, NamedTextColor.WHITE);
+
+            Component fullMessage = prefix.append(messageBody)
+                    .clickEvent(ClickEvent.suggestCommand("/flame msg " + recipientUsername + " "))
+                    .hoverEvent(HoverEvent.showText(Component.text("Click to send another message to " + recipientUsername).color(NamedTextColor.GREEN)));
+
+            sender.sendMessage(fullMessage);
+
+            server.getPlayer(recipientUsername).ifPresent(recipient -> {
+                messageManager.setLastPartner(sender, recipient);
+            });
         } catch (Exception e) {
-            sender.sendMessage(ChatColor.RED + "An error occurred while sending the message.");
-            plugin.getLogger().severe("Could not send PM to backend for " + sender.getName());
-            e.printStackTrace();
+            sender.sendMessage(Component.text("An error occurred while sending the message.").color(NamedTextColor.RED));
+            logger.error("Could not send PM to backend for " + sender.getUsername(), e);
         }
-    }
-
-
-    private void sendHelpMessage(CommandSender sender) {
-        sender.sendMessage(ChatColor.GOLD + "--- FlameWall Bridge Help ---");
-        sender.sendMessage(ChatColor.AQUA + "/flame msg <player> <message>" + ChatColor.WHITE + " - Send a private message");
-        sender.sendMessage(ChatColor.AQUA + "/flame reply <message>" + ChatColor.WHITE + " - Reply to the last message");
-        sender.sendMessage(ChatColor.AQUA + "/flame friend <add|remove|list>" + ChatColor.WHITE + " - Manage your friends");
-        sender.sendMessage(ChatColor.AQUA + "/flame sync-ranks <online|all>" + ChatColor.WHITE + " - Force sync ranks with the website");
     }
 
     @Override
-    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (args.length == 1) {
-            return Arrays.asList("msg", "reply", "friend", "sync-ranks").stream()
-                    .filter(a -> a.startsWith(args[0].toLowerCase())).collect(Collectors.toList());
+    public CompletableFuture<List<String>> suggestAsync(final Invocation invocation) {
+        String[] args = invocation.arguments();
+        if (args.length == 0 || args.length == 1) {
+            List<String> subCommands = Arrays.asList("msg", "reply", "friend");
+            String currentArg = args.length == 0 ? "" : args[0].toLowerCase();
+            return CompletableFuture.completedFuture(
+                    subCommands.stream().filter(s -> s.startsWith(currentArg)).collect(Collectors.toList())
+            );
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("sync-ranks")) {
-            return Arrays.asList("online", "all").stream()
-                    .filter(a -> a.startsWith(args[1].toLowerCase())).collect(Collectors.toList());
-        }
-
         if (args.length == 2) {
             String subCommand = args[0].toLowerCase();
-            if (subCommand.equals("msg")) {
-                return null; // Автодополнение ников игроков
-            }
+            String currentArg = args[1].toLowerCase();
             if (subCommand.equals("friend")) {
-                return List.of("add", "remove", "list").stream()
-                        .filter(s -> s.startsWith(args[1].toLowerCase()))
-                        .collect(Collectors.toList());
+                List<String> friendActions = Arrays.asList("add", "remove", "list", "accept", "deny");
+                return CompletableFuture.completedFuture(
+                        friendActions.stream().filter(s -> s.startsWith(currentArg)).collect(Collectors.toList())
+                );
+            }
+            if (subCommand.equals("msg")) {
+                return server.getAllPlayers().stream()
+                        .map(Player::getUsername)
+                        .filter(name -> name.toLowerCase().startsWith(currentArg))
+                        .collect(Collectors.collectingAndThen(Collectors.toList(), CompletableFuture::completedFuture));
             }
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("friend") &&
-                (args[1].equalsIgnoreCase("add") || args[1].equalsIgnoreCase("remove"))) {
-            return null; // Автодополнение ников игроков
-        }
-        return new ArrayList<>();
+        return CompletableFuture.completedFuture(List.of());
+    }
+
+    @Override
+    public boolean hasPermission(final Invocation invocation) {
+        return true;
+    }
+
+    private void sendHelpMessage(Player player) {
+        player.sendMessage(Component.text("--- FlameWall Bridge Help ---").color(NamedTextColor.GOLD));
+        player.sendMessage(Component.text("/flame msg <player> <message> - Send a private message").color(NamedTextColor.AQUA));
+        player.sendMessage(Component.text("/flame reply <message> - Reply to the last message").color(NamedTextColor.AQUA));
+        player.sendMessage(Component.text("/flame friend <add|remove|list> - Manage your friends").color(NamedTextColor.AQUA));
     }
 }
---- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/FlameCommand.java ---
+--- END FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/command/FlameCommand.java ---
 
 
 
---- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/LinkCommand.java ---
+--- START FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/command/LinkCommand.java ---
 
-package com.flamewall.bridge;
+// src/main/java/com/flamewall/proxybridge/command/LinkCommand.java
 
-import org.bukkit.ChatColor;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
-import org.json.JSONException;
+package com.flamewall.proxybridge.command;
+
+import com.flamewall.proxybridge.FlameWallProxyBridge;
+import com.velocitypowered.api.command.CommandSource;
+import com.velocitypowered.api.command.SimpleCommand;
+import com.velocitypowered.api.proxy.Player;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.json.JSONObject;
 
-public class LinkCommand implements CommandExecutor {
+public class LinkCommand implements SimpleCommand {
 
-    private final BridgePlugin plugin;
+    private final FlameWallProxyBridge plugin;
 
-    public LinkCommand(BridgePlugin plugin) {
+    public LinkCommand(FlameWallProxyBridge plugin) {
         this.plugin = plugin;
     }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("This command can only be run by a player.");
-            return true;
+    public void execute(Invocation invocation) {
+        CommandSource source = invocation.source();
+        String[] args = invocation.arguments();
+
+        if (!(source instanceof Player)) {
+            source.sendMessage(Component.text("This command can only be used by a player.").color(NamedTextColor.RED));
+            return;
         }
 
         if (args.length != 1) {
-            sender.sendMessage(ChatColor.RED + "Usage: /link <code>");
-            return false;
+            source.sendMessage(Component.text("Usage: /link <code>").color(NamedTextColor.RED));
+            return;
         }
 
-        Player player = (Player) sender;
+        Player player = (Player) source;
         String code = args[0];
 
         try {
-            // --- ИСПРАВЛЕНИЕ: Оборачиваем создание JSON в try-catch ---
             JSONObject payload = new JSONObject();
             payload.put("code", code);
             payload.put("minecraftUuid", player.getUniqueId().toString());
-            payload.put("minecraftUsername", player.getName());
+            payload.put("minecraftUsername", player.getUsername());
 
-            // --- ИСПРАВЛЕНИЕ: Передаем два аргумента, как и требует метод ---
+            // Используем наш метод для отправки данных на бэкенд
             plugin.sendJsonPayload("linkAccount", payload);
 
-            player.sendMessage(ChatColor.YELLOW + "Sent link request to the website. Please check the website for confirmation.");
-
-        } catch (JSONException e) {
-            player.sendMessage(ChatColor.RED + "An internal error occurred while creating the request.");
+            player.sendMessage(Component.text("Sent link request to the website. Please check the website for confirmation.").color(NamedTextColor.YELLOW));
+        } catch (Exception e) {
+            player.sendMessage(Component.text("An internal plugin error occurred.").color(NamedTextColor.RED));
             e.printStackTrace();
         }
+    }
 
+    // Для этой простой команды права есть у всех
+    @Override
+    public boolean hasPermission(Invocation invocation) {
         return true;
     }
 }
---- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/LinkCommand.java ---
+--- END FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/command/LinkCommand.java ---
 
 
 
---- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/PlayerConnectionListener.java ---
+--- START FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/FlameWallProxyBridge.java ---
 
-// FlameWallBridge/src/main/java/com/flamewall/bridge/PlayerConnectionListener.java
-package com.flamewall.bridge;
+// src/main/java/com/flamewall/proxybridge/FlameWallProxyBridge.java
 
-import me.clip.placeholderapi.PlaceholderAPI;
-import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerCommandPreprocessEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.server.ServerCommandEvent;
-import org.bukkit.scheduler.BukkitRunnable;
+package com.flamewall.proxybridge;
+
+import com.google.common.io.ByteArrayDataOutput;
+import com.google.common.io.ByteStreams;
+import com.velocitypowered.api.scheduler.ScheduledTask;
+import org.json.JSONArray;
 import org.json.JSONObject;
-
-import java.util.List;
-import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class PlayerConnectionListener implements Listener {
+import com.flamewall.proxybridge.command.FlameCommand;
+import com.flamewall.proxybridge.command.LinkCommand;
+import com.flamewall.proxybridge.manager.PrivateMessageManager;
+import com.google.inject.Inject;
+import com.velocitypowered.api.command.CommandManager;
+import com.velocitypowered.api.command.CommandMeta;
+import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.connection.PluginMessageEvent; // <<< НУЖНЫЙ ИМПОРТ
+import com.velocitypowered.api.event.connection.PostLoginEvent;
+import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.plugin.Plugin;
+import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.messages.ChannelIdentifier;     // <<< НУЖНЫЙ ИМПОРТ
+import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier; // <<< НУЖНЫЙ ИМПОРТ
 
-    private final BridgePlugin plugin;
-    private final boolean papiEnabled;
+import com.velocitypowered.api.scheduler.ScheduledTask;
+import io.socket.client.IO;
+import io.socket.client.Socket;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.slf4j.Logger;
+import net.kyori.adventure.text.event.ClickEvent;   // <<< ДОБАВЛЕН НУЖНЫЙ ИМПОРТ
+import net.kyori.adventure.text.event.HoverEvent;
 
-    public PlayerConnectionListener(BridgePlugin plugin) {
-        this.plugin = plugin;
-        this.papiEnabled = Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
-        if (papiEnabled) {
-            plugin.getLogger().info("PlaceholderAPI found! Rank synchronization will be used.");
-        } else {
-            plugin.getLogger().warning("PlaceholderAPI not found. Rank synchronization will be disabled.");
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.net.URI;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap; // <<< ДОБАВЛЕН НУЖНЫЙ ИМПОРТ
+import java.util.concurrent.TimeUnit;
+
+@Plugin(
+        id = "flamewallproxybridge",
+        name = "FlameWallProxyBridge",
+        version = "1.0-SNAPSHOT",
+        description = "The main proxy bridge for FlameWall website integration.",
+        authors = {"Sknery"}
+)
+public class FlameWallProxyBridge {
+
+    private final ProxyServer server;
+    private final Logger logger;
+    private Socket socket;
+    private ApiClient apiClient;
+    private PrivateMessageManager messageManager;
+    private final Map<UUID, Map<String, Integer>> pendingRequests = new ConcurrentHashMap<>();
+    private ScheduledTask pendingCommandsTask; // <<< НОВОЕ ПОЛЕ
+
+    private static final ChannelIdentifier FLAMEWALL_CHANNEL = MinecraftChannelIdentifier.create("flamewall", "main");
+
+
+    @Inject
+    public FlameWallProxyBridge(ProxyServer server, Logger logger) {
+        this.server = server;
+        this.logger = logger;
+    }
+
+    @Subscribe
+    public void onProxyInitialization(ProxyInitializeEvent event) {
+        this.apiClient = new ApiClient(this, server, logger);
+        this.messageManager = new PrivateMessageManager();
+        CommandManager commandManager = server.getCommandManager();
+        CommandMeta flameMeta = commandManager.metaBuilder("flame").aliases("fw").build();
+        commandManager.register(flameMeta, new FlameCommand(this, server, logger, messageManager));
+        CommandMeta linkMeta = commandManager.metaBuilder("link").build();
+        server.getChannelRegistrar().register(FLAMEWALL_CHANNEL);
+
+        commandManager.register(linkMeta, new LinkCommand(this));
+        connectToWebSocket();
+
+        this.pendingCommandsTask = server.getScheduler()
+                .buildTask(this, () -> apiClient.fetchAndExecutePendingCommands())
+                .repeat(1, TimeUnit.MINUTES) // Проверять каждые 5 минут
+                .delay(1, TimeUnit.MINUTES)  // Начать через 1 минуту после запуска сервера
+                .schedule();
+
+        logger.info("Pending command scheduler has been started.");
+        logger.info("FlameWallProxyBridge plugin has been enabled!");
+    }
+
+    public ApiClient getApiClient() {
+        return apiClient;
+    }
+
+    @Subscribe
+    public void onPluginMessage(PluginMessageEvent event) {
+        // Убеждаемся, что сообщение пришло по нашему каналу
+        if (!event.getIdentifier().equals(FLAMEWALL_CHANNEL)) {
+            return;
+        }
+
+        try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(event.getData()))) {
+            String subChannel = in.readUTF(); // Читаем нашу "подкоманду"
+
+            if (subChannel.equals("RankSync")) {
+                String uuid = in.readUTF();
+                String rankName = in.readUTF();
+                logger.info("[DEBUG] Received RankSync from helper for UUID " + uuid + " with rank " + rankName + ". Forwarding to backend...");
+
+                // Формируем JSON и отправляем на бэкенд
+                JSONObject payload = new JSONObject();
+                payload.put("minecraftUuid", uuid);
+                payload.put("rankName", rankName);
+                sendJsonPayload("player:sync-rank", payload);
+            }
+        } catch (IOException | JSONException e) {
+            logger.error("Failed to read plugin message", e);
         }
     }
 
-    // --- ОБРАБОТЧИКИ СОБЫТИЙ ---
 
-    @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        sendStatusUpdate(player, true);
-        if (papiEnabled && plugin.getConfig().getBoolean("rank-sync.enabled", true)) {
-            syncSinglePlayer(player);
-        }
-        // БЛОК УДАЛЁН. ТЕПЕРЬ МЫ ТОЛЬКО СИНХРОНИЗИРУЕМ.
+    // <<< НОВЫЙ СЛУШАТЕЛЬ ВХОДА ИГРОКА >>>
+    @Subscribe
+    public void onPlayerJoin(PostLoginEvent event) {
+        sendStatusUpdate(event.getPlayer(), true);
     }
 
-    @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
+    // <<< НОВЫЙ СЛУШАТЕЛЬ ВЫХОДА ИГРОКА >>>
+    @Subscribe
+    public void onPlayerQuit(DisconnectEvent event) {
+        // При выходе игрока, чистим его запросы, чтобы они не копились вечно
+        pendingRequests.remove(event.getPlayer().getUniqueId());
         sendStatusUpdate(event.getPlayer(), false);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
-        String command = event.getMessage().startsWith("/") ? event.getMessage().substring(1) : event.getMessage();
-        checkCommandAndSync(command);
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onServerCommand(ServerCommandEvent event) {
-        checkCommandAndSync(event.getCommand());
-    }
-
-
-    // --- ПУБЛИЧНЫЙ МЕТОД СИНХРОНИЗАЦИИ ---
-
-    public void syncSinglePlayer(OfflinePlayer player) {
-        if (player == null) return;
-        if (!papiEnabled) return;
-
-        String rankPlaceholder = plugin.getConfig().getString("rank-sync.placeholder");
-        if (rankPlaceholder == null || rankPlaceholder.isEmpty()) return;
-
-        String rankName = PlaceholderAPI.setPlaceholders(player, rankPlaceholder);
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("minecraftUuid", player.getUniqueId().toString());
-            payload.put("rankName", rankName);
-            plugin.sendJsonPayload("player:sync-rank", payload);
-        } catch (Exception e) {
-            plugin.getLogger().warning("Error syncing rank for " + player.getName() + ": " + e.getMessage());
-        }
-    }
-
-    // --- ПРИВАТНЫЕ МЕТОДЫ ---
-
+    // <<< НОВЫЙ МЕТОД ДЛЯ ОТПРАВКИ СТАТУСА >>>
     private void sendStatusUpdate(Player player, boolean isOnline) {
         try {
             JSONObject payload = new JSONObject();
             payload.put("minecraftUuid", player.getUniqueId().toString());
             payload.put("isOnline", isOnline);
-            plugin.sendJsonPayload("minecraftPlayerStatus", payload);
+            sendJsonPayload("minecraftPlayerStatus", payload);
+            logger.info("Sent status update for " + player.getUsername() + ": " + (isOnline ? "ONLINE" : "OFFLINE"));
         } catch (Exception e) {
-            plugin.getLogger().severe("Could not send player status update for " + player.getName());
+            logger.error("Could not send player status update for " + player.getUsername(), e);
         }
     }
 
-    private void checkCommandAndSync(String command) {
-        List<String> patterns = plugin.getCommandPatterns();
-        if (patterns.isEmpty()) return;
+    public Map<UUID, Map<String, Integer>> getPendingRequests() {
+        return pendingRequests;
+    }
 
-        for (String patternString : patterns) {
-            String regex = patternString
-                    .replace("{player}", "(?<player>\\S+)")
-                    .replace("{rank}", "(?<rank>\\S+)");
-            Pattern pattern = Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
-            Matcher matcher = pattern.matcher(command);
+    public void sendJsonPayload(String eventName, JSONObject payload) {
+        if (socket != null && socket.connected()) {
+            socket.emit(eventName, payload);
+        } else {
+            logger.warn("WebSocket is not connected. Cannot send data for event: " + eventName);
+        }
+    }
 
-            if (matcher.find()) {
-                final String playerName = matcher.group("player");
-                final OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(playerName);
-
-                if (targetPlayer.hasPlayedBefore() || targetPlayer.isOnline()) {
-                    plugin.getLogger().info("Intercepted a rank change command for player: " + playerName + ". Sending event to website...");
-                    try {
-                        // Мы не знаем, повышение это или понижение, мы просто сообщаем о факте
-                        String changedRankName = matcher.group("rank");
-                        JSONObject payload = new JSONObject();
-                        payload.put("minecraftUuid", targetPlayer.getUniqueId().toString());
-                        payload.put("newRankSystemName", changedRankName.toLowerCase());
-                        plugin.sendJsonPayload("player:rank-changed-ingame", payload);
-                    } catch (Exception e) {
-                        plugin.getLogger().warning("Error sending rank change event: " + e.getMessage());
-                    }
-                }
+    private void connectToWebSocket() {
+        try {
+            String url = "http://localhost:3001";
+            String apiKey = "your_super_long_and_random_plugin_secret_key";
+            if (apiKey == null || apiKey.isEmpty()) {
+                logger.error("CRITICAL: plugin-secret-key is not set! Plugin will not work.");
                 return;
             }
+            Map<String, List<String>> headers = new HashMap<>();
+            headers.put("x-api-key", Collections.singletonList(apiKey));
+            IO.Options options = IO.Options.builder()
+                    .setExtraHeaders(headers)
+                    .setTransports(new String[]{"websocket"})
+                    .build();
+            socket = IO.socket(URI.create(url), options);
+            socket.on(Socket.EVENT_CONNECT, args -> logger.info("Successfully connected to the website backend via WebSocket!"));
+            socket.on(Socket.EVENT_DISCONNECT, args -> logger.warn("Disconnected from website backend."));
+            socket.on(Socket.EVENT_CONNECT_ERROR, args -> logger.error("Connection error: " + (args.length > 0 ? args[0] : "Unknown error")));
+            socket.on("incomingFriendRequest", args -> {
+                if (args.length > 0 && args[0] instanceof JSONObject) {
+                    JSONObject data = (JSONObject) args[0];
+                    try {
+                        UUID receiverUuid = UUID.fromString(data.getString("receiverUuid"));
+                        String requesterName = data.getString("requesterName");
+                        int requestId = data.getInt("requestId");
+
+                        pendingRequests.computeIfAbsent(receiverUuid, k -> new HashMap<>()).put(requesterName.toLowerCase(), requestId);
+
+                        server.getPlayer(receiverUuid).ifPresent(receiver -> {
+                            receiver.sendMessage(Component.text("------------------------------------------").color(NamedTextColor.GOLD));
+                            receiver.sendMessage(
+                                    Component.text("Player ").color(NamedTextColor.YELLOW)
+                                            .append(Component.text(requesterName, NamedTextColor.WHITE))
+                                            .append(Component.text(" wants to be your friend!", NamedTextColor.YELLOW))
+                            );
+
+                            Component acceptButton = Component.text("[ACCEPT]", NamedTextColor.GREEN)
+                                    .clickEvent(ClickEvent.runCommand("/flame friend accept " + requesterName))
+                                    .hoverEvent(HoverEvent.showText(Component.text("Click to accept " + requesterName)));
+
+                            Component denyButton = Component.text("[DENY]", NamedTextColor.RED)
+                                    .clickEvent(ClickEvent.runCommand("/flame friend deny " + requesterName))
+                                    .hoverEvent(HoverEvent.showText(Component.text("Click to deny " + requesterName)));
+
+                            receiver.sendMessage(Component.text("    ").append(acceptButton).append(Component.text("    ")).append(denyButton));
+                            receiver.sendMessage(Component.text("------------------------------------------").color(NamedTextColor.GOLD));
+                        });
+                    } catch (Exception e) {
+                        logger.error("Could not parse incomingFriendRequest from backend.", e);
+                    }
+                }
+            });
+            socket.on("webPrivateMessage", args -> {
+                if (args.length > 0 && args[0] instanceof JSONObject) {
+                    JSONObject data = (JSONObject) args[0];
+                    try {
+                        UUID recipientUuid = UUID.fromString(data.getString("recipientUuid"));
+                        String senderUsername = data.getString("senderUsername");
+                        String content = data.getString("content");
+
+                        server.getPlayer(recipientUuid).ifPresent(recipient -> {
+                            Component prefix = Component.text()
+                                    .append(Component.text("[", NamedTextColor.DARK_GRAY))
+                                    .append(Component.text(senderUsername, NamedTextColor.AQUA))
+                                    .append(Component.text(" -> ", NamedTextColor.GRAY))
+                                    .append(Component.text("Me", NamedTextColor.AQUA))
+                                    .append(Component.text("] ", NamedTextColor.DARK_GRAY))
+                                    .build();
+
+                            Component messageBody = Component.text(content, NamedTextColor.WHITE);
+
+                            Component fullMessage = prefix.append(messageBody)
+                                    .clickEvent(ClickEvent.suggestCommand("/flame msg " + senderUsername + " "))
+                                    .hoverEvent(HoverEvent.showText(Component.text("Click to reply to " + senderUsername).color(NamedTextColor.GREEN)));
+
+                            recipient.sendMessage(fullMessage);
+
+                            // Также обновляем /reply для получателя
+                            server.getPlayer(senderUsername).ifPresent(sender -> messageManager.setLastPartner(recipient, sender));
+                        });
+                    } catch (Exception e) {
+                        logger.error("Could not parse webPrivateMessage from backend.", e);
+                    }
+                }
+            });
+            socket.on("shop:new-command", args -> {
+                logger.info("Received 'shop:new-command' signal from backend, fetching commands now...");
+                // Немедленно запускаем нашу функцию проверки команд
+                apiClient.fetchAndExecutePendingCommands();
+            });
+            socket.connect();
+            logger.info("Attempting to connect to website backend at " + url + "...");
+        } catch (Exception e) {
+            logger.error("Failed to initialize WebSocket connection: " + e.getMessage(), e);
         }
     }
+
+    public void processPendingCommands(JSONArray commands) {
+        List<Integer> executedIds = new ArrayList<>();
+        for (int i = 0; i < commands.length(); i++) {
+            try {
+                JSONObject cmdObj = commands.getJSONObject(i);
+                String commandStr = cmdObj.getString("command");
+                int commandId = cmdObj.getInt("id");
+
+                String[] parts = commandStr.split(" ");
+                String playerName = "";
+                for (String part : parts) {
+                    if (server.getPlayer(part).isPresent()) {
+                        playerName = part;
+                        break;
+                    }
+                }
+
+                if (playerName.isEmpty()) {
+                    logger.warn("Could not find an online player in command string to execute: '" + commandStr + "'");
+                    continue;
+                }
+
+                server.getPlayer(playerName).ifPresent(player -> {
+                    player.getCurrentServer().ifPresent(serverConnection -> {
+                        ByteArrayDataOutput out = ByteStreams.newDataOutput();
+                        out.writeUTF("ExecuteCommand");
+                        out.writeUTF(commandStr);
+                        serverConnection.sendPluginMessage(FLAMEWALL_CHANNEL, out.toByteArray());
+                        executedIds.add(commandId);
+                        logger.info("Sent command ID " + commandId + " to server " + serverConnection.getServerInfo().getName() + " for execution.");
+                    });
+                });
+            } catch (JSONException e) { // <<< ИСПРАВЛЕНИЕ ЗДЕСЬ
+                logger.error("Failed to parse command object from JSON array at index " + i, e);
+            }
+        }
+        if (!executedIds.isEmpty()) {
+             apiClient.clearExecutedCommands(executedIds);
+        }
+    }
+
 }
---- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/PlayerConnectionListener.java ---
+--- END FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/FlameWallProxyBridge.java ---
 
 
 
---- START FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/PrivateMessageManager.java ---
+--- START FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/manager/PrivateMessageManager.java ---
 
-package com.flamewall.bridge;
+// src/main/java/com/flamewall/proxybridge/manager/PrivateMessageManager.java
+package com.flamewall.proxybridge.manager;
 
-import org.bukkit.entity.Player;
+import com.velocitypowered.api.proxy.Player;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
 public class PrivateMessageManager {
-    // Хранит пару "ключ-значение", где:
-    // Ключ - UUID игрока, который получил сообщение
-    // Значение - UUID игрока, который отправил это сообщение
     private final Map<UUID, UUID> lastMessagePartners = new HashMap<>();
 
     public void setLastPartner(Player player1, Player player2) {
@@ -15737,64 +15561,223 @@ public class PrivateMessageManager {
         return lastMessagePartners.get(sender.getUniqueId());
     }
 }
---- END FILE: FlameWallBridge/src/main/java/com/flamewall/bridge/PrivateMessageManager.java ---
+--- END FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/manager/PrivateMessageManager.java ---
 
 
 
---- START FILE: FlameWallBridge/src/main/resources/config.yml ---
+--- START FILE: FlameWallProxyBridge/src/main/resources/velocity-plugin.json ---
 
-# FlameWallBridge Configuration
+{
+  "id": "flamewallproxybridge",
+  "name": "FlameWallProxyBridge",
+  "version": "1.0-SNAPSHOT",
+  "description": "The main proxy bridge for FlameWall website integration.",
+  "authors": [
+    "Sknery"
+  ],
+  "main": "com.flamewall.proxybridge.FlameWallProxyBridge"
+}
+--- END FILE: FlameWallProxyBridge/src/main/resources/velocity-plugin.json ---
 
-# URL и ключ для подключения к API бэкенда
-api-base-url: "http://localhost:3001"
-plugin-secret-key: "your_super_long_and_random_plugin_secret_key"
 
-# --- Shop Settings ---
-shop:
-  # How often (in seconds) should the plugin check for pending purchases?
-  check-interval-seconds: 300 # 5 minutes
 
-# --- Rank Synchronization Settings ---
+--- START FILE: FlameWallSpigotHelper/src/main/java/com/flamewall/Main.java ---
+
+package com.flamewall;
+
+//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
+// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
+public class Main {
+    public static void main(String[] args) {
+        //TIP Press <shortcut actionId="ShowIntentionActions"/> with your caret at the highlighted text
+        // to see how IntelliJ IDEA suggests fixing it.
+        System.out.printf("Hello and welcome!");
+
+        for (int i = 1; i <= 5; i++) {
+            //TIP Press <shortcut actionId="Debug"/> to start debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
+            // for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.
+            System.out.println("i = " + i);
+        }
+    }
+}
+--- END FILE: FlameWallSpigotHelper/src/main/java/com/flamewall/Main.java ---
+
+
+
+--- START FILE: FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/FlameWallSpigotHelper.java ---
+
+// FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/FlameWallSpigotHelper.java
+
+package com.flamewall.spigothelper;
+
+import com.google.common.io.ByteArrayDataInput;
+import com.google.common.io.ByteArrayDataOutput;
+import com.google.common.io.ByteStreams;
+import me.clip.placeholderapi.PlaceholderAPI;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.messaging.PluginMessageListener;
+import org.jetbrains.annotations.NotNull;
+
+public class FlameWallSpigotHelper extends JavaPlugin implements PluginMessageListener {
+
+    @Override
+    public void onEnable() {
+        this.getServer().getMessenger().registerIncomingPluginChannel(this, "flamewall:main", this);
+        this.getServer().getMessenger().registerOutgoingPluginChannel(this, "flamewall:main");
+        getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
+        saveDefaultConfig();
+        getLogger().info("FlameWall Spigot Helper has been enabled!");
+    }
+
+    @Override
+    public void onDisable() {
+        // Сервер сам отменит регистрацию каналов при выключении плагина.
+        // Явно вызывать здесь ничего не нужно, чтобы избежать ошибок.
+        getLogger().info("FlameWall Spigot Helper has been disabled!");
+    }
+
+    /**
+     * Слушатель сообщений от прокси-плагина.
+     */
+    @Override
+    public void onPluginMessageReceived(@NotNull String channel, @NotNull Player player, @NotNull byte[] message) {
+        if (!channel.equals("flamewall:main")) {
+            return;
+        }
+
+        ByteArrayDataInput in = ByteStreams.newDataInput(message);
+        String subChannel = in.readUTF();
+
+        if (subChannel.equals("ExecuteCommand")) {
+            String commandToExecute = in.readUTF();
+            getLogger().info("[FW-HELPER] Received command from proxy to execute: " + commandToExecute);
+
+            getServer().getScheduler().runTask(this, () -> {
+                getServer().dispatchCommand(getServer().getConsoleSender(), commandToExecute);
+                handleRankChangeCommand(commandToExecute, null);
+            });
+        }
+    }
+
+    /**
+     * Универсальный обработчик команды смены ранга.
+     * @param command Полная строка команды.
+     * @param initiator Игрок, который выполнил команду (может быть null).
+     */
+    public void handleRankChangeCommand(String command, Player initiator) {
+        String lowerCaseCommand = command.toLowerCase();
+
+        for (String pattern : getConfig().getStringList("intercept-commands")) {
+            if (lowerCaseCommand.startsWith(pattern.split(" ")[0] + " " + pattern.split(" ")[1])) {
+                String[] parts = command.split(" ");
+                if (parts.length >= 3) {
+                    String targetPlayerName = parts[2];
+                    Player targetPlayer = getServer().getPlayer(targetPlayerName);
+
+                    if (targetPlayer != null && targetPlayer.isOnline()) {
+                        getLogger().info("[FW-HELPER] Intercepted a rank-changing command for " + targetPlayerName + ". Syncing rank back to website...");
+
+                        getServer().getScheduler().runTaskLater(this, () -> {
+                            syncRank(targetPlayer);
+                        }, 40L); // 2-секундная задержка
+                    }
+                }
+                return;
+            }
+        }
+    }
+
+    /**
+     * Отправка актуального ранга игрока на прокси.
+     * @param player Игрок для синхронизации.
+     */
+    public void syncRank(Player player) {
+        if (player == null || !player.isOnline()) return;
+        if (!getConfig().getBoolean("rank-sync.enabled", true)) return;
+        String placeholder = getConfig().getString("rank-sync.placeholder");
+        if (placeholder == null || placeholder.isEmpty()) return;
+
+        String rankName = PlaceholderAPI.setPlaceholders(player, placeholder);
+
+        ByteArrayDataOutput out = ByteStreams.newDataOutput();
+        out.writeUTF("RankSync");
+        out.writeUTF(player.getUniqueId().toString());
+        out.writeUTF(rankName);
+
+        player.sendPluginMessage(this, "flamewall:main", out.toByteArray());
+        getLogger().info("[FW-HELPER] [DEBUG] Sent rank sync for " + player.getName() + ". New Rank: " + rankName);
+    }
+}
+--- END FILE: FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/FlameWallSpigotHelper.java ---
+
+
+
+--- START FILE: FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/PlayerListener.java ---
+
+// FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/PlayerListener.java
+package com.flamewall.spigothelper;
+
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.server.ServerCommandEvent;
+
+public class PlayerListener implements Listener {
+
+    private final FlameWallSpigotHelper plugin;
+
+    public PlayerListener(FlameWallSpigotHelper plugin) {
+        this.plugin = plugin;
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        // При входе игрока, как и раньше, синхронизируем его ранг
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            plugin.syncRank(event.getPlayer());
+        }, 20L); // 1 сек задержка
+    }
+
+    @EventHandler
+    public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
+        // Просто передаем команду игрока в наш универсальный обработчик
+        plugin.handleRankChangeCommand(event.getMessage().substring(1), event.getPlayer());
+    }
+
+    @EventHandler
+    public void onServerCommand(ServerCommandEvent event) {
+        // Просто передаем команду консоли в наш универсальный обработчик
+        plugin.handleRankChangeCommand(event.getCommand(), null);
+    }
+}
+--- END FILE: FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/PlayerListener.java ---
+
+
+
+--- START FILE: FlameWallSpigotHelper/src/main/resources/config.yml ---
+
 rank-sync:
   enabled: true
   placeholder: "%luckperms_primary_group_name%"
 
-# --- Command Interception ---
 intercept-commands:
   - "lp user {player} parent set {rank}"
-
-# --- Full Synchronization Settings ---
-sync-settings:
-  batch-size: 50
-  delay-ticks: 10
---- END FILE: FlameWallBridge/src/main/resources/config.yml ---
+  - "lp user {player} group set {rank}"
+  - "pex user {player} group set {rank}"
+--- END FILE: FlameWallSpigotHelper/src/main/resources/config.yml ---
 
 
 
---- START FILE: FlameWallBridge/src/main/resources/plugin.yml ---
+--- START FILE: FlameWallSpigotHelper/src/main/resources/plugin.yml ---
 
-name: FlameWallBridge
-version: 1.0-SNAPSHOT
-main: com.flamewall.bridge.BridgePlugin
+name: FlameWallSpigotHelper
+version: 1.0
+main: com.flamewall.spigothelper.FlameWallSpigotHelper
 api-version: '1.20'
-author: YourName
-softdepend: [PlaceholderAPI]
-
-commands:
-  link:
-    description: Links your website account to your Minecraft account.
-    usage: "/link <code>"
-
-  flame:
-    description: Main command for FlameWall website integration.
-    usage: /flame <msg|reply|friend|...>
-    aliases: [fw]
-
-permissions:
-  flamewall.admin.sync:
-    description: Allows usage of the /flame sync-ranks command.
-    default: op
---- END FILE: FlameWallBridge/src/main/resources/plugin.yml ---
+depend: [PlaceholderAPI]
+--- END FILE: FlameWallSpigotHelper/src/main/resources/plugin.yml ---
 
 
 
@@ -15884,6 +15867,8 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env
+    ports:
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -16367,7 +16352,7 @@ export default defineConfig({
 
 
 
---- START FILE: FlameWallBridge/pom.xml ---
+--- START FILE: FlameWallProxyBridge/pom.xml ---
 
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
@@ -16376,7 +16361,7 @@ export default defineConfig({
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.flamewall</groupId>
-    <artifactId>FlameWallBridge</artifactId>
+    <artifactId>FlameWallProxyBridge</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
@@ -16392,42 +16377,14 @@ export default defineConfig({
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <source>21</source>
-                    <target>21</target>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
                 </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
                 <version>3.5.1</version>
-                <configuration>
-                    <relocations>
-                        <relocation>
-                            <pattern>io.socket</pattern>
-                            <shadedPattern>com.flamewall.bridge.lib.io.socket</shadedPattern>
-                        </relocation>
-                        <relocation>
-                            <pattern>io.engine</pattern>
-                            <shadedPattern>com.flamewall.bridge.lib.io.engine</shadedPattern>
-                        </relocation>
-                        <relocation>
-                            <pattern>org.json</pattern>
-                            <shadedPattern>com.flamewall.bridge.lib.org.json</shadedPattern>
-                        </relocation>
-                        <relocation>
-                            <pattern>io.netty</pattern>
-                            <shadedPattern>com.flamewall.bridge.lib.io.netty</shadedPattern>
-                        </relocation>
-                        <relocation>
-                            <pattern>okhttp3</pattern>
-                            <shadedPattern>com.flamewall.bridge.lib.okhttp3</shadedPattern>
-                        </relocation>
-                        <relocation>
-                            <pattern>okio</pattern>
-                            <shadedPattern>com.flamewall.bridge.lib.okio</shadedPattern>
-                        </relocation>
-                    </relocations>
-                </configuration>
                 <executions>
                     <execution>
                         <phase>package</phase>
@@ -16451,24 +16408,19 @@ export default defineConfig({
             <id>papermc-repo</id>
             <url>https://repo.papermc.io/repository/maven-public/</url>
         </repository>
-        <repository>
-            <id>placeholderapi</id>
-            <url>https://repo.extendedclip.com/content/repositories/placeholderapi/</url>
-        </repository>
     </repositories>
 
     <dependencies>
         <dependency>
-            <groupId>io.papermc.paper</groupId>
-            <artifactId>paper-api</artifactId>
-            <version>1.21-R0.1-SNAPSHOT</version>
+            <groupId>com.velocitypowered</groupId>
+            <artifactId>velocity-api</artifactId>
+            <version>3.3.0-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
-
         <dependency>
-            <groupId>me.clip</groupId>
-            <artifactId>placeholderapi</artifactId>
-            <version>2.11.6</version>
+            <groupId>org.jetbrains</groupId>
+            <artifactId>annotations</artifactId>
+            <version>24.1.0</version>
             <scope>provided</scope>
         </dependency>
 
@@ -16487,5 +16439,71 @@ export default defineConfig({
         </dependency>
     </dependencies>
 </project>
---- END FILE: FlameWallBridge/pom.xml ---
+--- END FILE: FlameWallProxyBridge/pom.xml ---
+
+
+
+--- START FILE: FlameWallSpigotHelper/pom.xml ---
+
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.flamewall</groupId>
+    <artifactId>FlameWallSpigotHelper</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <java.version>17</java.version> <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
+        </plugins>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+    </build>
+
+    <repositories>
+        <repository>
+            <id>spigot-repo</id>
+            <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+        </repository>
+        <repository>
+            <id>placeholderapi</id>
+            <url>https://repo.extendedclip.com/content/repositories/placeholderapi/</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.spigotmc</groupId>
+            <artifactId>spigot-api</artifactId>
+            <version>1.20.1-R0.1-SNAPSHOT</version> <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>me.clip</groupId>
+            <artifactId>placeholderapi</artifactId>
+            <version>2.11.6</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>
+--- END FILE: FlameWallSpigotHelper/pom.xml ---
 
