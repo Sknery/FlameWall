@@ -1,6 +1,430 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Пт 27 июн 2025 16:12:33 UTC
+PROJECT SNAPSHOT CREATED ON: Пт 27 июн 2025 19:35:39 UTC
 ===============================================
+
+
+--- START FILE: backend/src/achievements/achievements.config.ts ---
+
+export interface AchievementConfig {
+    version: string;
+    triggers: AchievementTrigger[];
+    // [!] ИСПРАВЛЕНИЕ: Теперь мы указываем, что значение - это объект, 
+    // где ключи - строки (названия групп), а значения - массивы строк.
+    targets: Record<Partial<AchievementTrigger>, Record<string, string[]>>;
+    serverGroups: string[];
+}
+
+export type AchievementTrigger = 
+    | 'PLAYER_KILL_ENTITY'
+    | 'BLOCK_BREAK'
+    | 'BLOCK_PLACE'
+    | 'ITEM_CRAFT'
+    | 'ITEM_CONSUME'
+    | 'PLAYER_ENCHANT_ITEM'
+    | 'PLAYER_TRAVEL_DISTANCE'
+    | 'CUSTOM_API_TRIGGER';
+
+// Наш главный объект конфигурации (остается без изменений)
+export const ACHIEVEMENTS_CONFIG: AchievementConfig = {
+    version: '1.2.1-full',
+    triggers: [
+        'PLAYER_KILL_ENTITY',
+        'BLOCK_BREAK',
+        'BLOCK_PLACE',
+        'ITEM_CRAFT',
+        'ITEM_CONSUME',
+        'PLAYER_ENCHANT_ITEM',
+        'PLAYER_TRAVEL_DISTANCE',
+        'CUSTOM_API_TRIGGER'
+    ],
+    targets: {
+        PLAYER_KILL_ENTITY: {
+            "Bosses": ['ENDER_DRAGON', 'WITHER', 'ELDER_GUARDIAN', 'WARDEN'],
+            "Hostile Mobs": ['BLAZE', 'CAVE_SPIDER', 'CREEPER', 'DROWNED', 'ENDERMITE', 'EVOKER', 'GHAST', 'GUARDIAN', 'HOGLIN', 'HUSK', 'MAGMA_CUBE', 'PHANTOM', 'PIGLIN_BRUTE', 'PILLAGER', 'RAVAGER', 'SHULKER', 'SILVERFISH', 'SKELETON', 'SLIME', 'SPIDER', 'STRAY', 'VEX', 'VINDICATOR', 'WITCH', 'WITHER_SKELETON', 'ZOGLIN', 'ZOMBIE', 'ZOMBIE_VILLAGER'],
+            "Neutral Mobs": ['BEE', 'DOLPHIN', 'ENDERMAN', 'GOAT', 'IRON_GOLEM', 'LLAMA', 'PANDA', 'PIGLIN', 'POLAR_BEAR', 'PUFFERFISH', 'TRADER_LLAMA', 'WOLF', 'ZOMBIFIED_PIGLIN'],
+            "Passive Mobs": ['ALLAY', 'AXOLOTL', 'BAT', 'CAMEL', 'CAT', 'CHICKEN', 'COD', 'COW', 'DONKEY', 'FROG', 'GLOW_SQUID', 'HORSE', 'MOOSHROOM', 'MULE', 'OCELOT', 'PARROT', 'PIG', 'RABBIT', 'SALMON', 'SHEEP', 'SNIFFER', 'SQUID', 'STRIDER', 'TADPOLE', 'TROPICAL_FISH', 'TURTLE', 'VILLAGER'],
+            "Special": ['PLAYER']
+        },
+        BLOCK_BREAK: {
+            "Ores & Minerals": ['COAL_ORE', 'DEEPSLATE_COAL_ORE', 'COPPER_ORE', 'DEEPSLATE_COPPER_ORE', 'IRON_ORE', 'DEEPSLATE_IRON_ORE', 'GOLD_ORE', 'DEEPSLATE_GOLD_ORE', 'REDSTONE_ORE', 'DEEPSLATE_REDSTONE_ORE', 'LAPIS_ORE', 'DEEPSLATE_LAPIS_ORE', 'DIAMOND_ORE', 'DEEPSLATE_DIAMOND_ORE', 'EMERALD_ORE', 'DEEPSLATE_EMERALD_ORE', 'NETHER_GOLD_ORE', 'NETHER_QUARTZ_ORE', 'ANCIENT_DEBRIS', 'RAW_IRON_BLOCK', 'RAW_COPPER_BLOCK', 'RAW_GOLD_BLOCK', 'AMETHYST_BLOCK', 'BUDDING_AMETHYST', 'AMETHYST_CLUSTER'],
+            "Wood & Logs": ['OAK_LOG', 'SPRUCE_LOG', 'BIRCH_LOG', 'JUNGLE_LOG', 'ACACIA_LOG', 'DARK_OAK_LOG', 'MANGROVE_LOG', 'CHERRY_LOG', 'CRIMSON_STEM', 'WARPED_STEM', 'STRIPPED_OAK_LOG', 'STRIPPED_SPRUCE_LOG', 'STRIPPED_BIRCH_LOG', 'STRIPPED_JUNGLE_LOG', 'STRIPPED_ACACIA_LOG', 'STRIPPED_DARK_OAK_LOG', 'STRIPPED_MANGROVE_LOG', 'STRIPPED_CHERRY_LOG', 'STRIPPED_CRIMSON_STEM', 'STRIPPED_WARPED_STEM'],
+            "Stone & Earth": ['STONE', 'COBBLESTONE', 'MOSSY_COBBLESTONE', 'GRANITE', 'DIORITE', 'ANDESITE', 'DEEPSLATE', 'COBBLED_DEEPSLATE', 'TUFF', 'CALCITE', 'DIRT', 'GRASS_BLOCK', 'PODZOL', 'MYCELIUM', 'ROOTED_DIRT', 'SAND', 'RED_SAND', 'GRAVEL', 'CLAY'],
+            "Nether Blocks": ['NETHERRACK', 'SOUL_SAND', 'SOUL_SOIL', 'BASALT', 'SMOOTH_BASALT', 'POLISHED_BLACKSTONE', 'GILDED_BLACKSTONE', 'CRIMSON_NYLIUM', 'WARPED_NYLIUM', 'SHROOMLIGHT', 'WEEPING_VINES', 'TWISTING_VINES'],
+            "End Blocks": ['END_STONE', 'END_STONE_BRICKS', 'PURPUR_BLOCK', 'PURPUR_PILLAR', 'CHORUS_PLANT', 'CHORUS_FLOWER'],
+            "Farming & Plants": ['WHEAT', 'CARROTS', 'POTATOES', 'BEETROOTS', 'PUMPKIN', 'MELON', 'SUGAR_CANE', 'CACTUS', 'NETHER_WART', 'VINE', 'LILY_PAD', 'TALL_GRASS', 'FERN', 'DEAD_BUSH', 'DANDELION', 'POPPY', 'BLUE_ORCHID', 'ALLIUM', 'AZURE_BLUET', 'CORNFLOWER', 'LILY_OF_THE_VALLEY', 'WITHER_ROSE', 'SUNFLOWER', 'LILAC', 'ROSE_BUSH', 'PEONY'],
+            "Functional Blocks": ['CRAFTING_TABLE', 'FURNACE', 'CHEST', 'ENDER_CHEST', 'BARREL', 'SHULKER_BOX', 'BLAST_FURNACE', 'SMOKER', 'ANVIL', 'ENCHANTING_TABLE', 'BREWING_STAND', 'CAULDRON', 'JUKEBOX', 'NOTE_BLOCK', 'SPAWNER'],
+            "Misc & Building": ['GLASS', 'SANDSTONE', 'BRICKS', 'BOOKSHELF', 'OBSIDIAN', 'ICE', 'PACKED_ICE', 'BLUE_ICE', 'SNOW_BLOCK', 'GLOWSTONE', 'SEA_LANTERN', 'SPONGE', 'WET_SPONGE']
+        },
+        BLOCK_PLACE: {}, // Можно заполнить по аналогии с BLOCK_BREAK
+        ITEM_CRAFT: {
+            "Tools": ['WOODEN_PICKAXE', 'STONE_PICKAXE', 'IRON_PICKAXE', 'GOLDEN_PICKAXE', 'DIAMOND_PICKAXE', 'NETHERITE_PICKAXE', 'WOODEN_AXE', 'STONE_AXE', 'IRON_AXE', 'DIAMOND_AXE', 'NETHERITE_AXE', 'WOODEN_SHOVEL', 'STONE_SHOVEL', 'IRON_SHOVEL', 'DIAMOND_SHOVEL', 'NETHERITE_SHOVEL', 'WOODEN_HOE', 'STONE_HOE', 'IRON_HOE', 'DIAMOND_HOE', 'NETHERITE_HOE', 'FISHING_ROD', 'FLINT_AND_STEEL', 'SHEARS', 'COMPASS', 'CLOCK', 'BUCKET', 'SPYGLASS'],
+            "Weapons": ['WOODEN_SWORD', 'STONE_SWORD', 'IRON_SWORD', 'GOLDEN_SWORD', 'DIAMOND_SWORD', 'NETHERITE_SWORD', 'BOW', 'CROSSBOW', 'TRIDENT', 'ARROW'],
+            "Armor": ['LEATHER_HELMET', 'LEATHER_CHESTPLATE', 'LEATHER_LEGGINGS', 'LEATHER_BOOTS', 'CHAINMAIL_HELMET', 'CHAINMAIL_CHESTPLATE', 'CHAINMAIL_LEGGINGS', 'CHAINMAIL_BOOTS', 'IRON_HELMET', 'IRON_CHESTPLATE', 'IRON_LEGGINGS', 'IRON_BOOTS', 'GOLDEN_HELMET', 'GOLDEN_CHESTPLATE', 'GOLDEN_LEGGINGS', 'GOLDEN_BOOTS', 'DIAMOND_HELMET', 'DIAMOND_CHESTPLATE', 'DIAMOND_LEGGINGS', 'DIAMOND_BOOTS', 'NETHERITE_HELMET', 'NETHERITE_CHESTPLATE', 'NETHERITE_LEGGINGS', 'NETHERITE_BOOTS', 'TURTLE_HELMET', 'SHIELD'],
+            "Food": ['BREAD', 'COOKIE', 'CAKE', 'PUMPKIN_PIE', 'MUSHROOM_STEW', 'RABBIT_STEW', 'BEETROOT_SOUP', 'GOLDEN_CARROT', 'GOLDEN_APPLE'],
+            "Building Blocks": ['CRAFTING_TABLE', 'FURNACE', 'CHEST', 'BARREL', 'BLAST_FURNACE', 'SMOKER', 'STONECUTTER', 'LADDER', 'BOOKSHELF', 'TNT', 'BEACON', 'LANTERN', 'SOUL_LANTERN', 'CAMPFIRE', 'SOUL_CAMPFIRE'],
+            "Redstone": ['PISTON', 'STICKY_PISTON', 'OBSERVER', 'REPEATER', 'COMPARATOR', 'REDSTONE_LAMP', 'TARGET', 'DISPENSER', 'DROPPER', 'HOPPER', 'LEVER', 'STONE_BUTTON', 'OAK_BUTTON', 'TRIPWIRE_HOOK', 'DAYLIGHT_DETECTOR'],
+            "Transportation": ['MINECART', 'CHEST_MINECART', 'FURNACE_MINECART', 'HOPPER_MINECART', 'TNT_MINECART', 'RAIL', 'POWERED_RAIL', 'DETECTOR_RAIL', 'ACTIVATOR_RAIL', 'OAK_BOAT', 'OAK_CHEST_BOAT'],
+            "Decoration": ['ITEM_FRAME', 'GLOW_ITEM_FRAME', 'PAINTING', 'ARMOR_STAND', 'FLOWER_POT', 'WHITE_BANNER', 'BLACK_BED', 'WHITE_BED'],
+            "Misc": ['ENDER_EYE', 'END_CRYSTAL', 'FIRE_CHARGE', 'PAPER', 'BOOK', 'WRITABLE_BOOK', 'MAP', 'GLASS_BOTTLE']
+        },
+        ITEM_CONSUME: {
+            "Food": ['APPLE', 'GOLDEN_APPLE', 'ENCHANTED_GOLDEN_APPLE', 'BREAD', 'COOKED_PORKCHOP', 'COOKED_BEEF', 'COOKED_CHICKEN', 'COOKED_MUTTON', 'COOKED_RABBIT', 'COOKED_COD', 'COOKED_SALMON', 'BAKED_POTATO', 'CARROT', 'GOLDEN_CARROT', 'PUMPKIN_PIE', 'CAKE', 'COOKIE', 'MELON_SLICE', 'GLOW_BERRIES', 'SWEET_BERRIES', 'CHORUS_FRUIT', 'BEETROOT', 'BEETROOT_SOUP', 'MUSHROOM_STEW', 'RABBIT_STEW', 'DRIED_KELP', 'SUSPICIOUS_STEW'],
+            "Potions & Drinks": ['POTION', 'MILK_BUCKET', 'HONEY_BOTTLE'],
+        },
+        PLAYER_ENCHANT_ITEM: {
+            "Armor Enchantments": ['PROTECTION', 'FIRE_PROTECTION', 'FEATHER_FALLING', 'BLAST_PROTECTION', 'PROJECTILE_PROTECTION', 'RESPIRATION', 'AQUA_AFFINITY', 'THORNS', 'DEPTH_STRIDER', 'FROST_WALKER', 'SOUL_SPEED'],
+            "Weapon Enchantments": ['SHARPNESS', 'SMITE', 'BANE_OF_ARTHROPODS', 'KNOCKBACK', 'FIRE_ASPECT', 'LOOTING', 'SWEEPING_EDGE'],
+            "Tool Enchantments": ['EFFICIENCY', 'SILK_TOUCH', 'FORTUNE'],
+            "Bow Enchantments": ['POWER', 'PUNCH', 'FLAME', 'INFINITY'],
+            "Crossbow Enchantments": ['QUICK_CHARGE', 'MULTISHOT', 'PIERCING'],
+            "Trident Enchantments": ['IMPALING', 'LOYALTY', 'RIPTIDE', 'CHANNELING'],
+            "Universal & Curses": ['UNBREAKING', 'MENDING', 'VANISHING_CURSE', 'BINDING_CURSE']
+        },
+        PLAYER_TRAVEL_DISTANCE: {
+            "Movement Types": ['WALK', 'SPRINT', 'SWIM', 'CROUCH', 'FLY', 'ELYTRA_FLY', 'RIDE_HORSE', 'RIDE_PIG', 'RIDE_MINECART', 'RIDE_STRIDER']
+        },
+        CUSTOM_API_TRIGGER: {
+            "Game Modes": ['bedwars_win_solo', 'bedwars_win_doubles', 'skywars_win_solo', 'skywars_win_teams', 'dungeon_floor7_complete', 'parkour_map_finished'],
+            "Social": ['first_join', 'daily_login']
+        }
+    },
+    serverGroups: [
+        'survival', 'skyblock', 'bedwars', 'creative', 'lobby', 'auth', 'pvp', 'parkour', 'dungeons'
+    ]
+};
+--- END FILE: backend/src/achievements/achievements.config.ts ---
+
+
+
+--- START FILE: backend/src/achievements/achievements.controller.ts ---
+
+import { Controller, Get, Post, Body, UseGuards, Patch, Param, ParseIntPipe, Delete, Request } from '@nestjs/common';
+import { AchievementsService } from './achievements.service';
+import { CreateAchievementDto } from './dto/create-achievement.dto';
+import { UpdateAchievementDto } from './dto/update-achievement.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { SystemRanks } from '../ranks/ranks.service';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+
+@ApiTags('Achievements')
+@Controller('achievements')
+export class AchievementsController {
+  constructor(private readonly achievementsService: AchievementsService) {}
+
+  // =======================================================
+  // == ПУБЛИЧНЫЙ ЭНДПОИНТ (для всех авторизованных)      ==
+  // =======================================================
+  @Get('progress')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all achievements with current user progress' })
+  getAchievementsWithProgress(@Request() req) {
+    const userId = req.user.userId;
+    return this.achievementsService.findAllForUser(userId);
+  }
+
+  // =======================================================
+  // == АДМИНСКИЕ ЭНДПОИНТЫ (только для админов)         ==
+  // =======================================================
+  @Post('admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a new achievement' })
+  create(@Body() createAchievementDto: CreateAchievementDto) {
+    return this.achievementsService.create(createAchievementDto);
+  }
+
+  @Get('admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all achievements (for admin panel)' })
+  findAll() {
+    return this.achievementsService.findAll();
+  }
+
+  @Get('admin/config-data')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get data for the achievement UI builder' })
+  getConfigData() {
+    return this.achievementsService.getAchievementConfigData();
+  }
+
+  @Patch('admin/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update an achievement' })
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateAchievementDto: UpdateAchievementDto) {
+    return this.achievementsService.update(id, updateAchievementDto);
+  }
+
+  @Delete('admin/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(SystemRanks.ADMIN.power_level)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete an achievement' })
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.achievementsService.remove(id);
+  }
+}
+--- END FILE: backend/src/achievements/achievements.controller.ts ---
+
+
+
+--- START FILE: backend/src/achievements/achievements.module.ts ---
+
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AchievementsController } from './achievements.controller';
+import { AchievementsService } from './achievements.service';
+import { Achievement } from './entities/achievement.entity';
+import { AchievementProgress } from './entities/achievement-progress.entity';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([Achievement, AchievementProgress])],
+  controllers: [AchievementsController],
+  providers: [AchievementsService],
+})
+export class AchievementsModule {}
+--- END FILE: backend/src/achievements/achievements.module.ts ---
+
+
+
+--- START FILE: backend/src/achievements/achievements.service.ts ---
+
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Achievement } from './entities/achievement.entity';
+import { CreateAchievementDto } from './dto/create-achievement.dto';
+import { UpdateAchievementDto } from './dto/update-achievement.dto';
+import { AchievementProgress } from './entities/achievement-progress.entity';
+import { ACHIEVEMENTS_CONFIG } from './achievements.config'; // [!] 1. Импортируем наш новый большой конфиг
+
+@Injectable()
+export class AchievementsService {
+  private readonly logger = new Logger(AchievementsService.name);
+
+  constructor(
+    @InjectRepository(Achievement)
+    private achievementsRepository: Repository<Achievement>,
+    @InjectRepository(AchievementProgress)
+    private progressRepository: Repository<AchievementProgress>,
+  ) {
+    // [!] 3. Эта логика была в концепте, но теперь мы ее убираем,
+    // так как все ID уже есть в ACHIEVEMENTS_CONFIG.
+    // Логика с чтением файла txt понадобится, если списки станут слишком огромными для одного ts-файла.
+  }
+
+  create(createAchievementDto: CreateAchievementDto): Promise<Achievement> {
+    const achievement = this.achievementsRepository.create(createAchievementDto);
+    return this.achievementsRepository.save(achievement);
+  }
+
+  findAll(): Promise<Achievement[]> {
+    return this.achievementsRepository.find();
+  }
+
+  async findOne(id: number): Promise<Achievement> {
+    const achievement = await this.achievementsRepository.findOneBy({ id });
+    if (!achievement) {
+      throw new NotFoundException(`Achievement with ID ${id} not found`);
+    }
+    return achievement;
+  }
+
+  // [!] 2. Теперь этот метод просто возвращает наш большой конфиг
+  getAchievementConfigData() {
+    return ACHIEVEMENTS_CONFIG;
+  }
+
+  async update(id: number, updateAchievementDto: UpdateAchievementDto): Promise<Achievement> {
+    const achievement = await this.achievementsRepository.preload({
+      id: id,
+      ...updateAchievementDto,
+    });
+    if (!achievement) {
+      throw new NotFoundException(`Achievement with ID ${id} not found`);
+    }
+    return this.achievementsRepository.save(achievement);
+  }
+
+  async remove(id: number): Promise<void> {
+    const result = await this.achievementsRepository.delete(id);
+    if (result.affected === 0) {
+      throw new NotFoundException(`Achievement with ID ${id} not found`);
+    }
+  }
+
+  async findAllForUser(userId: number): Promise<any[]> {
+    const allAchievements = await this.achievementsRepository.find({
+      where: { is_enabled: true },
+      order: { name: 'ASC' },
+    });
+
+    const userProgress = await this.progressRepository.find({
+      where: { user_id: userId },
+    });
+
+    const progressMap = new Map(userProgress.map(p => [p.achievement_id, p]));
+
+    const result = allAchievements.map(achievement => {
+      const progress = progressMap.get(achievement.id);
+      return {
+        ...achievement,
+        progress: progress
+      };
+    });
+
+    return result;
+  }
+}
+--- END FILE: backend/src/achievements/achievements.service.ts ---
+
+
+
+--- START FILE: backend/src/achievements/dto/create-achievement.dto.ts ---
+
+import { IsString, IsNotEmpty, IsObject, IsOptional, IsBoolean } from 'class-validator';
+
+export class CreateAchievementDto {
+  @IsNotEmpty()
+  @IsString()
+  name: string;
+
+  @IsNotEmpty()
+  @IsString()
+  description: string;
+
+  @IsOptional()
+  @IsString()
+  icon_url?: string;
+  
+  @IsOptional()
+  @IsBoolean()
+  is_enabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  reward_command?: string;
+
+  @IsNotEmpty()
+  @IsObject()
+  conditions: Record<string, any>;
+}
+--- END FILE: backend/src/achievements/dto/create-achievement.dto.ts ---
+
+
+
+--- START FILE: backend/src/achievements/dto/update-achievement.dto.ts ---
+
+import { PartialType } from '@nestjs/swagger';
+import { CreateAchievementDto } from './create-achievement.dto';
+
+export class UpdateAchievementDto extends PartialType(CreateAchievementDto) {}
+--- END FILE: backend/src/achievements/dto/update-achievement.dto.ts ---
+
+
+
+--- START FILE: backend/src/achievements/entities/achievement.entity.ts ---
+
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  OneToMany,
+} from 'typeorm';
+import { AchievementProgress } from './achievement-progress.entity';
+
+@Entity('achievements')
+export class Achievement {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ type: 'varchar', length: 255 })
+  name: string;
+
+  @Column({ type: 'text' })
+  description: string;
+
+  @Column({ type: 'varchar', length: 255, name: 'icon_url', nullable: true })
+  icon_url: string | null;
+
+  @Column({ type: 'boolean', default: true, name: 'is_enabled' })
+  is_enabled: boolean;
+
+  @Column({ type: 'text', name: 'reward_command', nullable: true })
+  reward_command: string | null;
+
+  @Column({ type: 'jsonb' })
+  conditions: Record<string, any>;
+
+  @CreateDateColumn({ name: 'created_at' })
+  created_at: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updated_at: Date;
+
+  @OneToMany(() => AchievementProgress, (progress) => progress.achievement)
+  progress_entries: AchievementProgress[];
+}
+--- END FILE: backend/src/achievements/entities/achievement.entity.ts ---
+
+
+
+--- START FILE: backend/src/achievements/entities/achievement-progress.entity.ts ---
+
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  Unique,
+  CreateDateColumn,
+} from 'typeorm';
+import { User } from '../../users/entities/user.entity';
+import { Achievement } from './achievement.entity';
+
+@Entity('achievement_progress')
+@Unique(['user_id', 'achievement_id']) // Один пользователь - один прогресс для ачивки
+export class AchievementProgress {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ name: 'user_id' })
+  user_id: number;
+
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
+  user: User;
+
+  @Column({ name: 'achievement_id' })
+  achievement_id: number;
+
+  @ManyToOne(() => Achievement, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'achievement_id' })
+  achievement: Achievement;
+
+  @Column({ type: 'jsonb', default: {} })
+  progress_data: Record<string, any>;
+
+  @Column({ type: 'boolean', default: false, name: 'is_completed' })
+  is_completed: boolean;
+
+  @Column({ type: 'timestamp', name: 'completed_at', nullable: true })
+  completed_at: Date | null;
+}
+--- END FILE: backend/src/achievements/entities/achievement-progress.entity.ts ---
+
 
 
 --- START FILE: backend/src/admin/admin.controller.spec.ts ---
@@ -327,6 +751,10 @@ import { Rank } from './ranks/entities/rank.entity';
 import { PagesModule } from './pages/pages.module';
 import { CustomPage } from './pages/entities/page.entity';
 import { UploadsModule } from './uploads/uploads.module';
+import { AchievementsModule } from './achievements/achievements.module';
+import { EventsModule } from './events/events.module';
+import { Achievement } from './achievements/entities/achievement.entity';
+import { AchievementProgress } from './achievements/entities/achievement-progress.entity';
 
 @Module({
   imports: [
@@ -350,7 +778,7 @@ import { UploadsModule } from './uploads/uploads.module';
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_DATABASE'),
         entities: [
-          User, ShopItem, Post, Friendship, Message, News, Notification, Comment, Purchase, LinkCode, Rank, CustomPage// <-- ДОБАВЛЯЕМ СЮДА
+          User, ShopItem, Post, Friendship, Message, News, Notification, Comment, Purchase, LinkCode, Rank, CustomPage, Achievement, AchievementProgress// <-- ДОБАВЛЯЕМ СЮДА
         ],
         synchronize: false,
         autoLoadEntities: true,
@@ -373,7 +801,9 @@ import { UploadsModule } from './uploads/uploads.module';
     MessagesModule,
     RanksModule,
     PagesModule,
-    UploadsModule
+    UploadsModule,
+    AchievementsModule,
+    EventsModule,
   ],
   controllers: [AppController],
   providers: [AppService], // <-- Удалили ChatGateway отсюда
@@ -1766,6 +2196,199 @@ export const AppDataSource = new DataSource({
     subscribers: [],
 });
 --- END FILE: backend/src/data-source.ts ---
+
+
+
+--- START FILE: backend/src/events/events.controller.ts ---
+
+import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus, Logger } from '@nestjs/common';
+import { PluginApiKeyGuard } from '../auth/guards/plugin-api-key.guard';
+import { EventsService } from './events.service';
+import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+
+@ApiTags('Internal')
+@Controller('internal')
+export class EventsController {
+  private readonly logger = new Logger(EventsController.name);
+
+  constructor(private readonly eventsService: EventsService) {}
+
+  @Post('event-ingest')
+  @UseGuards(PluginApiKeyGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Endpoint for receiving game events from the proxy.' })
+  @ApiHeader({ name: 'x-api-key', required: true })
+  handleGameEvent(@Body() eventDto: any) {
+    // Не ждем ответа, чтобы не задерживать прокси-плагин
+    this.eventsService.processEvent(eventDto).catch(e => {
+        this.logger.error(`Failed to process event: ${JSON.stringify(eventDto)}`, e.stack);
+    });
+    return { message: 'Event accepted for processing.' };
+  }
+}
+--- END FILE: backend/src/events/events.controller.ts ---
+
+
+
+--- START FILE: backend/src/events/events.module.ts ---
+
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { EventsController } from './events.controller';
+import { EventsService } from './events.service';
+import { Achievement } from '../achievements/entities/achievement.entity';
+import { AchievementProgress } from '../achievements/entities/achievement-progress.entity';
+import { User } from '../users/entities/user.entity';
+import { PendingCommand } from '../shop/entities/pending-command.entity';
+import { PluginApiKeyGuard } from '../auth/guards/plugin-api-key.guard';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([Achievement, AchievementProgress, User, PendingCommand])],
+  controllers: [EventsController],
+  providers: [EventsService, PluginApiKeyGuard],
+})
+export class EventsModule {}
+--- END FILE: backend/src/events/events.module.ts ---
+
+
+
+--- START FILE: backend/src/events/events.service.ts ---
+
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Achievement } from '../achievements/entities/achievement.entity';
+import { AchievementProgress } from '../achievements/entities/achievement-progress.entity';
+import { User } from '../users/entities/user.entity';
+import { PendingCommand } from '../shop/entities/pending-command.entity';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+
+@Injectable()
+export class EventsService {
+  private readonly logger = new Logger(EventsService.name);
+
+  constructor(
+    @InjectRepository(Achievement)
+    private achievementsRepository: Repository<Achievement>,
+    @InjectRepository(AchievementProgress)
+    private progressRepository: Repository<AchievementProgress>,
+    @InjectRepository(User)
+    private usersRepository: Repository<User>,
+    @InjectRepository(PendingCommand)
+    private pendingCommandsRepository: Repository<PendingCommand>,
+    private eventEmitter: EventEmitter2,
+  ) {}
+
+  async processEvent(event: any): Promise<void> {
+    const { eventType, playerUuid, serverName, eventData } = event;
+    if (!eventType || !playerUuid) return;
+
+    const user = await this.usersRepository.findOneBy({ minecraft_uuid: playerUuid });
+    if (!user) {
+      this.logger.warn(`User with UUID ${playerUuid} not found. Skipping event.`);
+      return;
+    }
+
+    const relevantAchievements = await this.achievementsRepository
+        .createQueryBuilder("achievement")
+        .where("achievement.is_enabled = :isEnabled", { isEnabled: true })
+        // Используем более надежный поиск в JSON
+        .andWhere("achievement.conditions -> 'conditions' @> :trigger", { trigger: JSON.stringify([{ trigger: eventType }])})
+        .getMany();
+
+    if (relevantAchievements.length === 0) return;
+
+    for (const achievement of relevantAchievements) {
+      // [!] ИЗМЕНЕНИЕ: Передаем eventType в следующий метод
+      await this.updateProgressForAchievement(user, achievement, serverName, eventType, eventData);
+    }
+  }
+  
+  // [!] ИЗМЕНЕНИЕ: Добавляем eventType в параметры метода
+private async updateProgressForAchievement(user: User, achievement: Achievement, serverName: string, eventType: string, eventData: any) {
+    let progress = await this.progressRepository.findOne({
+        where: { user_id: user.id, achievement_id: achievement.id }
+    });
+    
+    if (progress?.is_completed) return;
+
+    if (!progress) {
+        progress = this.progressRepository.create({
+            user_id: user.id,
+            achievement_id: achievement.id,
+            progress_data: {}
+        });
+    }
+
+    let progressChanged = false;
+    const conditions = achievement.conditions?.conditions || [];
+
+    for (const condition of conditions) {
+        // Проверяем, совпадает ли триггер и доп. условия (цель, группа серверов)
+        const triggerMatch = condition.trigger === eventType;
+        const targetMatch = !condition.target || condition.target === eventData.targetType;
+        
+        // [!] ВОТ НАШЕ ИЗМЕНЕНИЕ
+        // Если serverGroup указан в условии, то имя сервера должно с него начинаться.
+        // Это позволяет указать как "survival", так и конкретный "survival-1".
+        // Если serverGroup не указан, условие считается выполненным для любого сервера.
+        const serverGroupMatch = !condition.serverGroup || serverName.startsWith(condition.serverGroup);
+
+        if (triggerMatch && targetMatch && serverGroupMatch) { // <-- Добавляем проверку serverGroupMatch
+            const conditionKey = `condition_${condition.index}`;
+            const currentCount = (progress.progress_data[conditionKey] || 0) + 1;
+            progress.progress_data[conditionKey] = currentCount;
+            progressChanged = true;
+        }
+    }
+    
+    if (progressChanged) {
+        const savedProgress = await this.progressRepository.save(progress);
+        await this.checkAndCompleteAchievement(user, achievement, savedProgress);
+    }
+}
+
+  private async checkAndCompleteAchievement(user: User, achievement: Achievement, progress: AchievementProgress) {
+    const logic = achievement.conditions?.logic || 'AND';
+    const conditions = achievement.conditions?.conditions || [];
+    let allConditionsMet = logic === 'AND';
+
+    for (const condition of conditions) {
+        const conditionKey = `condition_${condition.index}`;
+        const currentCount = progress.progress_data[conditionKey] || 0;
+        const requiredCount = condition.count;
+        const isConditionMet = currentCount >= requiredCount;
+
+        if (logic === 'AND') {
+            if (!isConditionMet) {
+                allConditionsMet = false;
+                break;
+            }
+        } else { // OR logic
+            if (isConditionMet) {
+                allConditionsMet = true;
+                break;
+            }
+        }
+    }
+
+    if (allConditionsMet) {
+        progress.is_completed = true;
+        progress.completed_at = new Date();
+        await this.progressRepository.save(progress);
+
+        this.logger.log(`User ${user.username} (ID: ${user.id}) has completed achievement "${achievement.name}"!`);
+
+        if (achievement.reward_command && user.minecraft_username) {
+            const command = achievement.reward_command.replace('{username}', user.minecraft_username);
+            const newCommand = this.pendingCommandsRepository.create({ command });
+            await this.pendingCommandsRepository.save(newCommand);
+            this.eventEmitter.emit('command.queued');
+        }
+    }
+  }
+}
+--- END FILE: backend/src/events/events.service.ts ---
 
 
 
@@ -3185,6 +3808,76 @@ export class AddVerifiedYoutuberFlag1750861105474 implements MigrationInterface 
 }
 
 --- END FILE: backend/src/migrations/1750861105474-AddVerifiedYoutuberFlag.ts ---
+
+
+
+--- START FILE: backend/src/migrations/1751042242562-CreateAchievementsTables.ts ---
+
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+// Ваше имя класса может немного отличаться из-за timestamp, это не страшно
+export class CreateAchievementsTables1751406857147 implements MigrationInterface {
+    name = 'CreateAchievementsTables1751406857147'
+
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        // Создаем таблицу для самих достижений
+        await queryRunner.query(`
+            CREATE TABLE "achievements" (
+                "id" SERIAL NOT NULL,
+                "name" character varying(255) NOT NULL,
+                "description" text NOT NULL,
+                "icon_url" character varying(255),
+                "is_enabled" boolean NOT NULL DEFAULT true,
+                "reward_command" text,
+                "conditions" jsonb NOT NULL,
+                "created_at" TIMESTAMP NOT NULL DEFAULT now(),
+                "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
+                CONSTRAINT "PK_achievements_id" PRIMARY KEY ("id")
+            )
+        `);
+
+        // Создаем таблицу для отслеживания прогресса игроков
+        await queryRunner.query(`
+            CREATE TABLE "achievement_progress" (
+                "id" SERIAL NOT NULL,
+                "user_id" integer NOT NULL,
+                "achievement_id" integer NOT NULL,
+                "progress_data" jsonb NOT NULL DEFAULT '{}',
+                "is_completed" boolean NOT NULL DEFAULT false,
+                "completed_at" TIMESTAMP,
+                CONSTRAINT "PK_achievement_progress_id" PRIMARY KEY ("id")
+            )
+        `);
+
+        // Добавляем внешний ключ для связи прогресса с пользователем
+        await queryRunner.query(`
+            ALTER TABLE "achievement_progress"
+            ADD CONSTRAINT "FK_progress_user" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION
+        `);
+
+        // Добавляем внешний ключ для связи прогресса с достижением
+        await queryRunner.query(`
+            ALTER TABLE "achievement_progress"
+            ADD CONSTRAINT "FK_progress_achievement" FOREIGN KEY ("achievement_id") REFERENCES "achievements"("id") ON DELETE CASCADE ON UPDATE NO ACTION
+        `);
+
+        // Добавляем уникальный индекс, чтобы у одного пользователя не было двух записей прогресса для одной ачивки
+        await queryRunner.query(`
+            CREATE UNIQUE INDEX "IDX_user_achievement_progress" ON "achievement_progress" ("user_id", "achievement_id")
+        `);
+    }
+
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        // Метод для отката миграции. Выполняет все действия в обратном порядке.
+        await queryRunner.query(`DROP INDEX "public"."IDX_user_achievement_progress"`);
+        await queryRunner.query(`ALTER TABLE "achievement_progress" DROP CONSTRAINT "FK_progress_achievement"`);
+        await queryRunner.query(`ALTER TABLE "achievement_progress" DROP CONSTRAINT "FK_progress_user"`);
+        await queryRunner.query(`DROP TABLE "achievement_progress"`);
+        await queryRunner.query(`DROP TABLE "achievements"`);
+    }
+
+}
+--- END FILE: backend/src/migrations/1751042242562-CreateAchievementsTables.ts ---
 
 
 
@@ -7036,6 +7729,7 @@ import AdminEditPage from './pages/AdminEditPage';         // [!code ++]
 import CustomPageView from './pages/CustomPageView';       // [!code ++]
 import axios from 'axios'; // <-- Убедитесь, что axios импортирован
 import UpdateNotification from './components/UpdateNotification';
+import AdminAchievementsPage from './pages/AdminAchievementsPage';
 
 axios.defaults.baseURL = import.meta.env.VITE_API_BASE_URL;
 
@@ -7083,6 +7777,7 @@ function App() {
                   <Route path="/p/:slug" element={<CustomPageView />} /> {/* [!code ++] */}
                   <Route path="/admin/shop" element={<ProtectedRoute><AdminShopPage /></ProtectedRoute>} /> {/* <-- ВОТ ЭТА СТРОКА */}
                   <Route path="/admin/shop/new" element={<ProtectedRoute><AdminCreateItemPage /></ProtectedRoute>} /> {/* <-- ВОТ ЭТА СТРОКА */}
+                  <Route path="/admin/achievements" element={<ProtectedRoute><AdminAchievementsPage /></ProtectedRoute>} />
                   <Route path="/store/ranks" element={
                     <Box>
                       <Typography level="h1">Ranks Store</Typography>
@@ -7209,10 +7904,11 @@ import AdbIcon from '@mui/icons-material/Adb';
 import DiamondIcon from '@mui/icons-material/Diamond';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MailIcon from '@mui/icons-material/Mail';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'; // <-- ДОБАВЬТЕ ЭТОТ ИМПОРТ
 import SupervisedUserCircleIcon from '@mui/icons-material/SupervisedUserCircle';
 import DynamicFeedIcon from '@mui/icons-material/DynamicFeed';
 import MenuIcon from '@mui/icons-material/Menu';
-import ShieldIcon from '@mui/icons-material/Menu';
+import ShieldIcon from '@mui/icons-material/Shield';
 import LoginIcon from '@mui/icons-material/Login';
 
 const SIDEBAR_WIDTH = 280;
@@ -7252,7 +7948,9 @@ const adminNavItem = {
         { name: 'Post Management', icon: <DynamicFeedIcon />, path: '/admin/posts' },
         { name: 'Rank Management', icon: <ShieldIcon />, path: '/admin/ranks' },
         { name: 'Shop Management', icon: <StorefrontIcon />, path: '/admin/shop' },
-        { name: 'Custom Page Editor', icon: <ArticleIcon />, path: '/admin/pages' }
+        { name: 'Custom Page Editor', icon: <ArticleIcon />, path: '/admin/pages' },
+                { name: 'Achievement Builder', icon: <EmojiEventsIcon />, path: '/admin/achievements' }
+
     ],
 };
 
@@ -8155,6 +8853,157 @@ export default UpdateNotification;
 
 
 
+--- START FILE: frontend/src/components/UserAchievementsList.js ---
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../context/AuthContext';
+import axios from 'axios';
+import {
+    Box, Typography, CircularProgress, Alert, Sheet,
+    List, ListItem, ListItemDecorator, Avatar, ListItemContent,
+    LinearProgress, Tooltip
+} from '@mui/joy';
+import { constructImageUrl } from '../utils/url';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'; // [!] ДОБАВЬТЕ ЭТОТ ИМПОРТ
+
+function UserAchievementsList() {
+    const { authToken } = useAuth();
+    const [achievements, setAchievements] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    const fetchAchievements = useCallback(async () => {
+        if (!authToken) return;
+        setLoading(true);
+        try {
+            const response = await axios.get('/api/achievements/progress', { headers: { Authorization: `Bearer ${authToken}` } });
+            setAchievements(response.data);
+        } catch (err) {
+            setError('Failed to load achievements progress.');
+        } finally {
+            setLoading(false);
+        }
+    }, [authToken]);
+
+    useEffect(() => {
+        fetchAchievements();
+    }, [fetchAchievements]);
+    
+    const calculateProgress = (achievement) => {
+        if (achievement.progress?.is_completed) return 100;
+        if (!achievement.progress) return 0;
+        
+        const conditions = achievement.conditions?.conditions || [];
+        if (conditions.length === 0) return 0;
+        
+        let totalProgress = 0;
+        let metConditions = 0;
+        
+        for (const condition of conditions) {
+            const current = achievement.progress.progress_data[`condition_${condition.index}`] || 0;
+            const required = condition.count;
+            totalProgress += Math.min(current / required, 1);
+            if(current >= required) metConditions++;
+        }
+        
+        const logic = achievement.conditions?.logic || 'AND';
+        if (logic === 'OR') {
+            return metConditions > 0 ? 100 : (totalProgress / conditions.length) * 100;
+        } else {
+            return (totalProgress / conditions.length) * 100;
+        }
+    };
+    
+    // [!] ИЗМЕНЕНИЕ: Улучшаем текст для отображения на прогресс-баре
+    const getProgressText = (achievement) => {
+        if (achievement.progress?.is_completed) return "Completed!";
+        
+        const conditions = achievement.conditions?.conditions || [];
+        if (conditions.length === 0) return "No conditions";
+
+        // Для простоты покажем прогресс только по первому условию
+        const firstCondition = conditions[0];
+        const current = achievement.progress?.progress_data[`condition_${firstCondition.index}`] || 0;
+        const required = firstCondition.count;
+
+        return `${current} / ${required}`;
+    }
+    
+    // [!] ИЗМЕНЕНИЕ: Текст для всплывающей подсказки (tooltip) будет более подробным
+    const getTooltipText = (achievement) => {
+        if (achievement.progress?.is_completed) return "Completed!";
+
+        const logic = achievement.conditions?.logic || 'AND';
+        const conditions = achievement.conditions?.conditions || [];
+
+        return conditions.map(cond => {
+             const current = achievement.progress?.progress_data[`condition_${cond.index}`] || 0;
+             return `${cond.trigger.replace(/_/g, ' ')}: ${current} / ${cond.count}`;
+        }).join(logic === 'AND' ? ' & ' : ' | ');
+    }
+
+    if (loading) return <CircularProgress />;
+    if (error) return <Alert color="danger">{error}</Alert>;
+
+    return (
+        <Sheet variant="outlined" sx={{ borderRadius: 'sm' }}>
+            <List sx={{ p: 0 }}>
+                {achievements.map((ach) => {
+                    const progressPercent = calculateProgress(ach);
+                    const isCompleted = ach.progress?.is_completed;
+                    
+                    return (
+                        <ListItem key={ach.id} sx={{ '&:not(:last-of-type)': { borderBottom: '1px solid', borderColor: 'divider' }, p: 2, opacity: isCompleted ? 0.7 : 1 }}>
+                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
+                               <Avatar sx={{'--Avatar-size': '56px', flexShrink: 0, bgcolor: 'background.level3'}}>
+                                   {isCompleted 
+                                        ? <CheckCircleIcon color="success"/> 
+                                        : (ach.icon_url ? <img src={constructImageUrl(ach.icon_url)} alt={ach.name} /> : <EmojiEventsIcon />) // [!] ИСПРАВЛЕНИЕ: Добавили иконку по умолчанию
+                                   }
+                               </Avatar>
+                               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                                   <Typography level="title-md" noWrap>{ach.name}</Typography>
+                                   <Typography level="body-sm" noWrap sx={{ mb: 1 }}>{ach.description}</Typography>
+                                   <Tooltip title={getTooltipText(ach)} variant="outlined" placement="top">
+                                        {/* [!] ИСПРАВЛЕНИЕ: Оборачиваем прогресс-бар в Box для позиционирования текста */}
+                                       <Box sx={{ position: 'relative' }}>
+                                           <LinearProgress
+                                               determinate
+                                               value={progressPercent}
+                                               color={isCompleted ? "success" : "primary"}
+                                               sx={{ height: '20px', borderRadius: 'sm' }}
+                                           />
+                                           <Typography
+                                                level="body-xs"
+                                                sx={{
+                                                    position: 'absolute',
+                                                    left: '50%',
+                                                    top: '50%',
+                                                    transform: 'translate(-50%, -50%)',
+                                                    color: 'white',
+                                                    textShadow: '1px 1px 2px black'
+                                                }}
+                                           >
+                                               {getProgressText(ach)}
+                                           </Typography>
+                                       </Box>
+                                   </Tooltip>
+                               </Box>
+                           </Box>
+                        </ListItem>
+                    )
+                })}
+            </List>
+        </Sheet>
+    );
+}
+
+export default UserAchievementsList;
+--- END FILE: frontend/src/components/UserAchievementsList.js ---
+
+
+
 --- START FILE: frontend/src/components/UserPostsList.js ---
 
 // frontend/src/components/UserPostsList.js
@@ -8994,14 +9843,25 @@ export const NotificationsProvider = ({ children }) => {
   const fetchNotifications = useCallback(async () => {
     if (!authToken) return;
     try {
-      const config = { headers: { Authorization: `Bearer ${authToken}` } };
-      const response = await axios.get(`/api/notifications`, config);
-      setNotifications(response.data);
-      setUnreadCount(response.data.filter(n => !n.read).length);
+        const config = { headers: { Authorization: `Bearer ${authToken}` } };
+        const response = await axios.get(`/api/notifications`, config);
+
+        // Проверяем, что именно вернул сервер, и извлекаем массив
+        const notificationsArray = Array.isArray(response.data) ? response.data : response.data.data;
+
+        // Дополнительная проверка на случай, если данные пришли в неожиданном формате
+        if (!Array.isArray(notificationsArray)) {
+            console.error("Received notification data is not an array:", response.data);
+            return; 
+        }
+
+        setNotifications(notificationsArray);
+        setUnreadCount(notificationsArray.filter(n => !n.read).length);
     } catch (error) {
-      console.error("Failed to fetch notifications", error);
+        // Добавим вывод самой ошибки в консоль для лучшей диагностики
+        console.error("Failed to fetch notifications:", error.response?.data || error.message);
     }
-  }, [authToken]);
+}, [authToken]);
 
   useEffect(() => {
     if (isLoggedIn) fetchNotifications();
@@ -9167,6 +10027,266 @@ const MainLayout = () => {
 
 export default MainLayout;
 --- END FILE: frontend/src/layouts/MainLayout.js ---
+
+
+
+--- START FILE: frontend/src/pages/AdminAchievementsPage.js ---
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../context/AuthContext';
+import axios from 'axios';
+import {
+    Box, Typography, Button, CircularProgress, Alert, Sheet, Table,
+    IconButton, Tooltip, Modal, ModalDialog, ModalClose,
+    FormControl, FormLabel, Input, Textarea, Switch, Stack, Select, Option, Divider
+} from '@mui/joy';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
+import toast from 'react-hot-toast';
+import ConfirmationModal from '../components/ConfirmationModal';
+
+function AdminAchievementsPage() {
+    const { authToken } = useAuth();
+    const [achievements, setAchievements] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingAchievement, setEditingAchievement] = useState(null);
+    const [formData, setFormData] = useState({});
+    const [conditions, setConditions] = useState([]);
+    const [logic, setLogic] = useState('AND');
+    
+    // [!] ИЗМЕНЕНИЕ: Добавляем отдельные состояния для загрузки конфига
+    const [configData, setConfigData] = useState({ triggers: [], targets: {}, serverGroups: [] });
+    const [configLoading, setConfigLoading] = useState(true);
+    
+    const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState(null);
+    const [isActionLoading, setIsActionLoading] = useState(false);
+
+     const renderTargetOptions = (trigger) => {
+        const targets = configData.targets[trigger];
+        if (!targets) {
+            return null; // Если для триггера нет целей, ничего не рендерим
+        }
+
+        // Проверяем, это объект с группами или простой массив
+        if (Array.isArray(targets)) {
+            // Если это простой массив, рендерим его как обычные опции
+            return targets.map(item => <Option key={item} value={item}>{item}</Option>);
+        }
+        
+        // Если это объект, рендерим с группами
+        return Object.entries(targets).map(([groupName, items]) => (
+            <OptionGroup label={groupName} key={groupName}>
+                {items.map(item => <Option key={item} value={item}>{item}</Option>)}
+            </OptionGroup>
+        ));
+    };
+
+    const fetchAchievements = useCallback(async () => {
+        try {
+            const response = await axios.get('/api/achievements/admin', { headers: { Authorization: `Bearer ${authToken}` } });
+            setAchievements(response.data);
+        } catch (err) {
+            setError('Failed to load achievements.');
+        }
+    }, [authToken]);
+
+    const fetchConfigData = useCallback(async () => {
+        setConfigLoading(true); // [!] ИЗМЕНЕНИЕ: Включаем загрузку
+        try {
+            const response = await axios.get('/api/achievements/admin/config-data', { headers: { Authorization: `Bearer ${authToken}` } });
+            setConfigData(response.data);
+        } catch (err) {
+            // [!] ИЗМЕНЕНИЕ: Показываем ошибку пользователю
+            toast.error('Failed to load achievement config data.');
+            setError('Could not load data for the achievement builder. Please refresh the page.');
+        } finally {
+            setConfigLoading(false); // [!] ИЗМЕНЕНИЕ: Выключаем загрузку
+        }
+    }, [authToken]);
+
+    useEffect(() => {
+        Promise.all([fetchAchievements(), fetchConfigData()]).finally(() => setLoading(false));
+    }, [fetchAchievements, fetchConfigData]);
+
+    const handleOpenCreateModal = () => {
+        setEditingAchievement(null);
+        setFormData({ name: '', description: '', icon_url: '', reward_command: '', is_enabled: true });
+        setConditions([{ index: 0, trigger: '', target: '', count: 1, serverGroup: '' }]);
+        setLogic('AND');
+        setIsModalOpen(true);
+    };
+
+    const handleOpenEditModal = (achievement) => {
+        setEditingAchievement(achievement);
+        setFormData({
+            name: achievement.name,
+            description: achievement.description,
+            icon_url: achievement.icon_url || '',
+            reward_command: achievement.reward_command || '',
+            is_enabled: achievement.is_enabled,
+        });
+        setConditions(achievement.conditions.conditions || [{ index: 0, trigger: '', target: '', count: 1, serverGroup: '' }]);
+        setLogic(achievement.conditions.logic || 'AND');
+        setIsModalOpen(true);
+    };
+    
+    const handleAddCondition = () => setConditions([...conditions, { index: conditions.length, trigger: '', target: '', count: 1, serverGroup: '' }]);
+    const handleRemoveCondition = (index) => setConditions(conditions.filter((_, i) => i !== index));
+    const handleConditionChange = (index, field, value) => {
+        const newConditions = [...conditions];
+        newConditions[index][field] = value;
+        if (field === 'trigger') newConditions[index]['target'] = '';
+        setConditions(newConditions);
+    };
+    
+    const handleSave = async () => {
+        const payload = { ...formData, conditions: { logic, conditions: conditions.map((c, i) => ({...c, index: i})) } };
+        const apiCall = editingAchievement 
+            ? axios.patch(`/api/achievements/admin/${editingAchievement.id}`, payload, { headers: { Authorization: `Bearer ${authToken}` } })
+            : axios.post('/api/achievements/admin', payload, { headers: { Authorization: `Bearer ${authToken}` } });
+
+        try {
+            await apiCall;
+            toast.success(`Achievement ${editingAchievement ? 'updated' : 'created'} successfully!`);
+            setIsModalOpen(false);
+            fetchAchievements();
+        } catch (err) {
+            const errorMessage = err.response?.data?.message || 'Failed to save achievement.';
+            toast.error(Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage);
+        }
+    };
+
+    const openDeleteModal = (achievement) => {
+        setItemToDelete(achievement);
+        setConfirmModalOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete) return;
+        setIsActionLoading(true);
+        try {
+            await axios.delete(`/api/achievements/admin/${itemToDelete.id}`, { headers: { Authorization: `Bearer ${authToken}` } });
+            toast.success('Achievement deleted.');
+            setConfirmModalOpen(false);
+            fetchAchievements();
+        } catch (err) {
+            toast.error('Failed to delete achievement.');
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    if (loading) return <CircularProgress />;
+    if (error) return <Alert color="danger">{error}</Alert>;
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography level="h2">Achievement Builder</Typography>
+                <Button onClick={handleOpenCreateModal} startDecorator={<AddIcon />}>Create Achievement</Button>
+            </Box>
+
+            <Sheet variant="outlined" sx={{ borderRadius: 'sm', overflow: 'auto' }}>
+                <Table hoverRow>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Enabled</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {achievements.map((ach) => (
+                            <tr key={ach.id}>
+                                <td>{ach.id}</td>
+                                <td>{ach.name}</td>
+                                <td><Switch checked={ach.is_enabled} readOnly /></td>
+                                <td>
+                                    <Stack direction="row" spacing={1}>
+                                        <Tooltip title="Edit">
+                                            <IconButton size="sm" color="neutral" onClick={() => handleOpenEditModal(ach)}><EditIcon /></IconButton>
+                                        </Tooltip>
+                                        <Tooltip title="Delete">
+                                            <IconButton size="sm" color="danger" onClick={() => openDeleteModal(ach)}><DeleteForeverIcon /></IconButton>
+                                        </Tooltip>
+                                    </Stack>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </Table>
+            </Sheet>
+
+            <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)}>
+                <ModalDialog sx={{ width: '90%', maxWidth: '900px' }}>
+                    <ModalClose />
+                    <Typography level="h4">{editingAchievement ? 'Edit' : 'Create'} Achievement</Typography>
+                    <Divider sx={{ my: 2 }} />
+                    {configLoading ? <CircularProgress /> : (
+                        <Stack spacing={2}>
+                            {/* ... Поля Name, Description, Reward Command ... */}
+                            <FormControl required><FormLabel>Name</FormLabel><Input value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})}/></FormControl>
+                            <Textarea minRows={2} placeholder="Description..." value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})}/>
+                            <Input placeholder="Reward Command (e.g., give {username} diamond 5)" value={formData.reward_command || ''} onChange={e => setFormData({...formData, reward_command: e.target.value})} />
+
+                            <Typography level="title-md" sx={{mt: 1}}>Conditions</Typography>
+                            <Select value={logic} onChange={(e, val) => setLogic(val)}><Option value="AND">All conditions must be met</Option><Option value="OR">Any condition can be met</Option></Select>
+
+                            {conditions.map((cond, index) => (
+                                <Stack direction="row" spacing={1} key={index} alignItems="center" useFlexGap flexWrap="wrap">
+                                    <Select value={cond.trigger} onChange={(e, val) => handleConditionChange(index, 'trigger', val)} placeholder="Trigger...">
+                                        {configData.triggers.map(t => <Option key={t} value={t}>{t}</Option>)}
+                                    </Select>
+                                    
+                                    {/* [!] УЛУЧШЕННЫЙ ВЫПАДАЮЩИЙ СПИСОК С ГРУППАМИ */}
+                                    <Select 
+                                        value={cond.target} 
+                                        onChange={(e, val) => handleConditionChange(index, 'target', val)} 
+                                        placeholder="Target..." 
+                                        disabled={!cond.trigger || !configData.targets[cond.trigger]}
+                                    >
+                                        <Option value="">* Any *</Option>
+                                        {renderTargetOptions(cond.trigger)}
+                                    </Select>
+
+                                    <Input type="number" placeholder="Count" value={cond.count} onChange={e => handleConditionChange(index, 'count', Number(e.target.value))} sx={{maxWidth: 100}} />
+                                    <Input placeholder="Server Group" value={cond.serverGroup || ''} onChange={e => handleConditionChange(index, 'serverGroup', e.target.value)} sx={{minWidth: 150}}/>
+                                    <IconButton onClick={() => handleRemoveCondition(index)} color="danger"><RemoveCircleOutlineIcon /></IconButton>
+                                </Stack>
+                            ))}
+                            <Button onClick={handleAddCondition} startDecorator={<AddCircleOutlineIcon />} variant="outlined" sx={{alignSelf: 'flex-start'}}>Add Condition</Button>
+                            <FormControl sx={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}><FormLabel>Enabled</FormLabel><Switch checked={formData.is_enabled} onChange={(e) => setFormData({...formData, is_enabled: e.target.checked})} /></FormControl>
+                            
+                            <Button onClick={handleSave} sx={{mt: 2}}>Save Achievement</Button>
+                        </Stack>
+                    )}
+                </ModalDialog>
+            </Modal>
+
+            <ConfirmationModal
+                open={confirmModalOpen}
+                onClose={() => setConfirmModalOpen(false)}
+                onConfirm={handleConfirmDelete}
+                title="Confirm Deletion"
+                content={`Are you sure you want to permanently delete the achievement "${itemToDelete?.name}"?`}
+                confirmText="Delete"
+                confirmColor="danger"
+                loading={isActionLoading}
+            />
+        </Box>
+    );
+}
+
+export default AdminAchievementsPage;
+--- END FILE: frontend/src/pages/AdminAchievementsPage.js ---
 
 
 
@@ -9737,6 +10857,7 @@ function AdminPage() {
             // --- СОЗДАЕМ PAYLOAD СО ВСЕМИ ДАННЫМИ ИЗ МОДАЛЬНОГО ОКНА ---
             const payload = {
                 rank_id: selectedRankId,
+                is_verified_admin: isAdminVerified,
                 is_verified_youtuber: isYoutuberVerified,
             };
 
@@ -12320,6 +13441,7 @@ import { constructImageUrl } from '../utils/url';
 import CircleIcon from '@mui/icons-material/Circle';
 import UserPostsList from '../components/UserPostsList'; // [!code ++]
 import VerifiedIcons from '../components/VerifiedIcons';
+import UserAchievementsList from '../components/UserAchievementsList';
 
 // Вспомогательная функция для определения цвета текста
 function isColorLight(hexColor) {
@@ -12442,6 +13564,12 @@ function MyProfilePage() {
                     My Posts
                 </Typography>
                 <UserPostsList userId={profile.id} />
+            </Box>
+             <Box sx={{ mt: 4 }}>
+                <Typography level="h2" component="h2" sx={{ mb: 2 }}>
+                    Achievements
+                </Typography>
+                <UserAchievementsList />
             </Box>
         </Box>
     );
@@ -14602,1185 +15730,6 @@ http {
 
 
 
---- START FILE: FlameWallProxyBridge/src/main/java/com/flamewall/Main.java ---
-
-package com.flamewall;
-
-//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
-// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
-public class Main {
-    public static void main(String[] args) {
-        //TIP Press <shortcut actionId="ShowIntentionActions"/> with your caret at the highlighted text
-        // to see how IntelliJ IDEA suggests fixing it.
-        System.out.printf("Hello and welcome!");
-
-        for (int i = 1; i <= 5; i++) {
-            //TIP Press <shortcut actionId="Debug"/> to start debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-            // for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.
-            System.out.println("i = " + i);
-        }
-    }
-}
---- END FILE: FlameWallProxyBridge/src/main/java/com/flamewall/Main.java ---
-
-
-
---- START FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/ApiClient.java ---
-
-// src/main/java/com/flamewall/proxybridge/ApiClient.java
-package com.flamewall.proxybridge;
-
-import com.velocitypowered.api.proxy.Player;
-import com.velocitypowered.api.proxy.ProxyServer;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import okhttp3.*;
-import org.jetbrains.annotations.NotNull;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.slf4j.Logger;
-
-import java.util.List;
-
-import java.io.IOException;
-
-public class ApiClient {
-
-    private final FlameWallProxyBridge plugin;
-    private final ProxyServer server;
-    private final Logger logger;
-    private final OkHttpClient httpClient;
-    private final String baseUrl;
-    private final String apiKey;
-
-    public ApiClient(FlameWallProxyBridge plugin, ProxyServer server, Logger logger) {
-        this.plugin = plugin;
-        this.server = server;
-        this.logger = logger;
-        this.httpClient = new OkHttpClient();
-
-        this.baseUrl = "http://localhost:3001"; // Убедись, что здесь порт 3001!
-        this.apiKey = "your_super_long_and_random_plugin_secret_key";
-    }
-
-    public void sendFriendRequest(Player sender, String receiverName) {
-        try {
-            JSONObject jsonBody = new JSONObject();
-            jsonBody.put("requesterUuid", sender.getUniqueId().toString());
-            jsonBody.put("receiverName", receiverName);
-            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
-            Request request = new Request.Builder()
-                    .url(baseUrl + "/api/friendships/from-plugin/add")
-                    .header("x-api-key", apiKey)
-                    .post(body)
-                    .build();
-            httpClient.newCall(request).enqueue(new HttpCallback(sender, "Friend request sent to " + receiverName + "!"));
-        } catch (JSONException e) {
-            handlePluginError(sender, "Could not create JSON for friend request", e);
-        }
-    }
-
-    public void removeFriend(Player sender, String friendToRemoveName) {
-        try {
-            JSONObject jsonBody = new JSONObject();
-            jsonBody.put("removerUuid", sender.getUniqueId().toString());
-            jsonBody.put("friendToRemoveName", friendToRemoveName);
-            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
-            Request request = new Request.Builder()
-                    .url(baseUrl + "/api/friendships/from-plugin/remove")
-                    .header("x-api-key", apiKey)
-                    .delete(body)
-                    .build();
-            httpClient.newCall(request).enqueue(new HttpCallback(sender, friendToRemoveName + " has been removed from your friends list."));
-        } catch (JSONException e) {
-            handlePluginError(sender, "Could not create JSON for friend removal", e);
-        }
-    }
-
-    public void getFriendsList(Player sender) {
-        Request request = new Request.Builder()
-                .url(baseUrl + "/api/friendships/from-plugin/list/" + sender.getUniqueId().toString())
-                .header("x-api-key", apiKey)
-                .get()
-                .build();
-        httpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NotNull Call call, @NotNull IOException e) {
-                handleApiFailure(sender, e);
-            }
-
-            @Override
-            public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
-                if (!response.isSuccessful()) {
-                    handleApiError(sender, response);
-                    return;
-                }
-                try (ResponseBody responseBody = response.body()) {
-                    JSONArray friendsArray = new JSONArray(responseBody.string());
-                    server.getScheduler().buildTask(plugin, () -> {
-                        sender.sendMessage(Component.text("--- Your Friends (" + friendsArray.length() + ") ---").color(NamedTextColor.GOLD));
-                        if (friendsArray.length() == 0) {
-                            sender.sendMessage(Component.text("Your friends list is empty. Use /flame friend add <player>").color(NamedTextColor.GRAY));
-                        } else {
-                            for (int i = 0; i < friendsArray.length(); i++) {
-                                //  <<< --- ВОТ ИСПРАВЛЕНИЕ --- >>>
-                                try {
-                                    sender.sendMessage(Component.text("- " + friendsArray.getString(i)).color(NamedTextColor.AQUA));
-                                } catch (JSONException e) {
-                                    logger.warn("Could not get friend name from JSON array at index " + i, e);
-                                }
-                                // <<< --- КОНЕЦ ИСПРАВЛЕНИЯ --- >>>
-                            }
-                        }
-                    }).schedule();
-                } catch (Exception e) {
-                    logger.error("Failed to parse friends list JSON from API", e);
-                    runOnMainThread(() -> sender.sendMessage(Component.text("Error: Could not read response from the website.").color(NamedTextColor.RED)));
-                }
-            }
-        });
-    }
-
-    public void acceptFriendRequest(Player sender, int requestId) {
-        try {
-            JSONObject jsonBody = new JSONObject();
-            jsonBody.put("responderUuid", sender.getUniqueId().toString());
-            jsonBody.put("requestId", requestId);
-            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
-            Request request = new Request.Builder()
-                    .url(baseUrl + "/api/friendships/from-plugin/accept")
-                    .header("x-api-key", apiKey)
-                    .post(body)
-                    .build();
-            httpClient.newCall(request).enqueue(new HttpCallback(sender, "Friend request accepted!"));
-        } catch (JSONException e) {
-            handlePluginError(sender, "Could not create JSON for accepting friend request", e);
-        }
-    }
-
-    public void denyFriendRequest(Player sender, int requestId) {
-        try {
-            JSONObject jsonBody = new JSONObject();
-            jsonBody.put("responderUuid", sender.getUniqueId().toString());
-            jsonBody.put("requestId", requestId);
-            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
-            Request request = new Request.Builder()
-                    .url(baseUrl + "/api/friendships/from-plugin/deny")
-                    .header("x-api-key", apiKey)
-                    .post(body)
-                    .build();
-            httpClient.newCall(request).enqueue(new HttpCallback(sender, "Friend request denied."));
-        } catch (JSONException e) {
-            handlePluginError(sender, "Could not create JSON for denying friend request", e);
-        }
-    }
-
-    private void runOnMainThread(Runnable task) {
-        server.getScheduler().buildTask(plugin, task).schedule();
-    }
-
-    private void handlePluginError(Player sender, String logMessage, Exception e) {
-        logger.error(logMessage, e);
-        runOnMainThread(() -> sender.sendMessage(Component.text("An internal plugin error occurred.").color(NamedTextColor.RED)));
-    }
-
-    private void handleApiFailure(Player player, IOException e) {
-        logger.error("Failed to send API request", e);
-        runOnMainThread(() -> player.sendMessage(Component.text("Error: Could not connect to the website API.").color(NamedTextColor.RED)));
-    }
-
-    private void handleApiError(Player player, Response response) {
-        try (ResponseBody responseBody = response.body()) {
-            JSONObject errorJson = new JSONObject(responseBody.string());
-            String message = errorJson.optString("message", "An unknown error occurred (" + response.code() + ")");
-            runOnMainThread(() -> player.sendMessage(Component.text("Error: " + message).color(NamedTextColor.RED)));
-        } catch (Exception e) {
-            logger.warn("Could not parse error response from API.", e);
-            runOnMainThread(() -> player.sendMessage(Component.text("An unknown error occurred while processing the server response.").color(NamedTextColor.RED)));
-        }
-    }
-
-    private class HttpCallback implements Callback {
-        private final Player sender;
-        private final String successMessage;
-
-        public HttpCallback(Player sender, String successMessage) {
-            this.sender = sender;
-            this.successMessage = successMessage;
-        }
-
-        @Override
-        public void onFailure(@NotNull Call call, @NotNull IOException e) {
-            handleApiFailure(sender, e);
-        }
-
-        @Override
-        public void onResponse(@NotNull Call call, @NotNull Response response) {
-            if (response.isSuccessful()) {
-                runOnMainThread(() -> sender.sendMessage(Component.text(successMessage).color(NamedTextColor.GREEN)));
-            } else {
-                handleApiError(sender, response);
-            }
-        }
-    }
-
-    public void fetchAndExecutePendingCommands() {
-        Request request = new Request.Builder()
-                .url(baseUrl + "/api/shop/pending-commands")
-                .header("x-api-key", apiKey)
-                .get()
-                .build();
-
-        httpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NotNull Call call, @NotNull IOException e) {
-                logger.warn("Could not fetch pending commands from website: " + e.getMessage());
-            }
-
-            @Override
-            public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
-                if (!response.isSuccessful()) {
-                    logger.warn("Failed to fetch pending commands, API response code: " + response.code());
-                    response.close();
-                    return;
-                }
-                try (ResponseBody body = response.body()) {
-                    JSONArray commands = new JSONArray(body.string());
-                    if (commands.length() > 0) {
-                        logger.info("Found " + commands.length() + " pending command(s) from website. Processing...");
-                        plugin.processPendingCommands(commands);
-                    }
-                } catch (Exception e) {
-                    logger.error("Failed to process pending commands", e);
-                }
-            }
-        });
-    }
-    public void clearExecutedCommands(List<Integer> ids) {
-        if (ids == null || ids.isEmpty()) {
-            return;
-        }
-        try {
-            JSONObject jsonBody = new JSONObject();
-            jsonBody.put("commandIds", new JSONArray(ids));
-            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
-
-            Request request = new Request.Builder()
-                    .url(baseUrl + "/api/shop/clear-pending-commands")
-                    .header("x-api-key", apiKey)
-                    .post(body)
-                    .build();
-
-            // Отправляем запрос и логируем результат, не дожидаясь ответа
-            httpClient.newCall(request).enqueue(new Callback() {
-                @Override
-                public void onFailure(@NotNull Call call, @NotNull IOException e) {
-                    logger.warn("Failed to confirm executed commands to website: " + e.getMessage());
-                }
-
-                @Override
-                public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
-                    if (response.isSuccessful()) {
-                        logger.info("Successfully confirmed execution of " + ids.size() + " command(s).");
-                    } else {
-                        logger.warn("Failed to confirm executed commands, API response code: " + response.code());
-                    }
-                    response.close();
-                }
-            });
-        } catch (Exception e) {
-            logger.error("Failed to build request for clearing executed commands", e);
-        }
-    }
-}
---- END FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/ApiClient.java ---
-
-
-
---- START FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/command/FlameCommand.java ---
-
-package com.flamewall.proxybridge.command;
-
-import com.flamewall.proxybridge.ApiClient;
-import com.flamewall.proxybridge.FlameWallProxyBridge;
-import com.flamewall.proxybridge.manager.PrivateMessageManager;
-import com.velocitypowered.api.command.SimpleCommand;
-import com.velocitypowered.api.proxy.Player;
-import com.velocitypowered.api.proxy.ProxyServer;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.NamedTextColor;
-import org.json.JSONObject;
-import org.slf4j.Logger;
-
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-
-public class FlameCommand implements SimpleCommand {
-
-    private final FlameWallProxyBridge plugin;
-    private final PrivateMessageManager messageManager;
-    private final ApiClient apiClient;
-    private final ProxyServer server;
-    private final Logger logger;
-
-    public FlameCommand(FlameWallProxyBridge plugin, ProxyServer server, Logger logger, PrivateMessageManager messageManager) {
-        this.plugin = plugin;
-        this.server = server;
-        this.logger = logger;
-        this.messageManager = messageManager;
-        this.apiClient = plugin.getApiClient();
-    }
-
-    @Override
-    public void execute(final Invocation invocation) {
-        if (!(invocation.source() instanceof Player)) {
-            invocation.source().sendMessage(Component.text("This command can only be used by a player.").color(NamedTextColor.RED));
-            return;
-        }
-
-        Player player = (Player) invocation.source();
-        String[] args = invocation.arguments();
-
-        if (args.length == 0) {
-            sendHelpMessage(player);
-            return;
-        }
-
-        String subCommand = args[0].toLowerCase();
-        String[] subArgs = Arrays.copyOfRange(args, 1, args.length);
-
-        switch (subCommand) {
-            case "msg":
-                handleMessageCommand(player, subArgs);
-                break;
-            case "r":
-            case "reply":
-                handleReplyCommand(player, subArgs);
-                break;
-            case "friend":
-                handleFriendCommand(player, subArgs);
-                break;
-            default:
-                sendHelpMessage(player);
-                break;
-        }
-    }
-
-    private void handleFriendCommand(Player player, String[] args) {
-        if (args.length == 0) {
-            player.sendMessage(Component.text("Usage: /flame friend <add|remove|list|accept|deny>").color(NamedTextColor.RED));
-            return;
-        }
-        String action = args[0].toLowerCase();
-        String[] actionArgs = Arrays.copyOfRange(args, 1, args.length);
-
-        switch(action) {
-            case "add": {
-                if (actionArgs.length < 1) {
-                    player.sendMessage(Component.text("Usage: /flame friend add <player>").color(NamedTextColor.RED));
-                    return;
-                }
-                if (player.getUsername().equalsIgnoreCase(actionArgs[0])) {
-                    player.sendMessage(Component.text("You cannot add yourself as a friend.").color(NamedTextColor.RED));
-                    return;
-                }
-                apiClient.sendFriendRequest(player, actionArgs[0]);
-                break;
-            }
-            case "remove": {
-                if (actionArgs.length < 1) {
-                    player.sendMessage(Component.text("Usage: /flame friend remove <player>").color(NamedTextColor.RED));
-                    return;
-                }
-                apiClient.removeFriend(player, actionArgs[0]);
-                break;
-            }
-            case "list": {
-                apiClient.getFriendsList(player);
-                break;
-            }
-            case "accept": {
-                if (actionArgs.length < 1) {
-                    player.sendMessage(Component.text("Usage: /flame friend accept <player>").color(NamedTextColor.RED));
-                    return;
-                }
-                String requesterName = actionArgs[0].toLowerCase();
-                Map<String, Integer> playerRequests = plugin.getPendingRequests().get(player.getUniqueId());
-
-                if (playerRequests == null || !playerRequests.containsKey(requesterName)) {
-                    player.sendMessage(Component.text("You don't have a friend request from " + actionArgs[0] + ".").color(NamedTextColor.RED));
-                    return;
-                }
-                int requestId = playerRequests.remove(requesterName);
-                apiClient.acceptFriendRequest(player, requestId);
-                break;
-            }
-            case "deny": {
-                if (actionArgs.length < 1) {
-                    player.sendMessage(Component.text("Usage: /flame friend deny <player>").color(NamedTextColor.RED));
-                    return;
-                }
-                String requesterName = actionArgs[0].toLowerCase();
-                Map<String, Integer> playerRequests = plugin.getPendingRequests().get(player.getUniqueId());
-
-                if (playerRequests == null || !playerRequests.containsKey(requesterName)) {
-                    player.sendMessage(Component.text("You don't have a friend request from " + actionArgs[0] + ".").color(NamedTextColor.RED));
-                    return;
-                }
-                int requestId = playerRequests.remove(requesterName);
-                apiClient.denyFriendRequest(player, requestId);
-                break;
-            }
-            default:
-                player.sendMessage(Component.text("Unknown friend command. Use: add, remove, list, accept, deny.").color(NamedTextColor.RED));
-                break;
-        }
-    }
-
-    private void handleMessageCommand(Player sender, String[] args) {
-        if (args.length < 2) {
-            sender.sendMessage(Component.text("Usage: /flame msg <player> <message>").color(NamedTextColor.RED));
-            return;
-        }
-        String recipientName = args[0];
-        String message = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
-
-        if (sender.getUsername().equalsIgnoreCase(recipientName)) {
-            sender.sendMessage(Component.text("You cannot send a message to yourself.").color(NamedTextColor.RED));
-            return;
-        }
-
-        sendMessage(sender, recipientName, message);
-    }
-
-    private void handleReplyCommand(Player sender, String[] args) {
-        if (args.length < 1) {
-            sender.sendMessage(Component.text("Usage: /flame reply <message>").color(NamedTextColor.RED));
-            return;
-        }
-        UUID recipientUuid = messageManager.getReplyTarget(sender);
-        if (recipientUuid == null) {
-            sender.sendMessage(Component.text("There is no one to reply to.").color(NamedTextColor.RED));
-            return;
-        }
-
-        Optional<Player> recipientOpt = server.getPlayer(recipientUuid);
-        if (recipientOpt.isEmpty()) {
-            sender.sendMessage(Component.text("The player you are replying to has gone offline.").color(NamedTextColor.RED));
-            return;
-        }
-
-        String message = String.join(" ", args);
-        sendMessage(sender, recipientOpt.get().getUsername(), message);
-    }
-
-    private void sendMessage(Player sender, String recipientUsername, String content) {
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("senderUuid", sender.getUniqueId().toString());
-            payload.put("recipientUsername", recipientUsername);
-            payload.put("content", content);
-            plugin.sendJsonPayload("inGamePrivateMessage", payload);
-
-            Component prefix = Component.text()
-                    .append(Component.text("[", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("Me", NamedTextColor.AQUA))
-                    .append(Component.text(" -> ", NamedTextColor.GRAY))
-                    .append(Component.text(recipientUsername, NamedTextColor.AQUA))
-                    .append(Component.text("] ", NamedTextColor.DARK_GRAY))
-                    .build();
-
-            Component messageBody = Component.text(content, NamedTextColor.WHITE);
-
-            Component fullMessage = prefix.append(messageBody)
-                    .clickEvent(ClickEvent.suggestCommand("/flame msg " + recipientUsername + " "))
-                    .hoverEvent(HoverEvent.showText(Component.text("Click to send another message to " + recipientUsername).color(NamedTextColor.GREEN)));
-
-            sender.sendMessage(fullMessage);
-
-            server.getPlayer(recipientUsername).ifPresent(recipient -> {
-                messageManager.setLastPartner(sender, recipient);
-            });
-        } catch (Exception e) {
-            sender.sendMessage(Component.text("An error occurred while sending the message.").color(NamedTextColor.RED));
-            logger.error("Could not send PM to backend for " + sender.getUsername(), e);
-        }
-    }
-
-    @Override
-    public CompletableFuture<List<String>> suggestAsync(final Invocation invocation) {
-        String[] args = invocation.arguments();
-        if (args.length == 0 || args.length == 1) {
-            List<String> subCommands = Arrays.asList("msg", "reply", "friend");
-            String currentArg = args.length == 0 ? "" : args[0].toLowerCase();
-            return CompletableFuture.completedFuture(
-                    subCommands.stream().filter(s -> s.startsWith(currentArg)).collect(Collectors.toList())
-            );
-        }
-        if (args.length == 2) {
-            String subCommand = args[0].toLowerCase();
-            String currentArg = args[1].toLowerCase();
-            if (subCommand.equals("friend")) {
-                List<String> friendActions = Arrays.asList("add", "remove", "list", "accept", "deny");
-                return CompletableFuture.completedFuture(
-                        friendActions.stream().filter(s -> s.startsWith(currentArg)).collect(Collectors.toList())
-                );
-            }
-            if (subCommand.equals("msg")) {
-                return server.getAllPlayers().stream()
-                        .map(Player::getUsername)
-                        .filter(name -> name.toLowerCase().startsWith(currentArg))
-                        .collect(Collectors.collectingAndThen(Collectors.toList(), CompletableFuture::completedFuture));
-            }
-        }
-        return CompletableFuture.completedFuture(List.of());
-    }
-
-    @Override
-    public boolean hasPermission(final Invocation invocation) {
-        return true;
-    }
-
-    private void sendHelpMessage(Player player) {
-        player.sendMessage(Component.text("--- FlameWall Bridge Help ---").color(NamedTextColor.GOLD));
-        player.sendMessage(Component.text("/flame msg <player> <message> - Send a private message").color(NamedTextColor.AQUA));
-        player.sendMessage(Component.text("/flame reply <message> - Reply to the last message").color(NamedTextColor.AQUA));
-        player.sendMessage(Component.text("/flame friend <add|remove|list> - Manage your friends").color(NamedTextColor.AQUA));
-    }
-}
---- END FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/command/FlameCommand.java ---
-
-
-
---- START FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/command/LinkCommand.java ---
-
-// src/main/java/com/flamewall/proxybridge/command/LinkCommand.java
-
-package com.flamewall.proxybridge.command;
-
-import com.flamewall.proxybridge.FlameWallProxyBridge;
-import com.velocitypowered.api.command.CommandSource;
-import com.velocitypowered.api.command.SimpleCommand;
-import com.velocitypowered.api.proxy.Player;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import org.json.JSONObject;
-
-public class LinkCommand implements SimpleCommand {
-
-    private final FlameWallProxyBridge plugin;
-
-    public LinkCommand(FlameWallProxyBridge plugin) {
-        this.plugin = plugin;
-    }
-
-    @Override
-    public void execute(Invocation invocation) {
-        CommandSource source = invocation.source();
-        String[] args = invocation.arguments();
-
-        if (!(source instanceof Player)) {
-            source.sendMessage(Component.text("This command can only be used by a player.").color(NamedTextColor.RED));
-            return;
-        }
-
-        if (args.length != 1) {
-            source.sendMessage(Component.text("Usage: /link <code>").color(NamedTextColor.RED));
-            return;
-        }
-
-        Player player = (Player) source;
-        String code = args[0];
-
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("code", code);
-            payload.put("minecraftUuid", player.getUniqueId().toString());
-            payload.put("minecraftUsername", player.getUsername());
-
-            // Используем наш метод для отправки данных на бэкенд
-            plugin.sendJsonPayload("linkAccount", payload);
-
-            player.sendMessage(Component.text("Sent link request to the website. Please check the website for confirmation.").color(NamedTextColor.YELLOW));
-        } catch (Exception e) {
-            player.sendMessage(Component.text("An internal plugin error occurred.").color(NamedTextColor.RED));
-            e.printStackTrace();
-        }
-    }
-
-    // Для этой простой команды права есть у всех
-    @Override
-    public boolean hasPermission(Invocation invocation) {
-        return true;
-    }
-}
---- END FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/command/LinkCommand.java ---
-
-
-
---- START FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/FlameWallProxyBridge.java ---
-
-// src/main/java/com/flamewall/proxybridge/FlameWallProxyBridge.java
-
-package com.flamewall.proxybridge;
-
-import com.google.common.io.ByteArrayDataOutput;
-import com.google.common.io.ByteStreams;
-import com.velocitypowered.api.scheduler.ScheduledTask;
-import org.json.JSONArray;
-import org.json.JSONObject;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import com.flamewall.proxybridge.command.FlameCommand;
-import com.flamewall.proxybridge.command.LinkCommand;
-import com.flamewall.proxybridge.manager.PrivateMessageManager;
-import com.google.inject.Inject;
-import com.velocitypowered.api.command.CommandManager;
-import com.velocitypowered.api.command.CommandMeta;
-import com.velocitypowered.api.event.Subscribe;
-import com.velocitypowered.api.event.connection.DisconnectEvent;
-import com.velocitypowered.api.event.connection.PluginMessageEvent; // <<< НУЖНЫЙ ИМПОРТ
-import com.velocitypowered.api.event.connection.PostLoginEvent;
-import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
-import com.velocitypowered.api.plugin.Plugin;
-import com.velocitypowered.api.proxy.Player;
-import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.proxy.messages.ChannelIdentifier;     // <<< НУЖНЫЙ ИМПОРТ
-import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier; // <<< НУЖНЫЙ ИМПОРТ
-
-import com.velocitypowered.api.scheduler.ScheduledTask;
-import io.socket.client.IO;
-import io.socket.client.Socket;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.slf4j.Logger;
-import net.kyori.adventure.text.event.ClickEvent;   // <<< ДОБАВЛЕН НУЖНЫЙ ИМПОРТ
-import net.kyori.adventure.text.event.HoverEvent;
-
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.net.URI;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap; // <<< ДОБАВЛЕН НУЖНЫЙ ИМПОРТ
-import java.util.concurrent.TimeUnit;
-
-@Plugin(
-        id = "flamewallproxybridge",
-        name = "FlameWallProxyBridge",
-        version = "1.0-SNAPSHOT",
-        description = "The main proxy bridge for FlameWall website integration.",
-        authors = {"Sknery"}
-)
-public class FlameWallProxyBridge {
-
-    private final ProxyServer server;
-    private final Logger logger;
-    private Socket socket;
-    private ApiClient apiClient;
-    private PrivateMessageManager messageManager;
-    private final Map<UUID, Map<String, Integer>> pendingRequests = new ConcurrentHashMap<>();
-    private ScheduledTask pendingCommandsTask; // <<< НОВОЕ ПОЛЕ
-
-    private static final ChannelIdentifier FLAMEWALL_CHANNEL = MinecraftChannelIdentifier.create("flamewall", "main");
-
-
-    @Inject
-    public FlameWallProxyBridge(ProxyServer server, Logger logger) {
-        this.server = server;
-        this.logger = logger;
-    }
-
-    @Subscribe
-    public void onProxyInitialization(ProxyInitializeEvent event) {
-        this.apiClient = new ApiClient(this, server, logger);
-        this.messageManager = new PrivateMessageManager();
-        CommandManager commandManager = server.getCommandManager();
-        CommandMeta flameMeta = commandManager.metaBuilder("flame").aliases("fw").build();
-        commandManager.register(flameMeta, new FlameCommand(this, server, logger, messageManager));
-        CommandMeta linkMeta = commandManager.metaBuilder("link").build();
-        server.getChannelRegistrar().register(FLAMEWALL_CHANNEL);
-
-        commandManager.register(linkMeta, new LinkCommand(this));
-        connectToWebSocket();
-
-        this.pendingCommandsTask = server.getScheduler()
-                .buildTask(this, () -> apiClient.fetchAndExecutePendingCommands())
-                .repeat(1, TimeUnit.MINUTES) // Проверять каждые 5 минут
-                .delay(1, TimeUnit.MINUTES)  // Начать через 1 минуту после запуска сервера
-                .schedule();
-
-        logger.info("Pending command scheduler has been started.");
-        logger.info("FlameWallProxyBridge plugin has been enabled!");
-    }
-
-    public ApiClient getApiClient() {
-        return apiClient;
-    }
-
-    @Subscribe
-    public void onPluginMessage(PluginMessageEvent event) {
-        // Убеждаемся, что сообщение пришло по нашему каналу
-        if (!event.getIdentifier().equals(FLAMEWALL_CHANNEL)) {
-            return;
-        }
-
-        try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(event.getData()))) {
-            String subChannel = in.readUTF(); // Читаем нашу "подкоманду"
-
-            if (subChannel.equals("RankSync")) {
-                String uuid = in.readUTF();
-                String rankName = in.readUTF();
-                logger.info("[DEBUG] Received RankSync from helper for UUID " + uuid + " with rank " + rankName + ". Forwarding to backend...");
-
-                // Формируем JSON и отправляем на бэкенд
-                JSONObject payload = new JSONObject();
-                payload.put("minecraftUuid", uuid);
-                payload.put("rankName", rankName);
-                sendJsonPayload("player:sync-rank", payload);
-            }
-        } catch (IOException | JSONException e) {
-            logger.error("Failed to read plugin message", e);
-        }
-    }
-
-
-    // <<< НОВЫЙ СЛУШАТЕЛЬ ВХОДА ИГРОКА >>>
-    @Subscribe
-    public void onPlayerJoin(PostLoginEvent event) {
-        sendStatusUpdate(event.getPlayer(), true);
-    }
-
-    // <<< НОВЫЙ СЛУШАТЕЛЬ ВЫХОДА ИГРОКА >>>
-    @Subscribe
-    public void onPlayerQuit(DisconnectEvent event) {
-        // При выходе игрока, чистим его запросы, чтобы они не копились вечно
-        pendingRequests.remove(event.getPlayer().getUniqueId());
-        sendStatusUpdate(event.getPlayer(), false);
-    }
-
-    // <<< НОВЫЙ МЕТОД ДЛЯ ОТПРАВКИ СТАТУСА >>>
-    private void sendStatusUpdate(Player player, boolean isOnline) {
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("minecraftUuid", player.getUniqueId().toString());
-            payload.put("isOnline", isOnline);
-            sendJsonPayload("minecraftPlayerStatus", payload);
-            logger.info("Sent status update for " + player.getUsername() + ": " + (isOnline ? "ONLINE" : "OFFLINE"));
-        } catch (Exception e) {
-            logger.error("Could not send player status update for " + player.getUsername(), e);
-        }
-    }
-
-    public Map<UUID, Map<String, Integer>> getPendingRequests() {
-        return pendingRequests;
-    }
-
-    public void sendJsonPayload(String eventName, JSONObject payload) {
-        if (socket != null && socket.connected()) {
-            socket.emit(eventName, payload);
-        } else {
-            logger.warn("WebSocket is not connected. Cannot send data for event: " + eventName);
-        }
-    }
-
-    private void connectToWebSocket() {
-        try {
-            String url = "http://localhost:3001";
-            String apiKey = "your_super_long_and_random_plugin_secret_key";
-            if (apiKey == null || apiKey.isEmpty()) {
-                logger.error("CRITICAL: plugin-secret-key is not set! Plugin will not work.");
-                return;
-            }
-            Map<String, List<String>> headers = new HashMap<>();
-            headers.put("x-api-key", Collections.singletonList(apiKey));
-            IO.Options options = IO.Options.builder()
-                    .setExtraHeaders(headers)
-                    .setTransports(new String[]{"websocket"})
-                    .build();
-            socket = IO.socket(URI.create(url), options);
-            socket.on(Socket.EVENT_CONNECT, args -> logger.info("Successfully connected to the website backend via WebSocket!"));
-            socket.on(Socket.EVENT_DISCONNECT, args -> logger.warn("Disconnected from website backend."));
-            socket.on(Socket.EVENT_CONNECT_ERROR, args -> logger.error("Connection error: " + (args.length > 0 ? args[0] : "Unknown error")));
-            socket.on("incomingFriendRequest", args -> {
-                if (args.length > 0 && args[0] instanceof JSONObject) {
-                    JSONObject data = (JSONObject) args[0];
-                    try {
-                        UUID receiverUuid = UUID.fromString(data.getString("receiverUuid"));
-                        String requesterName = data.getString("requesterName");
-                        int requestId = data.getInt("requestId");
-
-                        pendingRequests.computeIfAbsent(receiverUuid, k -> new HashMap<>()).put(requesterName.toLowerCase(), requestId);
-
-                        server.getPlayer(receiverUuid).ifPresent(receiver -> {
-                            receiver.sendMessage(Component.text("------------------------------------------").color(NamedTextColor.GOLD));
-                            receiver.sendMessage(
-                                    Component.text("Player ").color(NamedTextColor.YELLOW)
-                                            .append(Component.text(requesterName, NamedTextColor.WHITE))
-                                            .append(Component.text(" wants to be your friend!", NamedTextColor.YELLOW))
-                            );
-
-                            Component acceptButton = Component.text("[ACCEPT]", NamedTextColor.GREEN)
-                                    .clickEvent(ClickEvent.runCommand("/flame friend accept " + requesterName))
-                                    .hoverEvent(HoverEvent.showText(Component.text("Click to accept " + requesterName)));
-
-                            Component denyButton = Component.text("[DENY]", NamedTextColor.RED)
-                                    .clickEvent(ClickEvent.runCommand("/flame friend deny " + requesterName))
-                                    .hoverEvent(HoverEvent.showText(Component.text("Click to deny " + requesterName)));
-
-                            receiver.sendMessage(Component.text("    ").append(acceptButton).append(Component.text("    ")).append(denyButton));
-                            receiver.sendMessage(Component.text("------------------------------------------").color(NamedTextColor.GOLD));
-                        });
-                    } catch (Exception e) {
-                        logger.error("Could not parse incomingFriendRequest from backend.", e);
-                    }
-                }
-            });
-            socket.on("webPrivateMessage", args -> {
-                if (args.length > 0 && args[0] instanceof JSONObject) {
-                    JSONObject data = (JSONObject) args[0];
-                    try {
-                        UUID recipientUuid = UUID.fromString(data.getString("recipientUuid"));
-                        String senderUsername = data.getString("senderUsername");
-                        String content = data.getString("content");
-
-                        server.getPlayer(recipientUuid).ifPresent(recipient -> {
-                            Component prefix = Component.text()
-                                    .append(Component.text("[", NamedTextColor.DARK_GRAY))
-                                    .append(Component.text(senderUsername, NamedTextColor.AQUA))
-                                    .append(Component.text(" -> ", NamedTextColor.GRAY))
-                                    .append(Component.text("Me", NamedTextColor.AQUA))
-                                    .append(Component.text("] ", NamedTextColor.DARK_GRAY))
-                                    .build();
-
-                            Component messageBody = Component.text(content, NamedTextColor.WHITE);
-
-                            Component fullMessage = prefix.append(messageBody)
-                                    .clickEvent(ClickEvent.suggestCommand("/flame msg " + senderUsername + " "))
-                                    .hoverEvent(HoverEvent.showText(Component.text("Click to reply to " + senderUsername).color(NamedTextColor.GREEN)));
-
-                            recipient.sendMessage(fullMessage);
-
-                            // Также обновляем /reply для получателя
-                            server.getPlayer(senderUsername).ifPresent(sender -> messageManager.setLastPartner(recipient, sender));
-                        });
-                    } catch (Exception e) {
-                        logger.error("Could not parse webPrivateMessage from backend.", e);
-                    }
-                }
-            });
-            socket.on("shop:new-command", args -> {
-                logger.info("Received 'shop:new-command' signal from backend, fetching commands now...");
-                // Немедленно запускаем нашу функцию проверки команд
-                apiClient.fetchAndExecutePendingCommands();
-            });
-            socket.connect();
-            logger.info("Attempting to connect to website backend at " + url + "...");
-        } catch (Exception e) {
-            logger.error("Failed to initialize WebSocket connection: " + e.getMessage(), e);
-        }
-    }
-
-    public void processPendingCommands(JSONArray commands) {
-        List<Integer> executedIds = new ArrayList<>();
-        for (int i = 0; i < commands.length(); i++) {
-            try {
-                JSONObject cmdObj = commands.getJSONObject(i);
-                String commandStr = cmdObj.getString("command");
-                int commandId = cmdObj.getInt("id");
-
-                String[] parts = commandStr.split(" ");
-                String playerName = "";
-                for (String part : parts) {
-                    if (server.getPlayer(part).isPresent()) {
-                        playerName = part;
-                        break;
-                    }
-                }
-
-                if (playerName.isEmpty()) {
-                    logger.warn("Could not find an online player in command string to execute: '" + commandStr + "'");
-                    continue;
-                }
-
-                server.getPlayer(playerName).ifPresent(player -> {
-                    player.getCurrentServer().ifPresent(serverConnection -> {
-                        ByteArrayDataOutput out = ByteStreams.newDataOutput();
-                        out.writeUTF("ExecuteCommand");
-                        out.writeUTF(commandStr);
-                        serverConnection.sendPluginMessage(FLAMEWALL_CHANNEL, out.toByteArray());
-                        executedIds.add(commandId);
-                        logger.info("Sent command ID " + commandId + " to server " + serverConnection.getServerInfo().getName() + " for execution.");
-                    });
-                });
-            } catch (JSONException e) { // <<< ИСПРАВЛЕНИЕ ЗДЕСЬ
-                logger.error("Failed to parse command object from JSON array at index " + i, e);
-            }
-        }
-        if (!executedIds.isEmpty()) {
-             apiClient.clearExecutedCommands(executedIds);
-        }
-    }
-
-}
---- END FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/FlameWallProxyBridge.java ---
-
-
-
---- START FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/manager/PrivateMessageManager.java ---
-
-// src/main/java/com/flamewall/proxybridge/manager/PrivateMessageManager.java
-package com.flamewall.proxybridge.manager;
-
-import com.velocitypowered.api.proxy.Player;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-
-public class PrivateMessageManager {
-    private final Map<UUID, UUID> lastMessagePartners = new HashMap<>();
-
-    public void setLastPartner(Player player1, Player player2) {
-        lastMessagePartners.put(player1.getUniqueId(), player2.getUniqueId());
-        lastMessagePartners.put(player2.getUniqueId(), player1.getUniqueId());
-    }
-
-    public UUID getReplyTarget(Player sender) {
-        return lastMessagePartners.get(sender.getUniqueId());
-    }
-}
---- END FILE: FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/manager/PrivateMessageManager.java ---
-
-
-
---- START FILE: FlameWallProxyBridge/src/main/resources/velocity-plugin.json ---
-
-{
-  "id": "flamewallproxybridge",
-  "name": "FlameWallProxyBridge",
-  "version": "1.0-SNAPSHOT",
-  "description": "The main proxy bridge for FlameWall website integration.",
-  "authors": [
-    "Sknery"
-  ],
-  "main": "com.flamewall.proxybridge.FlameWallProxyBridge"
-}
---- END FILE: FlameWallProxyBridge/src/main/resources/velocity-plugin.json ---
-
-
-
---- START FILE: FlameWallSpigotHelper/src/main/java/com/flamewall/Main.java ---
-
-package com.flamewall;
-
-//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
-// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
-public class Main {
-    public static void main(String[] args) {
-        //TIP Press <shortcut actionId="ShowIntentionActions"/> with your caret at the highlighted text
-        // to see how IntelliJ IDEA suggests fixing it.
-        System.out.printf("Hello and welcome!");
-
-        for (int i = 1; i <= 5; i++) {
-            //TIP Press <shortcut actionId="Debug"/> to start debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-            // for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.
-            System.out.println("i = " + i);
-        }
-    }
-}
---- END FILE: FlameWallSpigotHelper/src/main/java/com/flamewall/Main.java ---
-
-
-
---- START FILE: FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/FlameWallSpigotHelper.java ---
-
-// FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/FlameWallSpigotHelper.java
-
-package com.flamewall.spigothelper;
-
-import com.google.common.io.ByteArrayDataInput;
-import com.google.common.io.ByteArrayDataOutput;
-import com.google.common.io.ByteStreams;
-import me.clip.placeholderapi.PlaceholderAPI;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.plugin.messaging.PluginMessageListener;
-import org.jetbrains.annotations.NotNull;
-
-public class FlameWallSpigotHelper extends JavaPlugin implements PluginMessageListener {
-
-    @Override
-    public void onEnable() {
-        this.getServer().getMessenger().registerIncomingPluginChannel(this, "flamewall:main", this);
-        this.getServer().getMessenger().registerOutgoingPluginChannel(this, "flamewall:main");
-        getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
-        saveDefaultConfig();
-        getLogger().info("FlameWall Spigot Helper has been enabled!");
-    }
-
-    @Override
-    public void onDisable() {
-        // Сервер сам отменит регистрацию каналов при выключении плагина.
-        // Явно вызывать здесь ничего не нужно, чтобы избежать ошибок.
-        getLogger().info("FlameWall Spigot Helper has been disabled!");
-    }
-
-    /**
-     * Слушатель сообщений от прокси-плагина.
-     */
-    @Override
-    public void onPluginMessageReceived(@NotNull String channel, @NotNull Player player, @NotNull byte[] message) {
-        if (!channel.equals("flamewall:main")) {
-            return;
-        }
-
-        ByteArrayDataInput in = ByteStreams.newDataInput(message);
-        String subChannel = in.readUTF();
-
-        if (subChannel.equals("ExecuteCommand")) {
-            String commandToExecute = in.readUTF();
-            getLogger().info("[FW-HELPER] Received command from proxy to execute: " + commandToExecute);
-
-            getServer().getScheduler().runTask(this, () -> {
-                getServer().dispatchCommand(getServer().getConsoleSender(), commandToExecute);
-                handleRankChangeCommand(commandToExecute, null);
-            });
-        }
-    }
-
-    /**
-     * Универсальный обработчик команды смены ранга.
-     * @param command Полная строка команды.
-     * @param initiator Игрок, который выполнил команду (может быть null).
-     */
-    public void handleRankChangeCommand(String command, Player initiator) {
-        String lowerCaseCommand = command.toLowerCase();
-
-        for (String pattern : getConfig().getStringList("intercept-commands")) {
-            if (lowerCaseCommand.startsWith(pattern.split(" ")[0] + " " + pattern.split(" ")[1])) {
-                String[] parts = command.split(" ");
-                if (parts.length >= 3) {
-                    String targetPlayerName = parts[2];
-                    Player targetPlayer = getServer().getPlayer(targetPlayerName);
-
-                    if (targetPlayer != null && targetPlayer.isOnline()) {
-                        getLogger().info("[FW-HELPER] Intercepted a rank-changing command for " + targetPlayerName + ". Syncing rank back to website...");
-
-                        getServer().getScheduler().runTaskLater(this, () -> {
-                            syncRank(targetPlayer);
-                        }, 40L); // 2-секундная задержка
-                    }
-                }
-                return;
-            }
-        }
-    }
-
-    /**
-     * Отправка актуального ранга игрока на прокси.
-     * @param player Игрок для синхронизации.
-     */
-    public void syncRank(Player player) {
-        if (player == null || !player.isOnline()) return;
-        if (!getConfig().getBoolean("rank-sync.enabled", true)) return;
-        String placeholder = getConfig().getString("rank-sync.placeholder");
-        if (placeholder == null || placeholder.isEmpty()) return;
-
-        String rankName = PlaceholderAPI.setPlaceholders(player, placeholder);
-
-        ByteArrayDataOutput out = ByteStreams.newDataOutput();
-        out.writeUTF("RankSync");
-        out.writeUTF(player.getUniqueId().toString());
-        out.writeUTF(rankName);
-
-        player.sendPluginMessage(this, "flamewall:main", out.toByteArray());
-        getLogger().info("[FW-HELPER] [DEBUG] Sent rank sync for " + player.getName() + ". New Rank: " + rankName);
-    }
-}
---- END FILE: FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/FlameWallSpigotHelper.java ---
-
-
-
---- START FILE: FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/PlayerListener.java ---
-
-// FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/PlayerListener.java
-package com.flamewall.spigothelper;
-
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerCommandPreprocessEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.server.ServerCommandEvent;
-
-public class PlayerListener implements Listener {
-
-    private final FlameWallSpigotHelper plugin;
-
-    public PlayerListener(FlameWallSpigotHelper plugin) {
-        this.plugin = plugin;
-    }
-
-    @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        // При входе игрока, как и раньше, синхронизируем его ранг
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            plugin.syncRank(event.getPlayer());
-        }, 20L); // 1 сек задержка
-    }
-
-    @EventHandler
-    public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
-        // Просто передаем команду игрока в наш универсальный обработчик
-        plugin.handleRankChangeCommand(event.getMessage().substring(1), event.getPlayer());
-    }
-
-    @EventHandler
-    public void onServerCommand(ServerCommandEvent event) {
-        // Просто передаем команду консоли в наш универсальный обработчик
-        plugin.handleRankChangeCommand(event.getCommand(), null);
-    }
-}
---- END FILE: FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/PlayerListener.java ---
-
-
-
---- START FILE: FlameWallSpigotHelper/src/main/resources/config.yml ---
-
-rank-sync:
-  enabled: true
-  placeholder: "%luckperms_primary_group_name%"
-
-intercept-commands:
-  - "lp user {player} parent set {rank}"
-  - "lp user {player} group set {rank}"
-  - "pex user {player} group set {rank}"
---- END FILE: FlameWallSpigotHelper/src/main/resources/config.yml ---
-
-
-
---- START FILE: FlameWallSpigotHelper/src/main/resources/plugin.yml ---
-
-name: FlameWallSpigotHelper
-version: 1.0
-main: com.flamewall.spigothelper.FlameWallSpigotHelper
-api-version: '1.20'
-depend: [PlaceholderAPI]
---- END FILE: FlameWallSpigotHelper/src/main/resources/plugin.yml ---
-
-
-
 --- START FILE: .env ---
 
 # ================================================================
@@ -16201,9 +16150,9 @@ export default defineConfig({
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "typeorm:prod": "typeorm -d ./dist/data-source.js",
-    "migration:run": "NODE_ENV=migration npm run typeorm -- -d src/data-source.ts migration:run",
-    "migration:create": "npm run typeorm -- -d src/data-source.ts migration:create",
-    "migration:generate": "npm run typeorm -- -d src/data-source.ts migration:generate",
+    "migration:run": "npx ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js --dataSource src/data-source.ts migration:run",
+    "migration:create": "npx ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:create",
+    "migration:generate": "npx ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js --dataSource src/data-source.ts migration:generate",
     "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js",
     "typeorm:generate": "npm run typeorm -- migration:create",
     "migration:run:prod": "typeorm-ts-node-commonjs -d dist/data-source.js migration:run"
@@ -16268,7 +16217,6 @@ export default defineConfig({
     "typescript-eslint": "^8.20.0"
   }
 }
-
 --- END FILE: backend/package.json ---
 
 
@@ -16349,161 +16297,4 @@ export default defineConfig({
   }
 }
 --- END FILE: frontend/package.json ---
-
-
-
---- START FILE: FlameWallProxyBridge/pom.xml ---
-
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-
-    <groupId>com.flamewall</groupId>
-    <artifactId>FlameWallProxyBridge</artifactId>
-    <version>1.0-SNAPSHOT</version>
-    <packaging>jar</packaging>
-
-    <properties>
-        <java.version>21</java.version>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
-                <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>3.5.1</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-                <filtering>true</filtering>
-            </resource>
-        </resources>
-    </build>
-
-    <repositories>
-        <repository>
-            <id>papermc-repo</id>
-            <url>https://repo.papermc.io/repository/maven-public/</url>
-        </repository>
-    </repositories>
-
-    <dependencies>
-        <dependency>
-            <groupId>com.velocitypowered</groupId>
-            <artifactId>velocity-api</artifactId>
-            <version>3.3.0-SNAPSHOT</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.jetbrains</groupId>
-            <artifactId>annotations</artifactId>
-            <version>24.1.0</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>io.socket</groupId>
-            <artifactId>socket.io-client</artifactId>
-            <version>2.1.0</version>
-            <scope>compile</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp</artifactId>
-            <version>4.12.0</version>
-            <scope>compile</scope>
-        </dependency>
-    </dependencies>
-</project>
---- END FILE: FlameWallProxyBridge/pom.xml ---
-
-
-
---- START FILE: FlameWallSpigotHelper/pom.xml ---
-
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-
-    <groupId>com.flamewall</groupId>
-    <artifactId>FlameWallSpigotHelper</artifactId>
-    <version>1.0-SNAPSHOT</version>
-    <packaging>jar</packaging>
-
-    <properties>
-        <java.version>17</java.version> <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.8.1</version>
-                <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
-                </configuration>
-            </plugin>
-        </plugins>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-                <filtering>true</filtering>
-            </resource>
-        </resources>
-    </build>
-
-    <repositories>
-        <repository>
-            <id>spigot-repo</id>
-            <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
-        </repository>
-        <repository>
-            <id>placeholderapi</id>
-            <url>https://repo.extendedclip.com/content/repositories/placeholderapi/</url>
-        </repository>
-    </repositories>
-
-    <dependencies>
-        <dependency>
-            <groupId>org.spigotmc</groupId>
-            <artifactId>spigot-api</artifactId>
-            <version>1.20.1-R0.1-SNAPSHOT</version> <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>me.clip</groupId>
-            <artifactId>placeholderapi</artifactId>
-            <version>2.11.6</version>
-            <scope>provided</scope>
-        </dependency>
-    </dependencies>
-</project>
---- END FILE: FlameWallSpigotHelper/pom.xml ---
 
