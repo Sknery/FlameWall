@@ -2,10 +2,10 @@ version: '3.8'
 
 services:
   backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile.prod
-    image: flamewall-backend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+  #  build:
+  #    context: .
+  #    dockerfile: backend/Dockerfile.prod
+    image: sknery/flamewall-backend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_backend_prod
     restart: unless-stopped
     environment:
@@ -29,12 +29,12 @@ services:
       - db
 
   frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile.prod
-      args:
-        - VITE_FULL_API_URL=${VITE_FULL_API_URL}
-    image: flamewall-frontend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+  #  build:
+  #    context: .
+  #    dockerfile: frontend/Dockerfile.prod
+  #    args:
+  #      - VITE_FULL_API_URL=${VITE_FULL_API_URL}
+    image: sknery/flamewall-frontend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_frontend_prod
     restart: unless-stopped
     networks:
