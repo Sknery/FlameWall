@@ -5,10 +5,11 @@ set -e
 DOCKER_USERNAME=sknery
 
 # Загружаем переменные из .env файла
-export $(grep -v '^#' .env | xargs)
+set -a
+source .env
+set +a
 
 echo "🔹 Logging in to Docker Hub..."
-docker login -u "$DOCKER_USERNAME"
 
 echo "🛠️ Building and pushing backend image..."
 docker build -f backend/Dockerfile.prod -t $DOCKER_USERNAME/flamewall-backend:latest .

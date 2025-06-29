@@ -1,20 +1,16 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Пт 27 июн 2025 22:24:20 UTC
+PROJECT SNAPSHOT CREATED ON: Сб 28 июн 2025 20:00:40 UTC
 ===============================================
 
 
 --- START FILE: backend/src/achievements/achievements.config.ts ---
 
-export interface AchievementConfig {
-    version: string;
-    triggers: AchievementTrigger[];
-    // [!] ИСПРАВЛЕНИЕ: Теперь мы указываем, что значение - это объект, 
-    // где ключи - строки (названия групп), а значения - массивы строк.
-    targets: Record<Partial<AchievementTrigger>, Record<string, string[]>>;
-    serverGroups: string[];
-}
+// backend/src/achievements/achievements.config.ts
 
-export type AchievementTrigger = 
+// --- 1. ОПРЕДЕЛЕНИЯ ТИПОВ (ЧТОБЫ TS ПОНИМАЛ СТРУКТУРУ) ---
+// Их нужно было оставить в файле.
+
+export type AchievementTrigger =
     | 'PLAYER_KILL_ENTITY'
     | 'BLOCK_BREAK'
     | 'BLOCK_PLACE'
@@ -28,82 +24,42 @@ export type AchievementTrigger =
     | 'COMMENT_CREATED'
     | 'FRIEND_ADDED';
 
-// Наш главный объект конфигурации (остается без изменений)
+export interface AchievementConfig {
+    version: string;
+    triggers: AchievementTrigger[];
+    // А вот это - правильный способ сказать TypeScript то, что мы хотим
+    targets: Partial<Record<AchievementTrigger, Record<string, string[]>>>;
+    serverGroups: string[];
+}
+
+// --- 2. САМ ОБЪЕКТ КОНФИГУРАЦИИ (ТВОЯ НОВАЯ, ЧИСТАЯ ВЕРСИЯ) ---
+// Он остается таким, как ты и хотел.
+
 export const ACHIEVEMENTS_CONFIG: AchievementConfig = {
-    version: '1.2.1-full',
+    version: '2.0.0-core', // Новая версия, отражающая новую архитектуру!
+    
+    // Только ядро! Сайт и универсальный триггер для плагинов.
     triggers: [
-        'PLAYER_KILL_ENTITY',
-        'BLOCK_BREAK',
-        'BLOCK_PLACE',
-        'ITEM_CRAFT',
-        'ITEM_CONSUME',
-        'PLAYER_ENCHANT_ITEM',
-        'PLAYER_TRAVEL_DISTANCE',
-        'CUSTOM_API_TRIGGER',
         'REPUTATION_CHANGED',
         'POST_CREATED',
         'COMMENT_CREATED',
-        'FRIEND_ADDED'
+        'FRIEND_ADDED',
+        'CUSTOM_API_TRIGGER'
     ],
+
+    // Цели теперь пусты. Они будут приезжать от плагинов динамически.
     targets: {
-        PLAYER_KILL_ENTITY: {
-            "Bosses": ['ENDER_DRAGON', 'WITHER', 'ELDER_GUARDIAN', 'WARDEN'],
-            "Hostile Mobs": ['BLAZE', 'CAVE_SPIDER', 'CREEPER', 'DROWNED', 'ENDERMITE', 'EVOKER', 'GHAST', 'GUARDIAN', 'HOGLIN', 'HUSK', 'MAGMA_CUBE', 'PHANTOM', 'PIGLIN_BRUTE', 'PILLAGER', 'RAVAGER', 'SHULKER', 'SILVERFISH', 'SKELETON', 'SLIME', 'SPIDER', 'STRAY', 'VEX', 'VINDICATOR', 'WITCH', 'WITHER_SKELETON', 'ZOGLIN', 'ZOMBIE', 'ZOMBIE_VILLAGER'],
-            "Neutral Mobs": ['BEE', 'DOLPHIN', 'ENDERMAN', 'GOAT', 'IRON_GOLEM', 'LLAMA', 'PANDA', 'PIGLIN', 'POLAR_BEAR', 'PUFFERFISH', 'TRADER_LLAMA', 'WOLF', 'ZOMBIFIED_PIGLIN'],
-            "Passive Mobs": ['ALLAY', 'AXOLOTL', 'BAT', 'CAMEL', 'CAT', 'CHICKEN', 'COD', 'COW', 'DONKEY', 'FROG', 'GLOW_SQUID', 'HORSE', 'MOOSHROOM', 'MULE', 'OCELOT', 'PARROT', 'PIG', 'RABBIT', 'SALMON', 'SHEEP', 'SNIFFER', 'SQUID', 'STRIDER', 'TADPOLE', 'TROPICAL_FISH', 'TURTLE', 'VILLAGER'],
-            "Special": ['PLAYER']
-        },
-        BLOCK_BREAK: {
-            "Ores & Minerals": ['COAL_ORE', 'DEEPSLATE_COAL_ORE', 'COPPER_ORE', 'DEEPSLATE_COPPER_ORE', 'IRON_ORE', 'DEEPSLATE_IRON_ORE', 'GOLD_ORE', 'DEEPSLATE_GOLD_ORE', 'REDSTONE_ORE', 'DEEPSLATE_REDSTONE_ORE', 'LAPIS_ORE', 'DEEPSLATE_LAPIS_ORE', 'DIAMOND_ORE', 'DEEPSLATE_DIAMOND_ORE', 'EMERALD_ORE', 'DEEPSLATE_EMERALD_ORE', 'NETHER_GOLD_ORE', 'NETHER_QUARTZ_ORE', 'ANCIENT_DEBRIS', 'RAW_IRON_BLOCK', 'RAW_COPPER_BLOCK', 'RAW_GOLD_BLOCK', 'AMETHYST_BLOCK', 'BUDDING_AMETHYST', 'AMETHYST_CLUSTER'],
-            "Wood & Logs": ['OAK_LOG', 'SPRUCE_LOG', 'BIRCH_LOG', 'JUNGLE_LOG', 'ACACIA_LOG', 'DARK_OAK_LOG', 'MANGROVE_LOG', 'CHERRY_LOG', 'CRIMSON_STEM', 'WARPED_STEM', 'STRIPPED_OAK_LOG', 'STRIPPED_SPRUCE_LOG', 'STRIPPED_BIRCH_LOG', 'STRIPPED_JUNGLE_LOG', 'STRIPPED_ACACIA_LOG', 'STRIPPED_DARK_OAK_LOG', 'STRIPPED_MANGROVE_LOG', 'STRIPPED_CHERRY_LOG', 'STRIPPED_CRIMSON_STEM', 'STRIPPED_WARPED_STEM'],
-            "Stone & Earth": ['STONE', 'COBBLESTONE', 'MOSSY_COBBLESTONE', 'GRANITE', 'DIORITE', 'ANDESITE', 'DEEPSLATE', 'COBBLED_DEEPSLATE', 'TUFF', 'CALCITE', 'DIRT', 'GRASS_BLOCK', 'PODZOL', 'MYCELIUM', 'ROOTED_DIRT', 'SAND', 'RED_SAND', 'GRAVEL', 'CLAY'],
-            "Nether Blocks": ['NETHERRACK', 'SOUL_SAND', 'SOUL_SOIL', 'BASALT', 'SMOOTH_BASALT', 'POLISHED_BLACKSTONE', 'GILDED_BLACKSTONE', 'CRIMSON_NYLIUM', 'WARPED_NYLIUM', 'SHROOMLIGHT', 'WEEPING_VINES', 'TWISTING_VINES'],
-            "End Blocks": ['END_STONE', 'END_STONE_BRICKS', 'PURPUR_BLOCK', 'PURPUR_PILLAR', 'CHORUS_PLANT', 'CHORUS_FLOWER'],
-            "Farming & Plants": ['WHEAT', 'CARROTS', 'POTATOES', 'BEETROOTS', 'PUMPKIN', 'MELON', 'SUGAR_CANE', 'CACTUS', 'NETHER_WART', 'VINE', 'LILY_PAD', 'TALL_GRASS', 'FERN', 'DEAD_BUSH', 'DANDELION', 'POPPY', 'BLUE_ORCHID', 'ALLIUM', 'AZURE_BLUET', 'CORNFLOWER', 'LILY_OF_THE_VALLEY', 'WITHER_ROSE', 'SUNFLOWER', 'LILAC', 'ROSE_BUSH', 'PEONY'],
-            "Functional Blocks": ['CRAFTING_TABLE', 'FURNACE', 'CHEST', 'ENDER_CHEST', 'BARREL', 'SHULKER_BOX', 'BLAST_FURNACE', 'SMOKER', 'ANVIL', 'ENCHANTING_TABLE', 'BREWING_STAND', 'CAULDRON', 'JUKEBOX', 'NOTE_BLOCK', 'SPAWNER'],
-            "Misc & Building": ['GLASS', 'SANDSTONE', 'BRICKS', 'BOOKSHELF', 'OBSIDIAN', 'ICE', 'PACKED_ICE', 'BLUE_ICE', 'SNOW_BLOCK', 'GLOWSTONE', 'SEA_LANTERN', 'SPONGE', 'WET_SPONGE']
-        },
-        BLOCK_PLACE: {}, // Можно заполнить по аналогии с BLOCK_BREAK
-        ITEM_CRAFT: {
-            "Tools": ['WOODEN_PICKAXE', 'STONE_PICKAXE', 'IRON_PICKAXE', 'GOLDEN_PICKAXE', 'DIAMOND_PICKAXE', 'NETHERITE_PICKAXE', 'WOODEN_AXE', 'STONE_AXE', 'IRON_AXE', 'DIAMOND_AXE', 'NETHERITE_AXE', 'WOODEN_SHOVEL', 'STONE_SHOVEL', 'IRON_SHOVEL', 'DIAMOND_SHOVEL', 'NETHERITE_SHOVEL', 'WOODEN_HOE', 'STONE_HOE', 'IRON_HOE', 'DIAMOND_HOE', 'NETHERITE_HOE', 'FISHING_ROD', 'FLINT_AND_STEEL', 'SHEARS', 'COMPASS', 'CLOCK', 'BUCKET', 'SPYGLASS'],
-            "Weapons": ['WOODEN_SWORD', 'STONE_SWORD', 'IRON_SWORD', 'GOLDEN_SWORD', 'DIAMOND_SWORD', 'NETHERITE_SWORD', 'BOW', 'CROSSBOW', 'TRIDENT', 'ARROW'],
-            "Armor": ['LEATHER_HELMET', 'LEATHER_CHESTPLATE', 'LEATHER_LEGGINGS', 'LEATHER_BOOTS', 'CHAINMAIL_HELMET', 'CHAINMAIL_CHESTPLATE', 'CHAINMAIL_LEGGINGS', 'CHAINMAIL_BOOTS', 'IRON_HELMET', 'IRON_CHESTPLATE', 'IRON_LEGGINGS', 'IRON_BOOTS', 'GOLDEN_HELMET', 'GOLDEN_CHESTPLATE', 'GOLDEN_LEGGINGS', 'GOLDEN_BOOTS', 'DIAMOND_HELMET', 'DIAMOND_CHESTPLATE', 'DIAMOND_LEGGINGS', 'DIAMOND_BOOTS', 'NETHERITE_HELMET', 'NETHERITE_CHESTPLATE', 'NETHERITE_LEGGINGS', 'NETHERITE_BOOTS', 'TURTLE_HELMET', 'SHIELD'],
-            "Food": ['BREAD', 'COOKIE', 'CAKE', 'PUMPKIN_PIE', 'MUSHROOM_STEW', 'RABBIT_STEW', 'BEETROOT_SOUP', 'GOLDEN_CARROT', 'GOLDEN_APPLE'],
-            "Building Blocks": ['CRAFTING_TABLE', 'FURNACE', 'CHEST', 'BARREL', 'BLAST_FURNACE', 'SMOKER', 'STONECUTTER', 'LADDER', 'BOOKSHELF', 'TNT', 'BEACON', 'LANTERN', 'SOUL_LANTERN', 'CAMPFIRE', 'SOUL_CAMPFIRE'],
-            "Redstone": ['PISTON', 'STICKY_PISTON', 'OBSERVER', 'REPEATER', 'COMPARATOR', 'REDSTONE_LAMP', 'TARGET', 'DISPENSER', 'DROPPER', 'HOPPER', 'LEVER', 'STONE_BUTTON', 'OAK_BUTTON', 'TRIPWIRE_HOOK', 'DAYLIGHT_DETECTOR'],
-            "Transportation": ['MINECART', 'CHEST_MINECART', 'FURNACE_MINECART', 'HOPPER_MINECART', 'TNT_MINECART', 'RAIL', 'POWERED_RAIL', 'DETECTOR_RAIL', 'ACTIVATOR_RAIL', 'OAK_BOAT', 'OAK_CHEST_BOAT'],
-            "Decoration": ['ITEM_FRAME', 'GLOW_ITEM_FRAME', 'PAINTING', 'ARMOR_STAND', 'FLOWER_POT', 'WHITE_BANNER', 'BLACK_BED', 'WHITE_BED'],
-            "Misc": ['ENDER_EYE', 'END_CRYSTAL', 'FIRE_CHARGE', 'PAPER', 'BOOK', 'WRITABLE_BOOK', 'MAP', 'GLASS_BOTTLE']
-        },
-        ITEM_CONSUME: {
-            "Food": ['APPLE', 'GOLDEN_APPLE', 'ENCHANTED_GOLDEN_APPLE', 'BREAD', 'COOKED_PORKCHOP', 'COOKED_BEEF', 'COOKED_CHICKEN', 'COOKED_MUTTON', 'COOKED_RABBIT', 'COOKED_COD', 'COOKED_SALMON', 'BAKED_POTATO', 'CARROT', 'GOLDEN_CARROT', 'PUMPKIN_PIE', 'CAKE', 'COOKIE', 'MELON_SLICE', 'GLOW_BERRIES', 'SWEET_BERRIES', 'CHORUS_FRUIT', 'BEETROOT', 'BEETROOT_SOUP', 'MUSHROOM_STEW', 'RABBIT_STEW', 'DRIED_KELP', 'SUSPICIOUS_STEW'],
-            "Potions & Drinks": ['POTION', 'MILK_BUCKET', 'HONEY_BOTTLE'],
-        },
-        PLAYER_ENCHANT_ITEM: {
-            "Armor Enchantments": ['PROTECTION', 'FIRE_PROTECTION', 'FEATHER_FALLING', 'BLAST_PROTECTION', 'PROJECTILE_PROTECTION', 'RESPIRATION', 'AQUA_AFFINITY', 'THORNS', 'DEPTH_STRIDER', 'FROST_WALKER', 'SOUL_SPEED'],
-            "Weapon Enchantments": ['SHARPNESS', 'SMITE', 'BANE_OF_ARTHROPODS', 'KNOCKBACK', 'FIRE_ASPECT', 'LOOTING', 'SWEEPING_EDGE'],
-            "Tool Enchantments": ['EFFICIENCY', 'SILK_TOUCH', 'FORTUNE'],
-            "Bow Enchantments": ['POWER', 'PUNCH', 'FLAME', 'INFINITY'],
-            "Crossbow Enchantments": ['QUICK_CHARGE', 'MULTISHOT', 'PIERCING'],
-            "Trident Enchantments": ['IMPALING', 'LOYALTY', 'RIPTIDE', 'CHANNELING'],
-            "Universal & Curses": ['UNBREAKING', 'MENDING', 'VANISHING_CURSE', 'BINDING_CURSE']
-        },
-        PLAYER_TRAVEL_DISTANCE: {
-            "Movement Types": ['WALK', 'SPRINT', 'SWIM', 'CROUCH', 'FLY', 'ELYTRA_FLY', 'RIDE_HORSE', 'RIDE_PIG', 'RIDE_MINECART', 'RIDE_STRIDER']
-        },
-        CUSTOM_API_TRIGGER: {
-            "Game Modes": ['bedwars_win_solo', 'bedwars_win_doubles', 'skywars_win_solo', 'skywars_win_teams', 'dungeon_floor7_complete', 'parkour_map_finished'],
-            "Social": ['first_join', 'daily_login']
-        },
+        CUSTOM_API_TRIGGER: {},
         REPUTATION_CHANGED: {},
         POST_CREATED: {},
         COMMENT_CREATED: {},
         FRIEND_ADDED: {},
     },
+
+    
     serverGroups: [
         'survival', 'skyblock', 'bedwars', 'creative', 'lobby', 'auth', 'pvp', 'parkour', 'dungeons'
     ]
-    
 };
 --- END FILE: backend/src/achievements/achievements.config.ts ---
 
@@ -111,7 +67,7 @@ export const ACHIEVEMENTS_CONFIG: AchievementConfig = {
 
 --- START FILE: backend/src/achievements/achievements.controller.ts ---
 
-import { Controller, Get, Post, Body, UseGuards, Patch, Param, ParseIntPipe, Delete, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Patch, Param, ParseIntPipe, Delete, Request, HttpStatus, HttpCode } from '@nestjs/common';
 import { AchievementsService } from './achievements.service';
 import { CreateAchievementDto } from './dto/create-achievement.dto';
 import { UpdateAchievementDto } from './dto/update-achievement.dto';
@@ -120,6 +76,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { SystemRanks } from '../ranks/ranks.service';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { PluginApiKeyGuard } from 'src/auth/guards/plugin-api-key.guard';
+import { RegisterTargetsDto } from './dto/register-targets.dto';
 
 @ApiTags('Achievements')
 @Controller('achievements')
@@ -185,12 +143,23 @@ export class AchievementsController {
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.achievementsService.remove(id);
   }
-}
+
+   @Post('admin/register-targets')
+  @UseGuards(PluginApiKeyGuard) // Защищаем эндпоинт ключом, как и другие внутренние эндпоинты
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Register achievable targets from a game plugin' })
+  registerTargets(@Body() registrationDto: RegisterTargetsDto) {
+    this.achievementsService.registerDynamicTargets(registrationDto);
+    // Мы не возвращаем данные, просто принимае м их
+  }
+} 
 --- END FILE: backend/src/achievements/achievements.controller.ts ---
 
 
 
 --- START FILE: backend/src/achievements/achievements.module.ts ---
+
+// backend/src/achievements/achievements.module.ts
 
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -203,6 +172,7 @@ import { AchievementProgress } from './entities/achievement-progress.entity';
   imports: [TypeOrmModule.forFeature([Achievement, AchievementProgress])],
   controllers: [AchievementsController],
   providers: [AchievementsService],
+  exports: [AchievementsService] // <-- ВОТ ЭТА СТРОКА РЕШИТ ПРОБЛЕМУ
 })
 export class AchievementsModule {}
 --- END FILE: backend/src/achievements/achievements.module.ts ---
@@ -219,10 +189,17 @@ import { CreateAchievementDto } from './dto/create-achievement.dto';
 import { UpdateAchievementDto } from './dto/update-achievement.dto';
 import { AchievementProgress } from './entities/achievement-progress.entity';
 import { ACHIEVEMENTS_CONFIG } from './achievements.config'; // [!] 1. Импортируем наш новый большой конфиг
+import * as fs from 'fs/promises';
+import { join } from 'path';
+import { RegisterTargetsDto } from './dto/register-targets.dto';
 
 @Injectable()
 export class AchievementsService {
   private readonly logger = new Logger(AchievementsService.name);
+  // Здесь будем хранить динамические цели в памяти
+  private dynamicTargets: Record<string, Record<string, string[]>> = {};
+  // Путь к файлу для кеширования целей
+  private readonly dynamicTargetsPath = join(__dirname, '..', 'dynamic-targets.json');
 
   constructor(
     @InjectRepository(Achievement)
@@ -230,9 +207,33 @@ export class AchievementsService {
     @InjectRepository(AchievementProgress)
     private progressRepository: Repository<AchievementProgress>,
   ) {
-    // [!] 3. Эта логика была в концепте, но теперь мы ее убираем,
-    // так как все ID уже есть в ACHIEVEMENTS_CONFIG.
-    // Логика с чтением файла txt понадобится, если списки станут слишком огромными для одного ts-файла.
+    // При запуске сервиса пытаемся загрузить цели из файла
+    this.loadDynamicTargetsFromFile();
+  }
+
+  async registerDynamicTargets(dto: RegisterTargetsDto): Promise<void> {
+    this.logger.log(`Registering targets from plugin: ${dto.pluginName}`);
+    this.dynamicTargets[dto.pluginName] = dto.targets;
+    await this.saveDynamicTargetsToFile();
+  }
+
+    private async saveDynamicTargetsToFile() {
+    try {
+      await fs.writeFile(this.dynamicTargetsPath, JSON.stringify(this.dynamicTargets, null, 2));
+    } catch (error) {
+      this.logger.error('Failed to save dynamic targets to file', error);
+    }
+  }
+
+  private async loadDynamicTargetsFromFile() {
+    try {
+      const data = await fs.readFile(this.dynamicTargetsPath, 'utf-8');
+      this.dynamicTargets = JSON.parse(data);
+      this.logger.log('Successfully loaded dynamic targets from file.');
+    } catch (error) {
+      // Это нормально, если файла еще нет при первом запуске
+      this.logger.warn('Dynamic targets file not found. Starting with an empty set.');
+    }
   }
 
   create(createAchievementDto: CreateAchievementDto): Promise<Achievement> {
@@ -253,8 +254,22 @@ export class AchievementsService {
   }
 
   // [!] 2. Теперь этот метод просто возвращает наш большой конфиг
-  getAchievementConfigData() {
-    return ACHIEVEMENTS_CONFIG;
+   getAchievementConfigData() {
+    // Создаем глубокую копию статического конфига, чтобы не изменять его
+    const mergedConfig = JSON.parse(JSON.stringify(ACHIEVEMENTS_CONFIG));
+
+    // Объединяем цели из всех зарегистрированных плагинов
+    for (const pluginName in this.dynamicTargets) {
+      const pluginTargets = this.dynamicTargets[pluginName];
+      for (const group in pluginTargets) {
+        if (!mergedConfig.targets.CUSTOM_API_TRIGGER[group]) {
+          mergedConfig.targets.CUSTOM_API_TRIGGER[group] = [];
+        }
+        mergedConfig.targets.CUSTOM_API_TRIGGER[group].push(...pluginTargets[group]);
+      }
+    }
+    
+    return mergedConfig;
   }
 
   async update(id: number, updateAchievementDto: UpdateAchievementDto): Promise<Achievement> {
@@ -332,6 +347,23 @@ export class CreateAchievementDto {
   conditions: Record<string, any>;
 }
 --- END FILE: backend/src/achievements/dto/create-achievement.dto.ts ---
+
+
+
+--- START FILE: backend/src/achievements/dto/register-targets.dto.ts ---
+
+// backend/src/achievements/dto/register-targets.dto.ts
+import { IsString, IsObject, IsNotEmpty } from 'class-validator';
+
+export class RegisterTargetsDto {
+  @IsString()
+  @IsNotEmpty()
+  pluginName: string; // Имя плагина-поставщика, например "VanillaAchievementTriggers"
+
+  @IsObject()
+  targets: Record<string, string[]>; // Объект с целями, например {"Mining": ["vanilla:break:DIRT", ...]}
+}
+--- END FILE: backend/src/achievements/dto/register-targets.dto.ts ---
 
 
 
@@ -1277,15 +1309,12 @@ export class OptionalJwtAuthGuard extends AuthGuard('jwt') {
 
 --- START FILE: backend/src/auth/guards/plugin-api-key.guard.ts ---
 
-// backend/src/auth/guards/plugin-api-key.guard.ts
-
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Observable } from 'rxjs';
 
 @Injectable()
 export class PluginApiKeyGuard implements CanActivate {
-  // --- НОВОЕ: Инициализируем Logger ---
   private readonly logger = new Logger(PluginApiKeyGuard.name);
 
   constructor(private readonly configService: ConfigService) {}
@@ -1295,15 +1324,15 @@ export class PluginApiKeyGuard implements CanActivate {
   ): boolean | Promise<boolean> | Observable<boolean> {
     const request = context.switchToHttp().getRequest();
     const providedKey = request.headers['x-api-key'];
+    
+    // Возвращаем чтение из конфига
     const validKey = this.configService.get<string>('PLUGIN_SECRET_KEY');
 
     if (!providedKey || providedKey !== validKey) {
-      // --- ИЗМЕНЕНО: Добавлен эмодзи ---
       this.logger.warn(`[DENIED] 🚫 Plugin access denied from IP: ${request.ip}. Reason: Invalid or missing API key.`);
       throw new UnauthorizedException('Invalid or missing API key for plugin');
     }
 
-    // --- ИЗМЕНЕНО: Добавлен эмодзи (на уровне verbose, чтобы не спамить в консоли) ---
     this.logger.verbose(`[GRANTED] 🔌 Plugin access granted to IP: ${request.ip}.`);
     return true;
   }
@@ -1446,6 +1475,9 @@ import { EditMessageDto } from '../messages/dto/edit-message.dto';
 import { DeleteMessageDto } from '../messages/dto/delete-message.dto';
 import { LinkingService } from '../linking/linking.service';
 import { ConfigService } from '@nestjs/config';
+// [!!!] ШАГ 1: ИМПОРТИРУЕМ НУЖНЫЕ СЕРВИС И DTO
+import { AchievementsService } from '../achievements/achievements.service';
+import { RegisterTargetsDto } from '../achievements/dto/register-targets.dto';
 
 // DTOs
 class LinkAccountDto {
@@ -1467,7 +1499,7 @@ class InGameMessageDto {
 
 @WebSocketGateway({
   cors: {
-    origin: /.*/, // Разрешаем ВСЕ источники с помощью регулярного выражения
+    origin: /.*/,
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -1482,13 +1514,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(
     private readonly messagesService: MessagesService,
-    @Inject(forwardRef(() => UsersService)) // <-- ИЗМЕНИТЬ ЭТУ СТРОКУ
+    @Inject(forwardRef(() => UsersService))
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
-    private readonly eventEmitter: EventEmitter2, // EventEmitter нужен для другой логики, так что оставляем
+    private readonly eventEmitter: EventEmitter2,
     private readonly friendshipsService: FriendshipsService,
     private readonly linkingService: LinkingService,
     private readonly configService: ConfigService,
+    // [!!!] ШАГ 2: ВНЕДРЯЕМ СЕРВИС АЧИВОК
+    private readonly achievementsService: AchievementsService,
   ) {
     const key = this.configService.get<string>('PLUGIN_SECRET_KEY');
     if (!key) {
@@ -1496,7 +1530,23 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
     this.pluginSecretKey = key;
   }
+  
+  // [!!!] ШАГ 3: ДОБАВЛЯЕМ НОВЫЙ ОБРАБОТЧИК
+  @SubscribeMessage('registerTargets')
+  handleRegisterTargets(
+    @MessageBody() data: RegisterTargetsDto,
+    @ConnectedSocket() client: Socket,
+  ): void {
+    // Убедимся, что это сообщение пришло от нашего плагина, а не от обычного пользователя
+    if (!client['isPlugin']) {
+        this.logger.warn(`[ACHIEVEMENT-REGISTER-DENIED] Попытка регистрации целей от не-плагина. Socket ID: ${client.id}`);
+        return;
+    }
+    this.logger.log(`[ACHIEVEMENT-REGISTER-WS] 🏆 Получены цели для ачивок от плагина '${data.pluginName}' через WebSocket.`);
+    this.achievementsService.registerDynamicTargets(data);
+  }
 
+  // ... весь остальной код ChatGateway остается без изменений ...
   async handleConnection(client: Socket) {
     const apiKey = client.handshake.headers['x-api-key'];
     if (apiKey && apiKey === this.pluginSecretKey) {
@@ -1581,7 +1631,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (recipientIsViewing) {
       this.logger.verbose(`Recipient ${recipient.id} is viewing chat with ${sender.id}, skipping notification.`);
     } else if (sender.id !== recipient.id) {
-      this.eventEmitter.emit('message.sent', { sender, recipient });
+       this.eventEmitter.emit('message.sent', { sender, recipient });
     }
 
     this.server.to(`user-${recipient.id}`).emit('newMessage', savedMessage);
@@ -1727,7 +1777,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @OnEvent('notification.created')
   handleNotificationCreated(payload: Notification) {
     if (payload && payload.user && payload.user.id) {
-      const room = `user-${payload.user.id}`;
+       const room = `user-${payload.user.id}`;
       this.logger.verbose(`[NOTIFY-PUSH] ✨ Pushing notification (Type: '${payload.type}') to User ID: ${payload.user.id}`);
       this.server.to(room).emit('newNotification', payload);
     } else {
@@ -1781,14 +1831,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Передаём данные в UsersService для обновления БД сайта
     await this.usersService.updateRankFromGameEvent(data.minecraftUuid, data.newRankSystemName);
   }
-
-  
 }
 --- END FILE: backend/src/chat/chat.gateway.ts ---
 
 
 
 --- START FILE: backend/src/chat/chat.module.ts ---
+
+// backend/src/chat/chat.module.ts
 
 import { Module } from '@nestjs/common';
 import { ChatGateway } from './chat.gateway';
@@ -1798,6 +1848,8 @@ import { UsersModule } from '../users/users.module';
 import { WsGuard } from '../auth/guards/ws.guard';
 import { FriendshipsModule } from '../friendships/friendships.module';
 import { LinkingModule } from '../linking/linking.module';
+// [!!!] ДОБАВЛЯЕМ ИМПОРТ
+import { AchievementsModule } from '../achievements/achievements.module';
 
 @Module({
   imports: [
@@ -1806,6 +1858,7 @@ import { LinkingModule } from '../linking/linking.module';
     UsersModule,
     FriendshipsModule,
     LinkingModule,
+    AchievementsModule, // [!!!] ДОБАВЛЯЕМ В МАССИВ
   ],
   providers: [ChatGateway, WsGuard],
   exports: [ChatGateway],
@@ -2218,13 +2271,14 @@ import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus, Logger } from 
 import { PluginApiKeyGuard } from '../auth/guards/plugin-api-key.guard';
 import { EventsService } from './events.service';
 import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { UsersService } from 'src/users/users.service';
 
 @ApiTags('Internal')
 @Controller('internal')
 export class EventsController {
   private readonly logger = new Logger(EventsController.name);
 
-  constructor(private readonly eventsService: EventsService) {}
+  constructor(private readonly eventsService: EventsService, private readonly usersService: UsersService ) {}
 
   @Post('event-ingest')
   @UseGuards(PluginApiKeyGuard)
@@ -2238,12 +2292,25 @@ export class EventsController {
     });
     return { message: 'Event accepted for processing.' };
   }
+
+    @Post('rank-sync')
+  @UseGuards(PluginApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Endpoint for receiving rank updates from a game server.' })
+  @ApiHeader({ name: 'x-api-key', required: true })
+  async syncRank(@Body() rankSyncDto: { minecraftUuid: string; newRankSystemName: string }) {
+    this.logger.log(`[RANK-SYNC-HTTP] 🔄 Received rank update for UUID ${rankSyncDto.minecraftUuid} to rank "${rankSyncDto.newRankSystemName}"`);
+    await this.usersService.updateRankFromGameEvent(rankSyncDto.minecraftUuid, rankSyncDto.newRankSystemName);
+    return { message: 'Rank sync accepted.' };
+  }
 }
 --- END FILE: backend/src/events/events.controller.ts ---
 
 
 
 --- START FILE: backend/src/events/events.module.ts ---
+
+// backend/src/events/events.module.ts
 
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -2254,9 +2321,13 @@ import { AchievementProgress } from '../achievements/entities/achievement-progre
 import { User } from '../users/entities/user.entity';
 import { PendingCommand } from '../shop/entities/pending-command.entity';
 import { PluginApiKeyGuard } from '../auth/guards/plugin-api-key.guard';
+import { UsersModule } from 'src/users/users.module'; // [!] ДОБАВЛЕНО
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Achievement, AchievementProgress, User, PendingCommand])],
+  imports: [
+    TypeOrmModule.forFeature([Achievement, AchievementProgress, User, PendingCommand]),
+    UsersModule, // [!] ДОБАВЛЕНО
+  ],
   controllers: [EventsController],
   providers: [EventsService, PluginApiKeyGuard],
 })
@@ -10930,7 +11001,6 @@ function AdminPage() {
             // --- СОЗДАЕМ PAYLOAD СО ВСЕМИ ДАННЫМИ ИЗ МОДАЛЬНОГО ОКНА ---
             const payload = {
                 rank_id: selectedRankId,
-                is_verified_admin: isAdminVerified,
                 is_verified_youtuber: isYoutuberVerified,
             };
 
@@ -15842,9 +15912,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 
-import java.util.List;
-
 import java.io.IOException;
+import java.util.List;
 
 public class ApiClient {
 
@@ -15860,36 +15929,15 @@ public class ApiClient {
         this.server = server;
         this.logger = logger;
         this.httpClient = new OkHttpClient();
-
-        this.baseUrl = "http://localhost:3001"; // Убедись, что здесь порт 3001!
-        this.apiKey = "your_super_long_and_random_plugin_secret_key";
+        this.baseUrl = "http://localhost:3001"; // [!] Исправленный порт
+        this.apiKey = "SuperSecretKeyForFlameWallNoMistakes123";
+        logger.info("✅ [API] ApiClient инициализирован. Адрес бэкенда: {}", this.baseUrl);
     }
 
-    public void sendEvent(JSONObject payload) {
-        RequestBody body = RequestBody.create(payload.toString(), MediaType.get("application/json; charset=utf-8"));
-        Request request = new Request.Builder()
-                .url(baseUrl + "/api/internal/event-ingest")
-                .header("x-api-key", apiKey)
-                .post(body)
-                .build();
-
-        httpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NotNull Call call, @NotNull IOException e) {
-                logger.error("Failed to send event to backend", e);
-            }
-
-            @Override
-            public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
-                if (!response.isSuccessful()) {
-                    logger.warn("Backend responded with an error for event. Code: " + response.code());
-                }
-                response.close();
-            }
-        });
-    }
+    // --- МЕТОДЫ ДЛЯ ДРУЗЕЙ (ВОССТАНОВЛЕНЫ И УЛУЧШЕНЫ) ---
 
     public void sendFriendRequest(Player sender, String receiverName) {
+        logger.info("🤝 [API] Игрок {} отправляет запрос в друзья игроку {}", sender.getUsername(), receiverName);
         try {
             JSONObject jsonBody = new JSONObject();
             jsonBody.put("requesterUuid", sender.getUniqueId().toString());
@@ -15907,6 +15955,7 @@ public class ApiClient {
     }
 
     public void removeFriend(Player sender, String friendToRemoveName) {
+        logger.info("💔 [API] Игрок {} удаляет из друзей {}", sender.getUsername(), friendToRemoveName);
         try {
             JSONObject jsonBody = new JSONObject();
             jsonBody.put("removerUuid", sender.getUniqueId().toString());
@@ -15923,51 +15972,8 @@ public class ApiClient {
         }
     }
 
-    public void getFriendsList(Player sender) {
-        Request request = new Request.Builder()
-                .url(baseUrl + "/api/friendships/from-plugin/list/" + sender.getUniqueId().toString())
-                .header("x-api-key", apiKey)
-                .get()
-                .build();
-        httpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NotNull Call call, @NotNull IOException e) {
-                handleApiFailure(sender, e);
-            }
-
-            @Override
-            public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
-                if (!response.isSuccessful()) {
-                    handleApiError(sender, response);
-                    return;
-                }
-                try (ResponseBody responseBody = response.body()) {
-                    JSONArray friendsArray = new JSONArray(responseBody.string());
-                    server.getScheduler().buildTask(plugin, () -> {
-                        sender.sendMessage(Component.text("--- Your Friends (" + friendsArray.length() + ") ---").color(NamedTextColor.GOLD));
-                        if (friendsArray.length() == 0) {
-                            sender.sendMessage(Component.text("Your friends list is empty. Use /flame friend add <player>").color(NamedTextColor.GRAY));
-                        } else {
-                            for (int i = 0; i < friendsArray.length(); i++) {
-                                //  <<< --- ВОТ ИСПРАВЛЕНИЕ --- >>>
-                                try {
-                                    sender.sendMessage(Component.text("- " + friendsArray.getString(i)).color(NamedTextColor.AQUA));
-                                } catch (JSONException e) {
-                                    logger.warn("Could not get friend name from JSON array at index " + i, e);
-                                }
-                                // <<< --- КОНЕЦ ИСПРАВЛЕНИЯ --- >>>
-                            }
-                        }
-                    }).schedule();
-                } catch (Exception e) {
-                    logger.error("Failed to parse friends list JSON from API", e);
-                    runOnMainThread(() -> sender.sendMessage(Component.text("Error: Could not read response from the website.").color(NamedTextColor.RED)));
-                }
-            }
-        });
-    }
-
     public void acceptFriendRequest(Player sender, int requestId) {
+        logger.info("✅ [API] Игрок {} принимает запрос на дружбу #{}", sender.getUsername(), requestId);
         try {
             JSONObject jsonBody = new JSONObject();
             jsonBody.put("responderUuid", sender.getUniqueId().toString());
@@ -15985,6 +15991,7 @@ public class ApiClient {
     }
 
     public void denyFriendRequest(Player sender, int requestId) {
+        logger.info("❌ [API] Игрок {} отклоняет запрос на дружбу #{}", sender.getUsername(), requestId);
         try {
             JSONObject jsonBody = new JSONObject();
             jsonBody.put("responderUuid", sender.getUniqueId().toString());
@@ -16001,27 +16008,213 @@ public class ApiClient {
         }
     }
 
+
+    // --- ОСТАЛЬНЫЕ МЕТОДЫ (С АЧИВКАМИ, СОБЫТИЯМИ, МАГАЗИНОМ) ---
+
+    public void registerTargets(JSONObject payload) {
+        logger.info("➡️ [API] Попытка регистрации целей (targets) для ачивок...");
+        logger.debug("➡️ [API] Payload: {}", payload.toString()); // Используем debug, чтобы не спамить в консоль
+
+        RequestBody body = RequestBody.create(payload.toString(), MediaType.get("application/json; charset=utf-8"));
+        Request request = new Request.Builder()
+                .url(baseUrl + "/api/achievements/admin/register-targets")
+                .header("x-api-key", apiKey)
+                .post(body)
+                .build();
+
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                logger.error("❌ [API] Не удалось зарегистрировать цели. Ошибка сети: {}", e.getMessage());
+            }
+
+            @Override
+            public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
+                if (response.isSuccessful()) {
+                    logger.info("✅ [API] Цели для ачивок успешно зарегистрированы на бэкенде!");
+                } else {
+                    try (ResponseBody responseBody = response.body()) {
+                        logger.warn("❌ [API] Бэкенд ответил ошибкой при регистрации целей. Код: {}, Ответ: {}", response.code(), responseBody != null ? responseBody.string() : "null");
+                    }
+                }
+            }
+        });
+    }
+
+    public void sendEvent(JSONObject payload) {
+        logger.info("➡️ [API] Отправка игрового события на бэкенд: {}", payload.toString());
+        // ... (остальной код метода без изменений)
+        RequestBody body = RequestBody.create(payload.toString(), MediaType.get("application/json; charset=utf-8"));
+        Request request = new Request.Builder()
+                .url(baseUrl + "/api/internal/event-ingest")
+                .header("x-api-key", apiKey)
+                .post(body)
+                .build();
+
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                logger.error("❌ [API] Не удалось отправить событие на бэкенд. Ошибка сети:", e);
+            }
+
+            @Override
+            public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
+                if (!response.isSuccessful()) {
+                    logger.warn("❌ [API] Бэкенд ответил ошибкой на игровое событие. Код: {}", response.code());
+                } else {
+                    logger.info("✅ [API] Игровое событие успешно принято бэкендом.");
+                }
+                response.close();
+            }
+        });
+    }
+
+    public void getFriendsList(Player sender) {
+        logger.info("➡️ [API] Запрос списка друзей для {}", sender.getUsername());
+        // ... (остальной код метода без изменений)
+        Request request = new Request.Builder()
+                .url(baseUrl + "/api/friendships/from-plugin/list/" + sender.getUniqueId().toString())
+                .header("x-api-key", apiKey)
+                .get()
+                .build();
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                handleApiFailure(sender, e);
+            }
+
+            @Override
+            public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
+                if (!response.isSuccessful()) {
+                    handleApiError(sender, response);
+                    return;
+                }
+                logger.info("✅ [API] Успешно получили список друзей для {}", sender.getUsername());
+                try (ResponseBody responseBody = response.body()) {
+                    JSONArray friendsArray = new JSONArray(responseBody.string());
+                    server.getScheduler().buildTask(plugin, () -> {
+                        sender.sendMessage(Component.text("--- Your Friends (" + friendsArray.length() + ") ---").color(NamedTextColor.GOLD));
+                        if (friendsArray.length() == 0) {
+                            sender.sendMessage(Component.text("Your friends list is empty. Use /flame friend add <player>").color(NamedTextColor.GRAY));
+                        } else {
+                            for (int i = 0; i < friendsArray.length(); i++) {
+                                try {
+                                    sender.sendMessage(Component.text("- " + friendsArray.getString(i)).color(NamedTextColor.AQUA));
+                                } catch (JSONException e) {
+                                    logger.warn("Could not get friend name from JSON array at index " + i, e);
+                                }
+                            }
+                        }
+                    }).schedule();
+                } catch (Exception e) {
+                    logger.error("❌ [API] Не удалось разобрать JSON со списком друзей", e);
+                    runOnMainThread(() -> sender.sendMessage(Component.text("Error: Could not read response from the website.").color(NamedTextColor.RED)));
+                }
+            }
+        });
+    }
+
+    public void fetchAndExecutePendingCommands() {
+        // ... (код метода с логами из предыдущего ответа) ...
+        logger.info("🛒 [Shop] Запрашиваем команды в ожидании от сайта...");
+        Request request = new Request.Builder()
+                .url(baseUrl + "/api/shop/pending-commands")
+                .header("x-api-key", apiKey)
+                .get()
+                .build();
+
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                logger.warn("🛒 [Shop] Не удалось получить команды: " + e.getMessage());
+            }
+
+            @Override
+            public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
+                if (!response.isSuccessful()) {
+                    logger.warn("🛒 [Shop] Не удалось получить команды, код ответа API: " + response.code());
+                    response.close();
+                    return;
+                }
+                try (ResponseBody body = response.body()) {
+                    JSONArray commands = new JSONArray(body.string());
+                    if (commands.length() > 0) {
+                        logger.info("🛒 [Shop] Найдено {} команд в ожидании. Обработка...", commands.length());
+                        plugin.processPendingCommands(commands);
+                    } else {
+                        // Убираем этот лог, чтобы не спамить каждую минуту
+                        // logger.info("🛒 [Shop] Нет команд в ожидании.");
+                    }
+                } catch (Exception e) {
+                    logger.error("🛒 [Shop] Не удалось обработать команды в ожидании", e);
+                }
+            }
+        });
+    }
+
+    public void clearExecutedCommands(List<Integer> ids) {
+        // ... (код метода с логами из предыдущего ответа) ...
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        logger.info("🛒 [Shop] Подтверждаем выполнение {} команд на сайте...", ids.size());
+        try {
+            JSONObject jsonBody = new JSONObject();
+            jsonBody.put("commandIds", new JSONArray(ids));
+            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
+
+            Request request = new Request.Builder()
+                    .url(baseUrl + "/api/shop/clear-pending-commands")
+                    .header("x-api-key", apiKey)
+                    .post(body)
+                    .build();
+
+            httpClient.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                    logger.warn("🛒 [Shop] Не удалось подтвердить выполненные команды: " + e.getMessage());
+                }
+
+                @Override
+                public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
+                    if (response.isSuccessful()) {
+                        logger.info("🛒 [Shop] Успешно подтверждено выполнение {} команд.", ids.size());
+                    } else {
+                        logger.warn("🛒 [Shop] Не удалось подтвердить выполненные команды, код ответа API: " + response.code());
+                    }
+                    response.close();
+                }
+            });
+        } catch (Exception e) {
+            logger.error("🛒 [Shop] Не удалось создать запрос для очистки выполненных команд", e);
+        }
+    }
+
+    // --- ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ДЛЯ ОБРАБОТКИ ОТВЕТОВ ---
+
     private void runOnMainThread(Runnable task) {
         server.getScheduler().buildTask(plugin, task).schedule();
     }
 
     private void handlePluginError(Player sender, String logMessage, Exception e) {
-        logger.error(logMessage, e);
+        logger.error("❗ [Plugin Error] " + logMessage, e);
         runOnMainThread(() -> sender.sendMessage(Component.text("An internal plugin error occurred.").color(NamedTextColor.RED)));
     }
 
     private void handleApiFailure(Player player, IOException e) {
-        logger.error("Failed to send API request", e);
+        logger.error("❌ [API] Не удалось отправить запрос для {}: {}", player.getUsername(), e.getMessage());
         runOnMainThread(() -> player.sendMessage(Component.text("Error: Could not connect to the website API.").color(NamedTextColor.RED)));
     }
 
     private void handleApiError(Player player, Response response) {
         try (ResponseBody responseBody = response.body()) {
-            JSONObject errorJson = new JSONObject(responseBody.string());
+            String errorBody = responseBody != null ? responseBody.string() : "No error body";
+            JSONObject errorJson = new JSONObject(errorBody);
             String message = errorJson.optString("message", "An unknown error occurred (" + response.code() + ")");
+            logger.warn("❌ [API] Ошибка от API для {}. Код: {}. Сообщение: {}", player.getUsername(), response.code(), message);
             runOnMainThread(() -> player.sendMessage(Component.text("Error: " + message).color(NamedTextColor.RED)));
         } catch (Exception e) {
-            logger.warn("Could not parse error response from API.", e);
+            logger.warn("❌ [API] Не удалось разобрать ответ с ошибкой от API.", e);
             runOnMainThread(() -> player.sendMessage(Component.text("An unknown error occurred while processing the server response.").color(NamedTextColor.RED)));
         }
     }
@@ -16049,75 +16242,6 @@ public class ApiClient {
             }
         }
     }
-
-    public void fetchAndExecutePendingCommands() {
-        Request request = new Request.Builder()
-                .url(baseUrl + "/api/shop/pending-commands")
-                .header("x-api-key", apiKey)
-                .get()
-                .build();
-
-        httpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NotNull Call call, @NotNull IOException e) {
-                logger.warn("Could not fetch pending commands from website: " + e.getMessage());
-            }
-
-            @Override
-            public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
-                if (!response.isSuccessful()) {
-                    logger.warn("Failed to fetch pending commands, API response code: " + response.code());
-                    response.close();
-                    return;
-                }
-                try (ResponseBody body = response.body()) {
-                    JSONArray commands = new JSONArray(body.string());
-                    if (commands.length() > 0) {
-                        logger.info("Found " + commands.length() + " pending command(s) from website. Processing...");
-                        plugin.processPendingCommands(commands);
-                    }
-                } catch (Exception e) {
-                    logger.error("Failed to process pending commands", e);
-                }
-            }
-        });
-    }
-    public void clearExecutedCommands(List<Integer> ids) {
-        if (ids == null || ids.isEmpty()) {
-            return;
-        }
-        try {
-            JSONObject jsonBody = new JSONObject();
-            jsonBody.put("commandIds", new JSONArray(ids));
-            RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.get("application/json; charset=utf-8"));
-
-            Request request = new Request.Builder()
-                    .url(baseUrl + "/api/shop/clear-pending-commands")
-                    .header("x-api-key", apiKey)
-                    .post(body)
-                    .build();
-
-            // Отправляем запрос и логируем результат, не дожидаясь ответа
-            httpClient.newCall(request).enqueue(new Callback() {
-                @Override
-                public void onFailure(@NotNull Call call, @NotNull IOException e) {
-                    logger.warn("Failed to confirm executed commands to website: " + e.getMessage());
-                }
-
-                @Override
-                public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
-                    if (response.isSuccessful()) {
-                        logger.info("Successfully confirmed execution of " + ids.size() + " command(s).");
-                    } else {
-                        logger.warn("Failed to confirm executed commands, API response code: " + response.code());
-                    }
-                    response.close();
-                }
-            });
-        } catch (Exception e) {
-            logger.error("Failed to build request for clearing executed commands", e);
-        }
-    }
 }
 --- END FILE: FlameWallBridge/FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/ApiClient.java ---
 
@@ -16125,8 +16249,10 @@ public class ApiClient {
 
 --- START FILE: FlameWallBridge/FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/command/FlameCommand.java ---
 
+// src/main/java/com/flamewall/proxybridge/command/FlameCommand.java
 package com.flamewall.proxybridge.command;
 
+// ... импорты остаются ...
 import com.flamewall.proxybridge.ApiClient;
 import com.flamewall.proxybridge.FlameWallProxyBridge;
 import com.flamewall.proxybridge.manager.PrivateMessageManager;
@@ -16148,8 +16274,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-public class FlameCommand implements SimpleCommand {
 
+public class FlameCommand implements SimpleCommand {
+    // ... поля класса без изменений ...
     private final FlameWallProxyBridge plugin;
     private final PrivateMessageManager messageManager;
     private final ApiClient apiClient;
@@ -16173,6 +16300,8 @@ public class FlameCommand implements SimpleCommand {
 
         Player player = (Player) invocation.source();
         String[] args = invocation.arguments();
+
+        logger.info("👨‍💻 [Command] Игрок {} выполнил команду: /flame {}", player.getUsername(), String.join(" ", args));
 
         if (args.length == 0) {
             sendHelpMessage(player);
@@ -16199,6 +16328,11 @@ public class FlameCommand implements SimpleCommand {
         }
     }
 
+    // Остальной код этого файла остается без изменений.
+    // Если хочешь, можно добавить логи в каждый `case` внутри handleFriendCommand,
+    // например: logger.info("🤝 [Friend] {} добавляет в друзья {}", player.getUsername(), actionArgs[0]);
+
+    // ... (весь остальной код файла) ...
     private void handleFriendCommand(Player player, String[] args) {
         if (args.length == 0) {
             player.sendMessage(Component.text("Usage: /flame friend <add|remove|list|accept|deny>").color(NamedTextColor.RED));
@@ -16453,17 +16587,9 @@ public class LinkCommand implements SimpleCommand {
 
 --- START FILE: FlameWallBridge/FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/FlameWallProxyBridge.java ---
 
-// src/main/java/com/flamewall/proxybridge/FlameWallProxyBridge.java
-
+// FlameWallBridge/src/main/java/com/flamewall/proxybridge/FlameWallProxyBridge.java
 package com.flamewall.proxybridge;
 
-
-import com.velocitypowered.api.plugin.annotation.DataDirectory; // <-- Убедитесь, что этот импорт есть
-import java.nio.file.Path; // <-- И этот тоже
-import com.flamewall.proxybridge.command.FlameCommand;
-import com.flamewall.proxybridge.command.LinkCommand;
-import com.flamewall.proxybridge.manager.DatabaseManager;
-import com.flamewall.proxybridge.manager.PrivateMessageManager;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
 import com.google.inject.Inject;
@@ -16493,17 +16619,19 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
-
 import com.velocitypowered.api.event.connection.PostLoginEvent;
+import com.flamewall.proxybridge.command.FlameCommand;
+import com.flamewall.proxybridge.command.LinkCommand;
+import com.flamewall.proxybridge.manager.PrivateMessageManager;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
-import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+
 
 @Plugin(
         id = "flamewallproxybridge",
@@ -16513,20 +16641,15 @@ import java.util.concurrent.TimeUnit;
         authors = {"Sknery"}
 )
 public class FlameWallProxyBridge {
-
     private final ProxyServer server;
     private final Logger logger;
     private Socket socket;
     private ApiClient apiClient;
-    private DatabaseManager databaseManager;
     private final Path dataDirectory;
-
     private PrivateMessageManager messageManager;
     private final Map<UUID, Map<String, Integer>> pendingRequests = new ConcurrentHashMap<>();
-    private ScheduledTask pendingCommandsTask; // <<< НОВОЕ ПОЛЕ
-
+    private ScheduledTask pendingCommandsTask;
     private static final ChannelIdentifier FLAMEWALL_CHANNEL = MinecraftChannelIdentifier.create("flamewall", "main");
-
 
     @Inject
     public FlameWallProxyBridge(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
@@ -16535,107 +16658,115 @@ public class FlameWallProxyBridge {
         this.dataDirectory = dataDirectory;
     }
 
-    @Subscribe
-    public void onProxyShutdown(ProxyShutdownEvent event) {
-        if (databaseManager != null) {
-            databaseManager.close();
-        }
-        if (socket != null) {
-            socket.disconnect();
-        }
-    }
-
-    @Subscribe
-    public void onProxyInitialization(ProxyInitializeEvent event) {
-        this.apiClient = new ApiClient(this, server, logger);
-        this.messageManager = new PrivateMessageManager();
-        this.databaseManager = new DatabaseManager(dataDirectory, logger);
-
-        CommandManager commandManager = server.getCommandManager();
-        CommandMeta flameMeta = commandManager.metaBuilder("flame").aliases("fw").build();
-        commandManager.register(flameMeta, new FlameCommand(this, server, logger, messageManager));
-        CommandMeta linkMeta = commandManager.metaBuilder("link").build();
-        server.getChannelRegistrar().register(FLAMEWALL_CHANNEL);
-
-        commandManager.register(linkMeta, new LinkCommand(this));
-        connectToWebSocket();
-
-        this.pendingCommandsTask = server.getScheduler()
-                .buildTask(this, () -> apiClient.fetchAndExecutePendingCommands())
-                .repeat(1, TimeUnit.MINUTES) // Проверять каждые 5 минут
-                .delay(1, TimeUnit.MINUTES)  // Начать через 1 минуту после запуска сервера
-                .schedule();
-
-        logger.info("Pending command scheduler has been started.");
-        logger.info("FlameWallProxyBridge plugin has been enabled!");
-    }
-
     public ApiClient getApiClient() {
         return apiClient;
     }
 
     @Subscribe
-    public void onPluginMessage(@NotNull PluginMessageEvent event) {
-        if (!event.getIdentifier().getId().equals("flamewall:main")) return;
+    public void onProxyInitialization(ProxyInitializeEvent event) {
+        logger.info("🚀 [Startup] Инициализация FlameWallProxyBridge...");
+        this.apiClient = new ApiClient(this, server, logger);
+        this.messageManager = new PrivateMessageManager();
+        logger.info("🔧 [Startup] Регистрация команд...");
+        CommandManager commandManager = server.getCommandManager();
+        CommandMeta flameMeta = commandManager.metaBuilder("flame").aliases("fw").build();
+        commandManager.register(flameMeta, new FlameCommand(this, server, logger, messageManager));
+        CommandMeta linkMeta = commandManager.metaBuilder("link").build();
+        commandManager.register(linkMeta, new LinkCommand(this));
+        logger.info("🔧 [Startup] Регистрация каналов связи...");
+        server.getChannelRegistrar().register(FLAMEWALL_CHANNEL);
+        connectToWebSocket();
+        logger.info("⏰ [Startup] Запуск планировщика для проверки команд магазина...");
+        this.pendingCommandsTask = server.getScheduler()
+                .buildTask(this, () -> apiClient.fetchAndExecutePendingCommands())
+                .repeat(1, TimeUnit.MINUTES)
+                .delay(1, TimeUnit.MINUTES)
+                .schedule();
+        logger.info("✅ [Startup] FlameWallProxyBridge успешно запущен!");
+    }
 
-        // Определяем, откуда пришло сообщение - от игрока на каком-то сервере
-        if (!(event.getSource() instanceof ServerConnection)) return;
+    @Subscribe
+    public void onProxyShutdown(ProxyShutdownEvent event) {
+        logger.info("🔌 [Shutdown] Отключаем прокси-плагин...");
+        if (pendingCommandsTask != null) {
+            pendingCommandsTask.cancel();
+            logger.info("⏰ [Shutdown] Планировщик команд остановлен.");
+        }
+        if (socket != null) {
+            socket.disconnect();
+            logger.info("🔌 [Shutdown] WebSocket соединение разорвано.");
+        }
+    }
+
+    @Subscribe
+    public void onPluginMessage(@NotNull PluginMessageEvent event) {
+        // Эта проверка должна стоять первой!
+        if (!event.getIdentifier().getId().equals("flamewall:main")) {
+            return;
+        }
+
+        if (!(event.getSource() instanceof ServerConnection)) {
+            // Игнорируем сообщения не от игровых серверов
+            return;
+        }
 
         ServerConnection serverConnection = (ServerConnection) event.getSource();
         String serverName = serverConnection.getServerInfo().getName();
+        logger.info("✉️ [PluginMsg] Получено сообщение от сервера: {}", serverName);
 
         try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(event.getData()))) {
             String subChannel = in.readUTF();
+            logger.info("✉️ [PluginMsg] Под-канал: {}", subChannel);
 
-            if (subChannel.equals("GameEvent")) {
+            if ("RegisterTargets".equals(subChannel)) {
+                String payloadString = in.readUTF();
+                logger.info("✉️ [PluginMsg] Получен payload для регистрации целей: {}", payloadString);
+                JSONObject payload = new JSONObject(payloadString);
+                sendJsonPayload("registerTargets", payload);
+                logger.info("✅ [PluginMsg] Успешно отправили payload для регистрации целей через WebSocket.");
+            } else if ("GameEvent".equals(subChannel)) {
                 String playerUuid = in.readUTF();
                 String eventType = in.readUTF();
                 String eventDataJson = in.readUTF();
-
+                logger.info("✉️ [PluginMsg] Получено игровое событие: Player={}, Type={}, Data={}", playerUuid, eventType, eventDataJson);
                 JSONObject payload = new JSONObject();
                 payload.put("eventType", eventType);
                 payload.put("playerUuid", playerUuid);
                 payload.put("serverName", serverName);
                 payload.put("eventData", new JSONObject(eventDataJson));
-
-                if (socket != null && socket.connected()) {
+                if (apiClient != null) {
                     apiClient.sendEvent(payload);
-                } else {
-                    databaseManager.queueEvent(payload.toString());
                 }
-            } else if (subChannel.equals("RankSync")) {
-                // Логика RankSync остается, но теперь тоже использует serverName
             }
-        } catch (IOException | JSONException e) {
-            logger.error("Failed to read plugin message from server " + serverName, e);
+        } catch (Exception e) {
+            logger.error("❌ [PluginMsg] Не удалось обработать сообщение от сервера " + serverName, e);
         }
     }
 
+    // ... остальной код класса FlameWallProxyBridge без изменений ...
 
-    // <<< НОВЫЙ СЛУШАТЕЛЬ ВХОДА ИГРОКА >>>
     @Subscribe
     public void onPlayerJoin(PostLoginEvent event) {
+        logger.info("👤 [Status] Игрок {} зашел на сервер.", event.getPlayer().getUsername());
         sendStatusUpdate(event.getPlayer(), true);
     }
 
-    // <<< НОВЫЙ СЛУШАТЕЛЬ ВЫХОДА ИГРОКА >>>
     @Subscribe
     public void onPlayerQuit(DisconnectEvent event) {
-        // При выходе игрока, чистим его запросы, чтобы они не копились вечно
+        logger.info("👤 [Status] Игрок {} покинул сервер.", event.getPlayer().getUsername());
         pendingRequests.remove(event.getPlayer().getUniqueId());
         sendStatusUpdate(event.getPlayer(), false);
     }
 
-    // <<< НОВЫЙ МЕТОД ДЛЯ ОТПРАВКИ СТАТУСА >>>
     private void sendStatusUpdate(Player player, boolean isOnline) {
         try {
             JSONObject payload = new JSONObject();
             payload.put("minecraftUuid", player.getUniqueId().toString());
             payload.put("isOnline", isOnline);
+            logger.info("➡️ [WS] Отправка статуса для {}: {}", player.getUsername(), payload.toString());
             sendJsonPayload("minecraftPlayerStatus", payload);
-            logger.info("Sent status update for " + player.getUsername() + ": " + (isOnline ? "ONLINE" : "OFFLINE"));
-        } catch (Exception e) {
-            logger.error("Could not send player status update for " + player.getUsername(), e);
+        } catch (JSONException e) {
+            logger.error("❌ [WS] Не удалось создать JSON для обновления статуса игрока " + player.getUsername(), e);
         }
     }
 
@@ -16647,16 +16778,16 @@ public class FlameWallProxyBridge {
         if (socket != null && socket.connected()) {
             socket.emit(eventName, payload);
         } else {
-            logger.warn("WebSocket is not connected. Cannot send data for event: " + eventName);
+            logger.warn("🔌 [WS] WebSocket не подключен. Не удалось отправить событие: {}", eventName);
         }
     }
 
     private void connectToWebSocket() {
         try {
             String url = "http://localhost:3001";
-            String apiKey = "your_super_long_and_random_plugin_secret_key";
+            String apiKey = "SuperSecretKeyForFlameWallNoMistakes123";
             if (apiKey == null || apiKey.isEmpty()) {
-                logger.error("CRITICAL: plugin-secret-key is not set! Plugin will not work.");
+                logger.error("🛑 CRITICAL: plugin-secret-key не установлен! Плагин не будет работать.");
                 return;
             }
             Map<String, List<String>> headers = new HashMap<>();
@@ -16666,115 +16797,60 @@ public class FlameWallProxyBridge {
                     .setTransports(new String[]{"websocket"})
                     .build();
             socket = IO.socket(URI.create(url), options);
-            socket.on(Socket.EVENT_CONNECT, args -> logger.info("Successfully connected to the website backend via WebSocket!"));
-            socket.on(Socket.EVENT_DISCONNECT, args -> logger.warn("Disconnected from website backend."));
-            socket.on(Socket.EVENT_CONNECT_ERROR, args -> logger.error("Connection error: " + (args.length > 0 ? args[0] : "Unknown error")));
+            socket.on(Socket.EVENT_CONNECT, args -> logger.info("✅ [WS] Успешно подключились к бэкенду сайта!"));
+            socket.on(Socket.EVENT_DISCONNECT, args -> logger.warn("🔌 [WS] Отключились от бэкенда сайта. Причина: {}", args.length > 0 ? args[0] : "неизвестно"));
+            socket.on(Socket.EVENT_CONNECT_ERROR, args -> logger.error("❌ [WS] Ошибка подключения к WebSocket: {}", args.length > 0 ? args[0] : "неизвестно"));
             socket.on("incomingFriendRequest", args -> {
+                logger.info("💌 [WS] Получен входящий запрос на дружбу от сайта.");
                 if (args.length > 0 && args[0] instanceof JSONObject) {
                     JSONObject data = (JSONObject) args[0];
                     try {
                         UUID receiverUuid = UUID.fromString(data.getString("receiverUuid"));
                         String requesterName = data.getString("requesterName");
                         int requestId = data.getInt("requestId");
-
                         pendingRequests.computeIfAbsent(receiverUuid, k -> new HashMap<>()).put(requesterName.toLowerCase(), requestId);
-
                         server.getPlayer(receiverUuid).ifPresent(receiver -> {
                             receiver.sendMessage(Component.text("------------------------------------------").color(NamedTextColor.GOLD));
-                            receiver.sendMessage(
-                                    Component.text("Player ").color(NamedTextColor.YELLOW)
-                                            .append(Component.text(requesterName, NamedTextColor.WHITE))
-                                            .append(Component.text(" wants to be your friend!", NamedTextColor.YELLOW))
-                            );
-
-                            Component acceptButton = Component.text("[ACCEPT]", NamedTextColor.GREEN)
-                                    .clickEvent(ClickEvent.runCommand("/flame friend accept " + requesterName))
-                                    .hoverEvent(HoverEvent.showText(Component.text("Click to accept " + requesterName)));
-
-                            Component denyButton = Component.text("[DENY]", NamedTextColor.RED)
-                                    .clickEvent(ClickEvent.runCommand("/flame friend deny " + requesterName))
-                                    .hoverEvent(HoverEvent.showText(Component.text("Click to deny " + requesterName)));
-
+                            receiver.sendMessage(Component.text("Player ").color(NamedTextColor.YELLOW).append(Component.text(requesterName, NamedTextColor.WHITE)).append(Component.text(" wants to be your friend!", NamedTextColor.YELLOW)));
+                            Component acceptButton = Component.text("[ACCEPT]", NamedTextColor.GREEN).clickEvent(ClickEvent.runCommand("/flame friend accept " + requesterName)).hoverEvent(HoverEvent.showText(Component.text("Click to accept " + requesterName)));
+                            Component denyButton = Component.text("[DENY]", NamedTextColor.RED).clickEvent(ClickEvent.runCommand("/flame friend deny " + requesterName)).hoverEvent(HoverEvent.showText(Component.text("Click to deny " + requesterName)));
                             receiver.sendMessage(Component.text("    ").append(acceptButton).append(Component.text("    ")).append(denyButton));
                             receiver.sendMessage(Component.text("------------------------------------------").color(NamedTextColor.GOLD));
                         });
-                    } catch (Exception e) {
-                        logger.error("Could not parse incomingFriendRequest from backend.", e);
+                    } catch (JSONException e) {
+                        logger.error("❌ [WS] Не удалось разобрать JSON 'incomingFriendRequest'", e);
                     }
                 }
             });
             socket.on("webPrivateMessage", args -> {
+                logger.info("💬 [WS] Получено личное сообщение с сайта.");
                 if (args.length > 0 && args[0] instanceof JSONObject) {
                     JSONObject data = (JSONObject) args[0];
                     try {
                         UUID recipientUuid = UUID.fromString(data.getString("recipientUuid"));
                         String senderUsername = data.getString("senderUsername");
                         String content = data.getString("content");
-
                         server.getPlayer(recipientUuid).ifPresent(recipient -> {
-                            Component prefix = Component.text()
-                                    .append(Component.text("[", NamedTextColor.DARK_GRAY))
-                                    .append(Component.text(senderUsername, NamedTextColor.AQUA))
-                                    .append(Component.text(" -> ", NamedTextColor.GRAY))
-                                    .append(Component.text("Me", NamedTextColor.AQUA))
-                                    .append(Component.text("] ", NamedTextColor.DARK_GRAY))
-                                    .build();
-
+                            Component prefix = Component.text().append(Component.text("[", NamedTextColor.DARK_GRAY)).append(Component.text(senderUsername, NamedTextColor.AQUA)).append(Component.text(" -> ", NamedTextColor.GRAY)).append(Component.text("Me", NamedTextColor.AQUA)).append(Component.text("] ", NamedTextColor.DARK_GRAY)).build();
                             Component messageBody = Component.text(content, NamedTextColor.WHITE);
-
-                            Component fullMessage = prefix.append(messageBody)
-                                    .clickEvent(ClickEvent.suggestCommand("/flame msg " + senderUsername + " "))
-                                    .hoverEvent(HoverEvent.showText(Component.text("Click to reply to " + senderUsername).color(NamedTextColor.GREEN)));
-
+                            Component fullMessage = prefix.append(messageBody).clickEvent(ClickEvent.suggestCommand("/flame msg " + senderUsername + " ")).hoverEvent(HoverEvent.showText(Component.text("Click to reply to " + senderUsername).color(NamedTextColor.GREEN)));
                             recipient.sendMessage(fullMessage);
-
-                            // Также обновляем /reply для получателя
                             server.getPlayer(senderUsername).ifPresent(sender -> messageManager.setLastPartner(recipient, sender));
                         });
-                    } catch (Exception e) {
-                        logger.error("Could not parse webPrivateMessage from backend.", e);
+                    } catch (JSONException e) {
+                        logger.error("❌ [WS] Не удалось разобрать JSON 'webPrivateMessage'", e);
                     }
                 }
             });
             socket.on("shop:new-command", args -> {
-                logger.info("Received 'shop:new-command' signal from backend, fetching commands now...");
-                // Немедленно запускаем нашу функцию проверки команд
+                logger.info("🛒 [WS] Получен сигнал 'shop:new-command' от сайта, запускаем проверку команд.");
                 apiClient.fetchAndExecutePendingCommands();
             });
-            socket.on(Socket.EVENT_CONNECT, args -> {
-                logger.info("Successfully connected to the website backend via WebSocket!");
-                // При успешном подключении запускаем обработку очереди
-                processOfflineQueue();
-            });
             socket.connect();
-            logger.info("Attempting to connect to website backend at " + url + "...");
+            logger.info("🔌 [WS] Попытка подключения к бэкенду сайта по адресу {}...", url);
         } catch (Exception e) {
-            logger.error("Failed to initialize WebSocket connection: " + e.getMessage(), e);
+            logger.error("❌ [WS] Не удалось инициализировать WebSocket-соединение: {}", e.getMessage(), e);
         }
-    }
-
-    private void processOfflineQueue() {
-        server.getScheduler().buildTask(this, () -> {
-            Map<Integer, String> events = databaseManager.getQueuedEvents();
-            if (events.isEmpty()) return;
-
-            logger.info("Found " + events.size() + " queued events. Sending to backend...");
-            List<Integer> sentEventIds = new ArrayList<>();
-
-            for (Map.Entry<Integer, String> entry : events.entrySet()) {
-                try {
-                    apiClient.sendEvent(new JSONObject(entry.getValue()));
-                    sentEventIds.add(entry.getKey());
-                } catch (JSONException e) {
-                    logger.error("Could not parse queued event with ID " + entry.getKey(), e);
-                    sentEventIds.add(entry.getKey()); // Удаляем даже если не смогли распарсить
-                }
-            }
-
-            if (!sentEventIds.isEmpty()) {
-                databaseManager.deleteEvents(sentEventIds);
-            }
-        }).schedule();
     }
 
     public void processPendingCommands(JSONArray commands) {
@@ -16784,7 +16860,7 @@ public class FlameWallProxyBridge {
                 JSONObject cmdObj = commands.getJSONObject(i);
                 String commandStr = cmdObj.getString("command");
                 int commandId = cmdObj.getInt("id");
-
+                logger.info("✔️ [Shop] Обработка команды ID {}: '{}'", commandId, commandStr);
                 String[] parts = commandStr.split(" ");
                 String playerName = "";
                 for (String part : parts) {
@@ -16793,12 +16869,11 @@ public class FlameWallProxyBridge {
                         break;
                     }
                 }
-
                 if (playerName.isEmpty()) {
-                    logger.warn("Could not find an online player in command string to execute: '" + commandStr + "'");
+                    logger.warn("⚠️ [Shop] Не удалось найти онлайн-игрока в команде для выполнения: '{}'", commandStr);
                     continue;
                 }
-
+                final String finalPlayerName = playerName;
                 server.getPlayer(playerName).ifPresent(player -> {
                     player.getCurrentServer().ifPresent(serverConnection -> {
                         ByteArrayDataOutput out = ByteStreams.newDataOutput();
@@ -16806,18 +16881,17 @@ public class FlameWallProxyBridge {
                         out.writeUTF(commandStr);
                         serverConnection.sendPluginMessage(FLAMEWALL_CHANNEL, out.toByteArray());
                         executedIds.add(commandId);
-                        logger.info("Sent command ID " + commandId + " to server " + serverConnection.getServerInfo().getName() + " for execution.");
+                        logger.info("✅ [Shop] Отправлена команда ID {} на сервер {} для игрока {}", commandId, serverConnection.getServerInfo().getName(), finalPlayerName);
                     });
                 });
-            } catch (JSONException e) { // <<< ИСПРАВЛЕНИЕ ЗДЕСЬ
-                logger.error("Failed to parse command object from JSON array at index " + i, e);
+            } catch (JSONException e) {
+                logger.error("❌ [Shop] Не удалось разобрать объект команды из JSON массива на индексе " + i, e);
             }
         }
         if (!executedIds.isEmpty()) {
-             apiClient.clearExecutedCommands(executedIds);
+            apiClient.clearExecutedCommands(executedIds);
         }
     }
-
 }
 --- END FILE: FlameWallBridge/FlameWallProxyBridge/src/main/java/com/flamewall/proxybridge/FlameWallProxyBridge.java ---
 
@@ -16986,206 +17060,239 @@ public class Main {
 
 
 
---- START FILE: FlameWallBridge/FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/FlameWallSpigotHelper.java ---
-
-// FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/FlameWallSpigotHelper.java
+--- START FILE: FlameWallBridge/FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/ApiClient.java ---
 
 package com.flamewall.spigothelper;
 
-import com.google.common.io.ByteArrayDataInput;
-import com.google.common.io.ByteArrayDataOutput;
-import com.google.common.io.ByteStreams;
-import me.clip.placeholderapi.PlaceholderAPI;
+import okhttp3.*;
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
+import org.json.JSONObject;
+import java.io.IOException;
+import java.util.logging.Logger;
+
+public class ApiClient {
+    private final OkHttpClient httpClient;
+    private final String baseUrl;
+    private final String apiKey;
+    private final Logger logger;
+
+    public ApiClient(String baseUrl, String apiKey, Logger logger) {
+        this.httpClient = new OkHttpClient();
+        this.baseUrl = baseUrl;
+        this.apiKey = apiKey;
+        this.logger = logger;
+    }
+
+    public void sendEvent(Player player, String eventType, String eventDataJson) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("eventType", eventType);
+            payload.put("playerUuid", player.getUniqueId().toString());
+            payload.put("serverName", player.getServer().getName());
+            payload.put("eventData", new JSONObject(eventDataJson));
+
+            RequestBody body = RequestBody.create(payload.toString(), okhttp3.MediaType.get("application/json; charset=utf-8"));
+            Request request = new Request.Builder()
+                    .url(baseUrl + "/api/internal/event-ingest")
+                    .header("x-api-key", apiKey)
+                    .post(body)
+                    .build();
+
+            httpClient.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(@NotNull Call call, @NotNull IOException e) {}
+                @Override
+                public void onResponse(@NotNull Call call, @NotNull Response response) { response.close(); }
+            });
+        } catch (Exception e) {
+            logger.severe("Could not create JSON for event " + eventType + ": " + e.getMessage());
+        }
+    }
+
+    public void registerTargets(JSONObject payload) {
+        RequestBody body = RequestBody.create(payload.toString(), okhttp3.MediaType.get("application/json; charset=utf-8"));
+        Request request = new Request.Builder()
+                .url(baseUrl + "/api/achievements/admin/register-targets")
+                .header("x-api-key", apiKey)
+                .post(body)
+                .build();
+
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(@NotNull Call call, @NotNull IOException e) {}
+            @Override
+            public void onResponse(@NotNull Call call, @NotNull Response response) { response.close(); }
+        });
+    }
+
+    public void syncRank(String playerUuid, String rankName) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("minecraftUuid", playerUuid);
+            payload.put("newRankSystemName", rankName);
+
+            RequestBody body = RequestBody.create(payload.toString(), okhttp3.MediaType.get("application/json; charset=utf-8"));
+            Request request = new Request.Builder()
+                    .url(baseUrl + "/api/internal/rank-sync")
+                    .header("x-api-key", apiKey)
+                    .post(body)
+                    .build();
+
+            httpClient.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(@NotNull Call call, @NotNull IOException e) {}
+                @Override
+                public void onResponse(@NotNull Call call, @NotNull Response response) { response.close(); }
+            });
+        } catch (Exception e) {
+            logger.severe("Could not create JSON for rank sync: " + e.getMessage());
+        }
+    }
+}
+--- END FILE: FlameWallBridge/FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/ApiClient.java ---
+
+
+
+--- START FILE: FlameWallBridge/FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/FlameWallSpigotHelper.java ---
+
+package com.flamewall.spigothelper;
+
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.jetbrains.annotations.NotNull;
+import org.json.JSONObject;
+
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.util.List;
+import java.util.Map;
 
 public class FlameWallSpigotHelper extends JavaPlugin implements PluginMessageListener {
 
+    private ApiClient apiClient;
+
     @Override
     public void onEnable() {
-        this.getServer().getMessenger().registerIncomingPluginChannel(this, "flamewall:main", this);
-        this.getServer().getMessenger().registerOutgoingPluginChannel(this, "flamewall:main");
-        getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         saveDefaultConfig();
-        getLogger().info("FlameWall Spigot Helper has been enabled!");
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") == null) {
+            getLogger().severe("!!! PlaceholderAPI не найден! Плагин не сможет синхронизировать ранги при входе. !!!");
+        }
+        this.apiClient = new ApiClient(
+                getConfig().getString("backend-api.url", "http://localhost:3001"),
+                getConfig().getString("backend-api.key", ""),
+                getLogger()
+        );
+
+        // Регистрация всех слушателей
+        getServer().getPluginManager().registerEvents(new PlayerStateListener(this), this);
+
+        // Регистрация каналов для команд с сайта (Сайт -> Игра)
+        this.getServer().getMessenger().registerIncomingPluginChannel(this, "flamewall:main", this);
+
+        getLogger().info("FlameWall Spigot Helper включен и готов к работе.");
     }
 
-    @Override
-    public void onDisable() {
-        // Сервер сам отменит регистрацию каналов при выключении плагина.
-        // Явно вызывать здесь ничего не нужно, чтобы избежать ошибок.
-        getLogger().info("FlameWall Spigot Helper has been disabled!");
-    }
-
-    /**
-     * Слушатель сообщений от прокси-плагина.
-     */
     @Override
     public void onPluginMessageReceived(@NotNull String channel, @NotNull Player player, @NotNull byte[] message) {
-        if (!channel.equals("flamewall:main")) {
-            return;
-        }
-
-        ByteArrayDataInput in = ByteStreams.newDataInput(message);
-        String subChannel = in.readUTF();
-
-        if (subChannel.equals("ExecuteCommand")) {
-            String commandToExecute = in.readUTF();
-            getLogger().info("[FW-HELPER] Received command from proxy to execute: " + commandToExecute);
-
-            getServer().getScheduler().runTask(this, () -> {
-                getServer().dispatchCommand(getServer().getConsoleSender(), commandToExecute);
-                handleRankChangeCommand(commandToExecute, null);
-            });
-        }
-    }
-
-    /**
-     * Универсальный обработчик команды смены ранга.
-     * @param command Полная строка команды.
-     * @param initiator Игрок, который выполнил команду (может быть null).
-     */
-    public void handleRankChangeCommand(String command, Player initiator) {
-        String lowerCaseCommand = command.toLowerCase();
-
-        for (String pattern : getConfig().getStringList("intercept-commands")) {
-            if (lowerCaseCommand.startsWith(pattern.split(" ")[0] + " " + pattern.split(" ")[1])) {
-                String[] parts = command.split(" ");
-                if (parts.length >= 3) {
-                    String targetPlayerName = parts[2];
-                    Player targetPlayer = getServer().getPlayer(targetPlayerName);
-
-                    if (targetPlayer != null && targetPlayer.isOnline()) {
-                        getLogger().info("[FW-HELPER] Intercepted a rank-changing command for " + targetPlayerName + ". Syncing rank back to website...");
-
-                        getServer().getScheduler().runTaskLater(this, () -> {
-                            syncRank(targetPlayer);
-                        }, 40L); // 2-секундная задержка
-                    }
-                }
-                return;
+        if (!channel.equals("flamewall:main")) return;
+        try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(message))) {
+            String subChannel = in.readUTF();
+            if (subChannel.equals("ExecuteCommand")) {
+                String commandToExecute = in.readUTF();
+                Bukkit.getScheduler().runTask(this, () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), commandToExecute));
             }
+        } catch (Exception e) {
+            getLogger().severe("Не удалось обработать сообщение от прокси-плагина: " + e.getMessage());
         }
     }
 
-    /**
-     * Отправка актуального ранга игрока на прокси.
-     * @param player Игрок для синхронизации.
-     */
-    public void syncRank(Player player) {
-        if (player == null || !player.isOnline()) return;
-        if (!getConfig().getBoolean("rank-sync.enabled", true)) return;
-        String placeholder = getConfig().getString("rank-sync.placeholder");
-        if (placeholder == null || placeholder.isEmpty()) return;
+    // --- ПУБЛИЧНОЕ API ДЛЯ ДРУГИХ ПЛАГИНОВ ---
 
-        String rankName = PlaceholderAPI.setPlaceholders(player, placeholder);
-
-        ByteArrayDataOutput out = ByteStreams.newDataOutput();
-        out.writeUTF("RankSync");
-        out.writeUTF(player.getUniqueId().toString());
-        out.writeUTF(rankName);
-
-        player.sendPluginMessage(this, "flamewall:main", out.toByteArray());
-        getLogger().info("[FW-HELPER] [DEBUG] Sent rank sync for " + player.getName() + ". New Rank: " + rankName);
+    public ApiClient getApiClient() {
+        return this.apiClient;
     }
 
-    public void sendGameEvent(Player player, String eventType, String eventDataJson) {
+    public void sendGameEvent(Player player, String eventDataJson) {
         if (player == null || !player.isOnline()) return;
+        if (apiClient != null) {
+            apiClient.sendEvent(player, "CUSTOM_API_TRIGGER", eventDataJson);
+        }
+    }
 
-        ByteArrayDataOutput out = ByteStreams.newDataOutput();
-        out.writeUTF("GameEvent");
-        out.writeUTF(player.getUniqueId().toString());
-        out.writeUTF(eventType);
-
-        // [!] УДАЛИТЕ ЭТУ СТРОКУ
-        // out.writeUTF(getServer().getServerName());
-
-        out.writeUTF(eventDataJson);
-
-        player.sendPluginMessage(this, "flamewall:main", out.toByteArray());
+    public void registerAchievementTargets(String pluginName, Map<String, List<String>> targets) {
+        if (apiClient != null) {
+            JSONObject payload = new JSONObject();
+            payload.put("pluginName", pluginName);
+            payload.put("targets", new JSONObject(targets));
+            apiClient.registerTargets(payload);
+        }
     }
 }
 --- END FILE: FlameWallBridge/FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/FlameWallSpigotHelper.java ---
 
 
 
---- START FILE: FlameWallBridge/FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/PlayerListener.java ---
+--- START FILE: FlameWallBridge/FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/PlayerStateListener.java ---
 
-// FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/PlayerListener.java
 package com.flamewall.spigothelper;
 
+import me.clip.placeholderapi.PlaceholderAPI;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.server.ServerCommandEvent;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-public class PlayerListener implements Listener {
-
+public class PlayerStateListener implements Listener {
     private final FlameWallSpigotHelper plugin;
+    private final List<String> commandPatterns;
 
-    public PlayerListener(FlameWallSpigotHelper plugin) {
+    public PlayerStateListener(FlameWallSpigotHelper plugin) {
         this.plugin = plugin;
+        this.commandPatterns = plugin.getConfig().getStringList("intercept-commands");
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerJoin(PlayerJoinEvent event) {
-        // При входе игрока, как и раньше, синхронизируем его ранг
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            plugin.syncRank(event.getPlayer());
-        }, 20L); // 1 сек задержка
-    }
-
-    @EventHandler
-    public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
-        // Просто передаем команду игрока в наш универсальный обработчик
-        plugin.handleRankChangeCommand(event.getMessage().substring(1), event.getPlayer());
-    }
-
-    @EventHandler
-    public void onServerCommand(ServerCommandEvent event) {
-        // Просто передаем команду консоли в наш универсальный обработчик
-        plugin.handleRankChangeCommand(event.getCommand(), null);
-    }
-
-    @EventHandler
-    public void onEntityDeath(EntityDeathEvent event) {
-        // Отправляем событие, только если у сущности был убийца-игрок
-        if (event.getEntity().getKiller() != null) {
-            Player killer = event.getEntity().getKiller();
-            String entityType = event.getEntityType().name();
-            // Формируем JSON с данными, специфичными для этого события
-            String eventDataJson = "{\"targetType\": \"" + entityType + "\"}";
-            plugin.sendGameEvent(killer, "PLAYER_KILL_ENTITY", eventDataJson);
-        }
-    }
-
-    @EventHandler
-    public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
-        String blockType = event.getBlock().getType().name();
-        String eventDataJson = "{\"targetType\": \"" + blockType + "\"}"; // Исправлено на targetType для унификации
-        plugin.sendGameEvent(player, "BLOCK_BREAK", eventDataJson);
+        Bukkit.getScheduler().runTaskLater(this.plugin, () -> {
+            String rank = PlaceholderAPI.setPlaceholders(player, "%luckperms_primary_group_name%");
+            sendRankUpdate(player, rank);
+        }, 40L);
     }
 
-    @EventHandler
-    public void onCraftItem(CraftItemEvent event) {
-        // Убеждаемся, что кликнул именно игрок
-        if (event.getWhoClicked() instanceof Player) {
-            Player player = (Player) event.getWhoClicked();
-            String itemType = event.getRecipe().getResult().getType().name();
-            String eventDataJson = "{\"targetType\": \"" + itemType + "\"}"; // Исправлено на targetType для унификации
-            plugin.sendGameEvent(player, "ITEM_CRAFT", eventDataJson);
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCommand(PlayerCommandPreprocessEvent event) {
+        String command = event.getMessage().substring(1);
+        for (String patternString : commandPatterns) {
+            Pattern pattern = Pattern.compile(patternString.replace("{player}", "(\\S+)").replace("{rank}", "(\\S+)"), Pattern.CASE_INSENSITIVE);
+            Matcher matcher = pattern.matcher(command);
+            if (matcher.find()) {
+                String targetPlayerName = matcher.group(1);
+                String rankName = matcher.group(2);
+                Player targetPlayer = Bukkit.getPlayer(targetPlayerName);
+                if (targetPlayer != null && targetPlayer.isOnline()) {
+                    sendRankUpdate(targetPlayer, rankName);
+                }
+                return;
+            }
         }
+    }
+
+    private void sendRankUpdate(Player player, String rank) {
+        if (player == null || rank == null || rank.isEmpty()) return;
+        this.plugin.getApiClient().syncRank(player.getUniqueId().toString(), rank);
     }
 }
---- END FILE: FlameWallBridge/FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/PlayerListener.java ---
+--- END FILE: FlameWallBridge/FlameWallSpigotHelper/src/main/java/com/flamewall/spigothelper/PlayerStateListener.java ---
 
 
 
@@ -17194,6 +17301,11 @@ public class PlayerListener implements Listener {
 rank-sync:
   enabled: true
   placeholder: "%luckperms_primary_group_name%"
+
+  # Конфигурация для прямого подключения к API бэкенда
+backend-api:
+  url: "http://localhost:3001"
+  key: "SuperSecretKeyForFlameWallNoMistakes123"
 
 intercept-commands:
   - "lp user {player} parent set {rank}"
@@ -17214,50 +17326,200 @@ depend: [PlaceholderAPI]
 
 
 
+--- START FILE: FlameWallBridge/VanillaAchievementTriggers/src/main/java/com/flamewall/vanilla_achievements/AchievementListener.java ---
+
+package com.flamewall.vanilla_achievements;
+
+import com.flamewall.spigothelper.FlameWallSpigotHelper;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.inventory.CraftItemEvent;
+
+public class AchievementListener implements Listener {
+
+    private final FlameWallSpigotHelper spigotHelper;
+
+    public AchievementListener(FlameWallSpigotHelper spigotHelper) {
+        this.spigotHelper = spigotHelper;
+    }
+
+    @EventHandler
+    public void onEntityDeath(EntityDeathEvent event) {
+        if (event.getEntity().getKiller() == null) return;
+        Player killer = event.getEntity().getKiller();
+        String eventDataJson = "{\"targetType\": \"vanilla:kill:" + event.getEntityType().name() + "\"}";
+        spigotHelper.sendGameEvent(killer, eventDataJson);
+    }
+
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent event) {
+        Player player = event.getPlayer();
+        String eventDataJson = "{\"targetType\": \"vanilla:break:" + event.getBlock().getType().name() + "\"}";
+        spigotHelper.sendGameEvent(player, eventDataJson);
+    }
+
+    @EventHandler
+    public void onCraftItem(CraftItemEvent event) {
+        if (!(event.getWhoClicked() instanceof Player)) return;
+        Player player = (Player) event.getWhoClicked();
+        String eventDataJson = "{\"targetType\": \"vanilla:craft:" + event.getRecipe().getResult().getType().name() + "\"}";
+        spigotHelper.sendGameEvent(player, eventDataJson);
+    }
+}
+--- END FILE: FlameWallBridge/VanillaAchievementTriggers/src/main/java/com/flamewall/vanilla_achievements/AchievementListener.java ---
+
+
+
+--- START FILE: FlameWallBridge/VanillaAchievementTriggers/src/main/java/com/flamewall/vanilla_achievements/Main.java ---
+
+package com.flamewall.vanilla_achievements;
+
+//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
+// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
+public class Main {
+    public static void main(String[] args) {
+        //TIP Press <shortcut actionId="ShowIntentionActions"/> with your caret at the highlighted text
+        // to see how IntelliJ IDEA suggests fixing it.
+        System.out.printf("Hello and welcome!");
+
+        for (int i = 1; i <= 5; i++) {
+            //TIP Press <shortcut actionId="Debug"/> to start debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
+            // for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.
+            System.out.println("i = " + i);
+        }
+    }
+}
+--- END FILE: FlameWallBridge/VanillaAchievementTriggers/src/main/java/com/flamewall/vanilla_achievements/Main.java ---
+
+
+
+--- START FILE: FlameWallBridge/VanillaAchievementTriggers/src/main/java/com/flamewall/vanilla_achievements/VanillaAchievementTriggers.java ---
+
+package com.flamewall.vanilla_achievements;
+
+import com.flamewall.spigothelper.FlameWallSpigotHelper;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+public class VanillaAchievementTriggers extends JavaPlugin {
+
+    @Override
+    public void onEnable() {
+        Plugin helperPlugin = getServer().getPluginManager().getPlugin("FlameWallSpigotHelper");
+        if (helperPlugin instanceof FlameWallSpigotHelper) {
+            FlameWallSpigotHelper spigotHelper = (FlameWallSpigotHelper) helperPlugin;
+            getLogger().info("Successfully hooked into FlameWallSpigotHelper.");
+
+            getServer().getPluginManager().registerEvents(new AchievementListener(spigotHelper), this);
+            getServer().getPluginManager().registerEvents(new RegistrationListener(spigotHelper), this);
+
+            getLogger().info("VanillaAchievementTriggers has been enabled!");
+        } else {
+            getLogger().severe("FlameWallSpigotHelper not found! This plugin will not work.");
+            getServer().getPluginManager().disablePlugin(this);
+        }
+    }
+
+    private class RegistrationListener implements Listener {
+        private final FlameWallSpigotHelper spigotHelper;
+        private final AtomicBoolean hasRegistered = new AtomicBoolean(false);
+
+        public RegistrationListener(FlameWallSpigotHelper spigotHelper) {
+            this.spigotHelper = spigotHelper;
+        }
+
+        @EventHandler
+        public void onPlayerJoin(PlayerJoinEvent event) {
+            if (hasRegistered.compareAndSet(false, true)) {
+                getLogger().info("First player joined, preparing simple targets for SpigotHelper...");
+
+                // Этот код больше не нужен, так как регистрация целей теперь происходит
+                // через другой механизм, напрямую в API бэкенда.
+                // Если ты захочешь его вернуть, тебе нужно будет добавить метод
+                // registerAchievementTargets в FlameWallSpigotHelper и ApiClient.
+                // Пока что мы его отключаем, чтобы сфокусироваться на главной проблеме.
+                
+                Map<String, List<String>> targets = new HashMap<>();
+                targets.put("Mining", Arrays.asList(
+                        "vanilla:break:DIRT",
+                        "vanilla:break:STONE",
+                        "vanilla:break:DIAMOND_ORE"
+                ));
+                targets.put("Combat", Arrays.asList(
+                        "vanilla:kill:ZOMBIE",
+                        "vanilla:kill:SKELETON"
+                ));
+                // this.spigotHelper.registerAchievementTargets("VanillaTriggers", targets);
+
+            }
+        }
+    }
+}
+--- END FILE: FlameWallBridge/VanillaAchievementTriggers/src/main/java/com/flamewall/vanilla_achievements/VanillaAchievementTriggers.java ---
+
+
+
+--- START FILE: FlameWallBridge/VanillaAchievementTriggers/src/main/resources/plugin.yml ---
+
+name: VanillaAchievementTriggers
+version: 1.0
+main: com.flamewall.vanilla_achievements.VanillaAchievementTriggers
+api-version: '1.20'
+depend: [FlameWallSpigotHelper] # <-- Указываем зависимость
+--- END FILE: FlameWallBridge/VanillaAchievementTriggers/src/main/resources/plugin.yml ---
+
+
+
 --- START FILE: .env ---
 
-# ================================================================
-# FLAMEWALL PRODUCTION .ENV
-# Этот файл используется на твоем VPS-сервере
-# ================================================================
+# ==========================================================
+# === .ENV ДЛЯ ЛОКАЛЬНОЙ РАЗРАБОТКИ (ТВОЙ КОМПЬЮТЕР) ===
+# ==========================================================
 
-# --- DOCKER & DATABASE CONFIG ---
-# Замени пароли на свои, сгенерированные (например, в менеджере паролей)
+# --- Настройки для локальной БД и PGAdmin ---
 POSTGRES_USER=flamewall_user
 POSTGRES_PASSWORD=taOE5dznW2hPB1xhNeVQ
 POSTGRES_DB=flamewall
 PGADMIN_DEFAULT_EMAIL=letsplayfrommax14@gmail.com
 PGADMIN_DEFAULT_PASSWORD=Hh3pgQJC7K6BxfDtJOnU
 
-# --- BACKEND (NESTJS) CONFIG ---
-# Эти переменные будут использоваться сервисом 'backend' в docker-compose
-API_PORT=3000 # Внутренний порт, на котором запускается NestJS
-DB_HOST=db    # Имя сервиса базы данных в docker-compose.yml
+# --- Настройки для локального бэкенда ---
+API_PORT=3000
+DB_HOST=db
 DB_PORT=5432
-DB_USERNAME=${POSTGRES_USER} # Используем ту же переменную, что и для сервиса db
-DB_PASSWORD=${POSTGRES_PASSWORD} # Используем ту же переменную, что и для сервиса db
-DB_DATABASE=${POSTGRES_DB} # Используем ту же переменную, что и для сервиса db
-
-# Замени эти ключи на длинные, случайные строки
+DB_USERNAME=flamewall_user
+DB_PASSWORD=taOE5dznW2hPB1xhNeVQ
+DB_DATABASE=flamewall
 JWT_SECRET=your_super_long_and_random_jwt_secret_key
-PLUGIN_SECRET_KEY=your_super_long_and_random_plugin_secret_key
+PLUGIN_SECRET_KEY=SuperSecretKeyForFlameWallNoMistakes123
+JWT_EXPIRATION_TIME=30d
 
-# ИЗМЕНЕНО: Формат, который понимает библиотека JWT
-JWT_EXPIRATION_TIME=30d # Токен будет действителен 30 дней
-
-# --- FRONTEND (REACT) CONFIG ---
-# Эти переменные будут использоваться при сборке фронтенда
-# ВАЖНО: На VPS эти переменные используются только во время сборки Docker-образа.
-# В локальной разработке они используются сервером Vite/React.
-PORT=5173 # Внутренний порт, на котором запускается фронтенд-сервер 
+# --- Переменные для СБОРКИ ПРОДАКШЕН-ФРОНТЕНДА ---
+# Эти строки используются скриптом build-and-push.sh, чтобы "впечатать"
+# правильный публичный адрес в код фронтенда перед отправкой на VPS.
+VITE_API_BASE_URL=https://flamewall.xyz
+VITE_FULL_API_URL=https://flamewall.xyz
 --- END FILE: .env ---
 
 
 
 --- START FILE: docker-compose.yml ---
 
-# docker-compose.yml
-
+# ==========================================================
+# === ФИНАЛЬНАЯ ВЕРСИЯ DOCKER-COMPOSE.YML (ДЛЯ ЛОКАЛКИ) ===
+# ==========================================================
 services:
   frontend:
     build:
@@ -17309,7 +17571,7 @@ services:
       retries: 5
     volumes:
       - postgres_data_dev:/var/lib/postgresql/data 
-      - ./docker/postgres:/docker-entrypoint-initdb.d # <-- ДОБАВЬТЕ ЭТУ СТРОКУ
+      - ./docker/postgres:/docker-entrypoint-initdb.d
     networks:
       - flamewall_net
 
@@ -17347,10 +17609,10 @@ version: '3.8'
 
 services:
   backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile.prod
-    image: flamewall-backend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+  #  build:
+  #    context: .
+  #    dockerfile: backend/Dockerfile.prod
+    image: sknery/flamewall-backend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_backend_prod
     restart: unless-stopped
     environment:
@@ -17374,12 +17636,12 @@ services:
       - db
 
   frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile.prod
-      args:
-        - VITE_FULL_API_URL=${VITE_FULL_API_URL}
-    image: flamewall-frontend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+  #  build:
+  #    context: .
+  #    dockerfile: frontend/Dockerfile.prod
+  #    args:
+  #      - VITE_FULL_API_URL=${VITE_FULL_API_URL}
+    image: sknery/flamewall-frontend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_frontend_prod
     restart: unless-stopped
     networks:
@@ -17798,7 +18060,7 @@ export default defineConfig({
     <packaging>jar</packaging>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>17</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -17806,16 +18068,12 @@ export default defineConfig({
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>3.5.1</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                    </execution>
-                </executions>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                </configuration>
             </plugin>
 
             <plugin>
@@ -17846,6 +18104,10 @@ export default defineConfig({
                                     <pattern>okio</pattern>
                                     <shadedPattern>com.flamewall.proxybridge.lib.okio</shadedPattern>
                                 </relocation>
+                                <relocation>
+                                    <pattern>org.json</pattern>
+                                    <shadedPattern>com.flamewall.proxybridge.lib.json</shadedPattern>
+                                </relocation>
                             </relocations>
                         </configuration>
                     </execution>
@@ -17871,7 +18133,7 @@ export default defineConfig({
         <dependency>
             <groupId>com.velocitypowered</groupId>
             <artifactId>velocity-api</artifactId>
-            <version>3.3.0-SNAPSHOT</version>
+            <version>3.4.0-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -17880,14 +18142,12 @@ export default defineConfig({
             <version>24.1.0</version>
             <scope>provided</scope>
         </dependency>
-
         <dependency>
             <groupId>io.socket</groupId>
             <artifactId>socket.io-client</artifactId>
             <version>2.1.0</version>
             <scope>compile</scope>
         </dependency>
-
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp</artifactId>
@@ -17900,6 +18160,14 @@ export default defineConfig({
             <version>3.45.1.0</version>
             <scope>compile</scope>
         </dependency>
+
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20240303</version>
+            <scope>compile</scope>
+        </dependency>
+
     </dependencies>
 </project>
 --- END FILE: FlameWallBridge/FlameWallProxyBridge/pom.xml ---
@@ -17913,35 +18181,14 @@ export default defineConfig({
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
     <groupId>com.flamewall</groupId>
     <artifactId>FlameWallSpigotHelper</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
-
     <properties>
-        <java.version>17</java.version> <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <java.version>17</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.8.1</version>
-                <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
-                </configuration>
-            </plugin>
-        </plugins>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-                <filtering>true</filtering>
-            </resource>
-        </resources>
-    </build>
 
     <repositories>
         <repository>
@@ -17958,7 +18205,20 @@ export default defineConfig({
         <dependency>
             <groupId>org.spigotmc</groupId>
             <artifactId>spigot-api</artifactId>
-            <version>1.20.1-R0.1-SNAPSHOT</version> <scope>provided</scope>
+            <version>1.20.1-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20240303</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>4.12.0</version>
+            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>me.clip</groupId>
@@ -17967,6 +18227,102 @@ export default defineConfig({
             <scope>provided</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <relocations>
+                                <relocation>
+                                    <pattern>org.json</pattern>
+                                    <shadedPattern>com.flamewall.spigothelper.lib.json</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>okhttp3</pattern>
+                                    <shadedPattern>com.flamewall.spigothelper.lib.okhttp3</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>okio</pattern>
+                                    <shadedPattern>com.flamewall.spigothelper.lib.okio</shadedPattern>
+                                </relocation>
+                            </relocations>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>
 --- END FILE: FlameWallBridge/FlameWallSpigotHelper/pom.xml ---
+
+
+
+--- START FILE: FlameWallBridge/VanillaAchievementTriggers/pom.xml ---
+
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.flamewall</groupId>
+    <artifactId>VanillaAchievementTriggers</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <properties>
+        <java.version>17</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+    <repositories>
+        <repository>
+            <id>spigot-repo</id>
+            <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+        </repository>
+    </repositories>
+    <dependencies>
+        <dependency>
+            <groupId>org.spigotmc</groupId>
+            <artifactId>spigot-api</artifactId>
+            <version>1.20.1-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.flamewall</groupId>
+            <artifactId>FlameWallSpigotHelper</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+--- END FILE: FlameWallBridge/VanillaAchievementTriggers/pom.xml ---
 
