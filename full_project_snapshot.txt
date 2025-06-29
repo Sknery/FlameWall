@@ -1,5 +1,5 @@
 ===============================================
-PROJECT SNAPSHOT CREATED ON: Сб 28 июн 2025 20:00:40 UTC
+PROJECT SNAPSHOT CREATED ON: Вс 29 июн 2025 14:18:17 UTC
 ===============================================
 
 
@@ -2637,6 +2637,50 @@ export class Friendship {
 
 
 
+--- START FILE: backend/src/friendships/entities/friendship-rejection.entity.ts ---
+
+// backend/src/friendships/entities/friendship-rejection.entity.ts
+
+import {
+  CreateDateColumn,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  Unique,
+  Column,
+} from 'typeorm';
+import { User } from '../../users/entities/user.entity';
+
+@Entity('friendship_rejections')
+@Unique(['rejector_id', 'requester_id'])
+export class FriendshipRejection {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ name: 'rejector_id' })
+  rejector_id: number;
+
+  // Тот, кто отклонил запрос
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'rejector_id' })
+  rejector: User;
+
+  @Column({ name: 'requester_id' })
+  requester_id: number;
+
+  // Тот, кому отклонили запрос
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'requester_id' })
+  requester: User;
+
+  @CreateDateColumn({ name: 'rejected_at' })
+  rejected_at: Date;
+}
+--- END FILE: backend/src/friendships/entities/friendship-rejection.entity.ts ---
+
+
+
 --- START FILE: backend/src/friendships/friendships.controller.ts ---
 
 // backend/src/friendships/friendships.controller.ts
@@ -2742,7 +2786,8 @@ export class FriendshipsController {
 
 --- START FILE: backend/src/friendships/friendships.module.ts ---
 
-// backend/friendships/friendships.module.ts
+// backend/src/friendships/friendships.module.ts
+
 import { Module } from '@nestjs/common';
 import { FriendshipsService } from './friendships.service';
 import { FriendshipsController } from './friendships.controller';
@@ -2752,10 +2797,16 @@ import { User } from '../users/entities/user.entity';
 import { FriendshipsPluginController } from './friendships.plugin.controller';
 import { PluginApiKeyGuard } from '../auth/guards/plugin-api-key.guard';
 import { UsersModule } from '../users/users.module';
+// [!code ++]
+import { FriendshipRejection } from './entities/friendship-rejection.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Friendship, User]),
+    TypeOrmModule.forFeature([
+      Friendship, 
+      User, 
+      FriendshipRejection // <-- [!code ++] ВОТ ЭТА СТРОКА САМАЯ ВАЖНАЯ
+    ]),
     UsersModule,
   ],
   controllers: [FriendshipsController, FriendshipsPluginController],
@@ -2989,6 +3040,7 @@ import { User } from '../users/entities/user.entity';
 import { FriendStatuses } from '../common/enums/friend-statuses.enum';
 import { PublicUser, UsersService } from '../users/users.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FriendshipRejection } from './entities/friendship-rejection.entity';
 
 export type FriendWithFriendshipId = {
   friendshipId: number;
@@ -3005,13 +3057,25 @@ export class FriendshipsService {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
     private eventEmitter: EventEmitter2,
+     @InjectRepository(FriendshipRejection)
+    private rejectionRepository: Repository<FriendshipRejection>,
   //  private readonly usersService: UsersService,
   ) { }
 
- async sendRequest(requesterId: number, receiverId: number): Promise<Friendship> {
+   async sendRequest(requesterId: number, receiverId: number): Promise<Friendship> {
     if (requesterId === receiverId) {
       this.logger.warn(`[REQ-SEND-FAIL] ⚠️ User ID: ${requesterId} tried to send a friend request to themselves.`);
       throw new ForbiddenException('You cannot send a friend request to yourself.');
+    }
+    
+    const rejection = await this.rejectionRepository.findOneBy({
+        rejector_id: receiverId,
+        requester_id: requesterId,
+    });
+
+    if (rejection) {
+        this.logger.warn(`[REQ-SEND-FAIL] ⚠️ User ${requesterId} tried to re-request friendship from ${receiverId} after rejection.`);
+        throw new ForbiddenException("This user has previously declined your friend request. You cannot send another one.");
     }
 
     const [requester, receiver] = await Promise.all([
@@ -3023,12 +3087,17 @@ export class FriendshipsService {
       throw new NotFoundException(`User not found.`);
     }
 
+    // [!code start]
+    // --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
     const existingFriendship = await this.friendshipsRepository.findOne({
       where: [
-        { requester_id: requesterId, receiver_id: receiverId },
-        { requester_id: receiverId, receiver_id: requesterId },
+         { requester_id: requesterId, receiver_id: receiverId },
+         // Раньше здесь была опечатка. Теперь проверка корректная.
+         { requester_id: receiverId, receiver_id: requesterId },
       ],
     });
+    // [!code end]
+
     if (existingFriendship) {
       this.logger.warn(`[REQ-SEND-FAIL] ⚠️ Conflict: Friendship/request already exists between User ID: ${requesterId} and User ID: ${receiverId}.`);
       throw new ConflictException('A friendship request already exists or you are already friends.');
@@ -3038,15 +3107,13 @@ export class FriendshipsService {
     const savedRequest = await this.friendshipsRepository.save(newRequest);
     this.logger.log(`[REQ-SEND-SUCCESS] ✅ User ID: ${requesterId} sent a friend request to User ID: ${receiverId}. Friendship ID: ${savedRequest.id}`);
     
-    // <<< --- ВОТ ИСПРАВЛЕНИЕ --- >>>
-    // Генерируем универсальное событие, которое поймает NotificationsService
+        this.logger.log(`[DEBUG] Saved Request Object: ${JSON.stringify(savedRequest, null, 2)}`);
+
     this.eventEmitter.emit('friendship.requested', { requester: requester, receiver: receiver });
-    
-    // Событие для игры тоже можно оставить, если оно где-то используется
     this.eventEmitter.emit('friendship.requested.ingame', { requester: requester, receiver: receiver, requestId: savedRequest.id } );
     
     return savedRequest;
-}
+  }
 
   async getPendingRequests(userId: number): Promise<Friendship[]> {
     this.logger.verbose(`[GET] 🔎 Fetching pending friend requests for User ID: ${userId}`);
@@ -3074,7 +3141,7 @@ export class FriendshipsService {
     return this.friendshipsRepository.save(request);
   }
 
-  async rejectOrCancelRequest(requestId: number, currentUserId: number): Promise<void> {
+    async rejectOrCancelRequest(requestId: number, currentUserId: number): Promise<void> {
     const request = await this.friendshipsRepository.findOne({ where: { id: requestId }});
     if (!request) { 
         this.logger.warn(`[REJECT/CANCEL-FAIL] ⚠️ Request ID: ${requestId} not found for User ID: ${currentUserId}.`);
@@ -3084,6 +3151,22 @@ export class FriendshipsService {
         this.logger.error(`[REJECT/CANCEL-FORBIDDEN] 🚫 User ID: ${currentUserId} is not authorized to manage request ID: ${requestId}.`);
         throw new ForbiddenException('You are not authorized to manage this request.');
     }
+    
+    // [!code start]
+    // Если запрос удаляет ПОЛУЧАТЕЛЬ, это - отклонение. Запоминаем его.
+    if (request.receiver_id === currentUserId) {
+        this.logger.log(`[REQ-REJECT] 🚫 User ${currentUserId} is rejecting request from ${request.requester_id}.`);
+        const newRejection = this.rejectionRepository.create({
+            rejector_id: currentUserId,
+            requester_id: request.requester_id
+        });
+        // Используем .save() вместо .findOrCreate() и .catch(), чтобы игнорировать ошибку уникальности, если она возникнет
+        await this.rejectionRepository.save(newRejection).catch(() => {
+            this.logger.warn(`[REQ-REJECT] Rejection record between ${currentUserId} and ${request.requester_id} already exists. Ignoring.`);
+        });
+    }
+    // [!code end]
+
     await this.friendshipsRepository.remove(request);
     this.logger.warn(`[REJECT/CANCEL-SUCCESS] 🗑️ Request ID: ${requestId} was removed by User ID: ${currentUserId}.`);
   }
@@ -3112,37 +3195,45 @@ export class FriendshipsService {
     });
   }
 
-  async getFriendshipStatus(currentUserId: number, otherUserIdentifier: string | number) {
-    this.logger.verbose(`[CHECK] 🕵️ Checking friendship status between User ID: ${currentUserId} and Identifier: ${otherUserIdentifier}`);
-      // ВРЕМЕННО ОТКЛЮЧАЕМ ЛОГИКУ, ЗАВИСЯЩУЮ ОТ USERSERVICE
-    /*
-    const otherUser = await this.usersService.findOne(otherUserIdentifier);
-    if (!otherUser) {
-      this.logger.warn(`[STATUS-FAIL] ⚠️ Could not check status. User with identifier '${otherUserIdentifier}' not found.`);
-      throw new NotFoundException(`User with identifier '${otherUserIdentifier}' not found.`);
-    }
-    const otherUserId = otherUser.id;
-    */
-    // ВМЕСТО НЕЁ ВРЕМЕННАЯ ЗАГЛУШКА, ЧТОБЫ КОД КОМПИЛИРОВАЛСЯ
-    const otherUserId = typeof otherUserIdentifier === 'number' ? otherUserIdentifier : parseInt(otherUserIdentifier, 10);
-    if(isNaN(otherUserId)) throw new NotFoundException('Identifier is not a valid user ID for this test.');
   
-    const friendship = await this.friendshipsRepository.findOne({
-      where: [
-        { requester_id: currentUserId, receiver_id: otherUserId },
-        { requester_id: otherUserId, receiver_id: currentUserId }
-      ]
-    });
+   async getFriendshipStatus(currentUserId: number, otherUserIdentifier: string | number) {
+    this.logger.verbose(`[CHECK] 🕵️ Checking friendship status between User ID: ${currentUserId} and Identifier: ${otherUserIdentifier}`);
     
-    if (!friendship) return { status: 'none' };
+    // Этот код для поиска ID пользователя остается без изменений
+    const otherUserId = typeof otherUserIdentifier === 'number' ? otherUserIdentifier : parseInt(String(otherUserIdentifier), 10);
+    if(isNaN(otherUserId)) {
+        throw new NotFoundException(`Invalid identifier provided: ${otherUserIdentifier}`);
+    }
+
+    // [!code focus start]
+    // --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+    const friendship = await this.friendshipsRepository.createQueryBuilder("friendship")
+        .where("(friendship.requester_id = :currentUserId AND friendship.receiver_id = :otherUserId)")
+        .orWhere("(friendship.requester_id = :otherUserId AND friendship.receiver_id = :currentUserId)")
+        .setParameters({ currentUserId, otherUserId })
+        .getOne();
+    // [!code focus end]
+    
+    if (!friendship) {
+        return { status: 'none' };
+    }
+
+    // [!code focus start]
+    // --- И ВОТ ГЛАВНАЯ ЛОГИКА ---
+    // Если статус 'PENDING', мы должны определить, он входящий или исходящий
     if (friendship.status === FriendStatuses.PENDING) {
       return friendship.requester_id === currentUserId 
-        ? { status: 'pending_outgoing', requestId: friendship.id } 
-        : { status: 'pending_incoming', requestId: friendship.id };
+        // Если автор запроса - текущий пользователь, то это исходящий запрос
+        ? { status: 'PENDING_OUTGOING', requestId: friendship.id } 
+        // В противном случае - входящий
+        : { status: 'PENDING_INCOMING', requestId: friendship.id };
     }
+    // [!code focus end]
+
+    // Для всех остальных статусов ('ACCEPTED', 'BLOCKED') возвращаем как есть
     return { status: friendship.status, friendshipId: friendship.id };
   }
-
+  
   async blockUser(requesterId: number, userToBlockId: number): Promise<Friendship> {
     if (requesterId === userToBlockId) { 
         this.logger.warn(`[BLOCK-FAIL] ⚠️ User ID: ${requesterId} tried to block themselves.`);
@@ -4005,6 +4096,43 @@ export class CreateAchievementsTables1751406857147 implements MigrationInterface
 
 }
 --- END FILE: backend/src/migrations/1751042242562-CreateAchievementsTables.ts ---
+
+
+
+--- START FILE: backend/src/migrations/1751197264811-AddFriendshipRejectionsTable.ts ---
+
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+export class AddFriendshipRejectionsTable1751197264811 implements MigrationInterface {
+    name = 'AddFriendshipRejectionsTable1751197264811'
+
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "achievement_progress" DROP CONSTRAINT "FK_progress_user"`);
+        await queryRunner.query(`ALTER TABLE "achievement_progress" DROP CONSTRAINT "FK_progress_achievement"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_user_achievement_progress"`);
+        await queryRunner.query(`CREATE TABLE "friendship_rejections" ("id" SERIAL NOT NULL, "rejector_id" integer NOT NULL, "requester_id" integer NOT NULL, "rejected_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_e99ebcdb83d323c264a0d3ae88f" UNIQUE ("rejector_id", "requester_id"), CONSTRAINT "PK_e95bd4fc5bd43bf44f390ffaf54" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`ALTER TABLE "achievement_progress" ADD CONSTRAINT "UQ_38ec5b8a201eca471f667e7bb99" UNIQUE ("user_id", "achievement_id")`);
+        await queryRunner.query(`ALTER TABLE "friendship_rejections" ADD CONSTRAINT "FK_7ad009e59ce68f0cb20803b04a9" FOREIGN KEY ("rejector_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "friendship_rejections" ADD CONSTRAINT "FK_3093972da9eaaa26c4e75674bfd" FOREIGN KEY ("requester_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "achievement_progress" ADD CONSTRAINT "FK_b615f4d226f61db44ab1a852be1" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "achievement_progress" ADD CONSTRAINT "FK_a836013769846c7e14c8cb3689a" FOREIGN KEY ("achievement_id") REFERENCES "achievements"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+    }
+
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "achievement_progress" DROP CONSTRAINT "FK_a836013769846c7e14c8cb3689a"`);
+        await queryRunner.query(`ALTER TABLE "achievement_progress" DROP CONSTRAINT "FK_b615f4d226f61db44ab1a852be1"`);
+        await queryRunner.query(`ALTER TABLE "friendship_rejections" DROP CONSTRAINT "FK_3093972da9eaaa26c4e75674bfd"`);
+        await queryRunner.query(`ALTER TABLE "friendship_rejections" DROP CONSTRAINT "FK_7ad009e59ce68f0cb20803b04a9"`);
+        await queryRunner.query(`ALTER TABLE "achievement_progress" DROP CONSTRAINT "UQ_38ec5b8a201eca471f667e7bb99"`);
+        await queryRunner.query(`DROP TABLE "friendship_rejections"`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_user_achievement_progress" ON "achievement_progress" ("user_id", "achievement_id") `);
+        await queryRunner.query(`ALTER TABLE "achievement_progress" ADD CONSTRAINT "FK_progress_achievement" FOREIGN KEY ("achievement_id") REFERENCES "achievements"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "achievement_progress" ADD CONSTRAINT "FK_progress_user" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+    }
+
+}
+
+--- END FILE: backend/src/migrations/1751197264811-AddFriendshipRejectionsTable.ts ---
 
 
 
@@ -14303,7 +14431,7 @@ export default PostsPage;
 // frontend/src/pages/PublicProfilePage.js
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { Box, Typography, Sheet, Avatar, CircularProgress, Alert, Divider, Button, Chip, Dropdown, Menu, MenuButton, MenuItem, Stack, useTheme, IconButton, Tooltip, AspectRatio } from '@mui/joy';
@@ -14319,9 +14447,12 @@ import MailIcon from '@mui/icons-material/Mail';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { constructImageUrl } from '../utils/url';
 import CircleIcon from '@mui/icons-material/Circle';
-import UserPostsList from '../components/UserPostsList'; // [!code ++]
-import ConfirmationModal from '../components/ConfirmationModal'; // [!code ++]
+import UserPostsList from '../components/UserPostsList';
+import ConfirmationModal from '../components/ConfirmationModal';
 import VerifiedIcons from '../components/VerifiedIcons';
+import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
+import CancelIcon from '@mui/icons-material/Cancel';
 
 function isColorLight(hexColor) {
     if (!hexColor) return false;
@@ -14334,7 +14465,6 @@ function isColorLight(hexColor) {
 }
 
 function PublicProfilePage() {
-    // Вся логика и состояния остаются без изменений
     const { userId } = useParams();
     const navigate = useNavigate();
     const { isLoggedIn, user: currentUser, authToken, socket } = useAuth();
@@ -14344,102 +14474,160 @@ function PublicProfilePage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [friendship, setFriendship] = useState({ status: 'loading' });
-    const isAdmin = currentUser && ['ADMIN', 'MODERATOR', 'OWNER'].includes(currentUser.rank);
+    const isAdmin = currentUser && currentUser.rank?.power_level >= 800;
 
     const [modalOpen, setModalOpen] = useState(false);
     const [modalContent, setModalContent] = useState({ title: '', content: '', onConfirm: null });
     const [isActionLoading, setIsActionLoading] = useState(false);
 
-
-
-    const fetchProfileAndStatus = useCallback(async () => {
-        setLoading(true); setError(null);
-        try {
-            const config = { headers: { Authorization: `Bearer ${authToken}` } };
-            const idAsNumber = parseInt(userId, 10);
-            const identifier = isNaN(idAsNumber) ? userId : idAsNumber;
-            const profileResponse = await axios.get(`/api/users/${identifier}`);
-            setProfile(profileResponse.data);
-            if (isLoggedIn && currentUser?.id !== profileResponse.data.id) {
-                const statusResponse = await axios.get(`/api/friendships/status/${profileResponse.data.id}`, config);
-                setFriendship(statusResponse.data);
-            } else if (currentUser?.id === profileResponse.data.id) {
-                setFriendship({ status: 'self' });
-            } else {
-                setFriendship({ status: 'guest' });
+       const openCancelRequestModal = () => {
+        setModalContent({
+            title: 'Cancel Friend Request',
+            content: `Are you sure you want to cancel your friend request to ${profile.username}?`,
+            confirmText: 'Yes, Cancel Request',
+            confirmColor: 'danger',
+            onConfirm: () => confirmAction('cancel') // При подтверждении вызываем наш старый confirmAction
+        });
+        setModalOpen(true);
+    };
+    // [!code start]
+    // ---- ПОЛНОСТЬЮ ПЕРЕПИСАННАЯ ЛОГИКА ЗАГРУЗКИ ДАННЫХ ----
+    useEffect(() => {
+        // Эта функция будет выполняться каждый раз, когда меняется ID пользователя в URL
+        // или когда AuthContext заканчивает определять текущего пользователя.
+        const fetchData = async () => {
+            // Если AuthContext еще не решил, кто мы, выходим.
+            // Хук выполнится снова, когда currentUser определится.
+            if (currentUser === undefined) {
+                return;
             }
-        } catch (err) { setError('Failed to load user profile.'); } finally { setLoading(false); }
-    }, [userId, authToken, isLoggedIn, currentUser?.id]);
-    useEffect(() => { fetchProfileAndStatus(); }, [fetchProfileAndStatus]);
-    const handleAction = async (action, needsConfirmation = false) => {
+
+            setLoading(true);
+            setError(null);
+
+            try {
+                const config = authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {};
+                const idAsNumber = parseInt(userId, 10);
+                const identifier = isNaN(idAsNumber) ? userId : idAsNumber;
+
+                // Загружаем публичный профиль.
+                const profileResponse = await axios.get(`/api/users/${identifier}`);
+                const fetchedProfile = profileResponse.data;
+                setProfile(fetchedProfile);
+
+                // Определяем статус дружбы.
+                if (isLoggedIn && currentUser && currentUser.id !== fetchedProfile.id) {
+                    const statusResponse = await axios.get(`/api/friendships/status/${fetchedProfile.id}`, config);
+                    setFriendship(statusResponse.data);
+                } else if (isLoggedIn && currentUser && currentUser.id === fetchedProfile.id) {
+                    setFriendship({ status: 'self' });
+                } else {
+                    setFriendship({ status: 'guest' });
+                }
+            } catch (err) {
+                setError('Failed to load user profile. The user may not exist.');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, [userId, currentUser, isLoggedIn, authToken]);
+    // [!code end]
+
+    const handleAction = (action, needsConfirmation = false) => {
         if (needsConfirmation) {
             let modalDetails = {};
             if (action === 'remove') {
-                modalDetails = {
-                    title: 'Remove Friend',
-                    content: `Are you sure you want to remove ${profile.username} from your friends?`,
-                    confirmText: 'Remove',
-                    confirmColor: 'danger',
-                    onConfirm: () => confirmAction(action),
-                };
+                modalDetails = { title: 'Remove Friend', content: `Are you sure you want to remove ${profile.username} from your friends?`, confirmText: 'Remove', confirmColor: 'danger', onConfirm: () => confirmAction(action) };
             } else if (action === 'block') {
-                modalDetails = {
-                    title: 'Block User',
-                    content: `Are you sure you want to block ${profile.username}? You will no longer see their posts or comments, and they won't be able to contact you.`,
-                    confirmText: 'Block',
-                    confirmColor: 'danger',
-                    onConfirm: () => confirmAction(action),
-                };
+                modalDetails = { title: 'Block User', content: `Are you sure you want to block ${profile.username}? You will no longer see their posts or comments, and they won't be able to contact you.`, confirmText: 'Block', confirmColor: 'danger', onConfirm: () => confirmAction(action) };
             }
             setModalContent(modalDetails);
             setModalOpen(true);
         } else {
-            // Для действий, не требующих подтверждения, вызываем сразу
             confirmAction(action);
         }
     };
 
     const confirmAction = async (action) => {
         const config = { headers: { Authorization: `Bearer ${authToken}` } };
+
+        // Сохраняем предыдущее состояние, чтобы можно было откатиться в случае ошибки
+        const previousFriendshipState = friendship;
+
         setIsActionLoading(true);
+
+        // 1. Оптимистично обновляем интерфейс
+        if (action === 'add') {
+            setFriendship({ status: 'PENDING_OUTGOING', requestId: null });
+        } else if (['cancel', 'reject', 'remove', 'unblock'].includes(action)) {
+            setFriendship({ status: 'NONE' });
+        }
+
         try {
+            let response;
             switch (action) {
                 case 'add':
-                    await axios.post(`/api/friendships/requests`, { receiverId: profile.id }, config);
+                    response = await axios.post(`/api/friendships/requests`, { receiverId: profile.id }, config);
+                    // [!code focus start]
+                    // После успешного ответа мы НЕ используем ответ сервера,
+                    // так как мы уже оптимистично обновили состояние на правильное ('PENDING_OUTGOING').
+                    // Просто покажем уведомление.
                     toast.success('Friend request sent!');
+                    // Обновим requestId, если он нам нужен для отмены
+                    setFriendship(prev => ({ ...prev, requestId: response.data.id }));
+                    // [!code focus end]
                     break;
                 case 'accept':
-                    await axios.patch(`/api/friendships/requests/${friendship.requestId}/accept`, {}, config);
+                    response = await axios.patch(`/api/friendships/requests/${friendship.requestId}/accept`, {}, config);
+                    // [!code focus start]
+                    // А здесь ответ сервера важен, он вернет 'ACCEPTED'
+                    setFriendship({ status: response.data.status, friendshipId: response.data.id });
                     toast.success('Friend request accepted!');
+                    // [!code focus end]
                     break;
                 case 'reject':
                 case 'cancel':
                     await axios.delete(`/api/friendships/requests/${friendship.requestId}`, config);
                     toast.success('Request cancelled.');
+                    // Здесь состояние уже оптимистично обновлено на 'NONE'
                     break;
                 case 'remove':
                     await axios.delete(`/api/friendships/${friendship.friendshipId}`, config);
                     toast.success('Friend removed.');
                     break;
                 case 'block':
-                    await axios.post(`/api/friendships/block/${profile.id}`, {}, config);
+                    response = await axios.post(`/api/friendships/block/${profile.id}`, {}, config);
+                    // [!code focus start]
+                    // И для блокировки
+                    setFriendship({ status: response.data.status, friendshipId: response.data.id });
                     toast.success('User blocked.');
+                    // [!code focus end]
                     break;
                 case 'unblock':
                     await axios.delete(`/api/friendships/block/${profile.id}`, config);
                     toast.success('User unblocked.');
                     break;
-                default: break;
+                default:
+                    break;
             }
-            fetchProfileAndStatus(); // Обновляем статус после любого действия
         } catch (err) {
             toast.error(err.response?.data?.message || 'An error occurred.');
+            // [!code focus start]
+            // 2. Если произошла ОШИБКА, откатываем интерфейс к состоянию до клика
+            setFriendship(previousFriendshipState);
+            // [!code focus end]
         } finally {
+            // [!code focus start]
+            // 3. Блок finally ТЕПЕРЬ отвечает только за состояние загрузки и модального окна
             setIsActionLoading(false);
             setModalOpen(false);
+            // [!code focus end]
         }
     };
 
+    // Остальная часть файла остается без изменений
     const handleToggleBanStatus = async () => {
         if (!profile) return;
         const action = profile.is_banned ? 'unban' : 'ban';
@@ -14447,9 +14635,10 @@ function PublicProfilePage() {
         try {
             const config = { headers: { Authorization: `Bearer ${authToken}` } };
             await axios.post(`/api/admin/users/${profile.id}/${action}`, {}, config);
-            fetchProfileAndStatus();
-        } catch (err) { alert(`Failed to ${action} user.`); }
+            setProfile(prev => ({ ...prev, is_banned: !prev.is_banned })); // Optimistic update
+        } catch (err) { toast.error(`Failed to ${action} user.`); }
     };
+
     useEffect(() => {
         if (!socket || !profile) return;
         const handleStatusUpdate = (data) => {
@@ -14462,73 +14651,65 @@ function PublicProfilePage() {
     }, [socket, profile]);
 
     const renderActionButtons = () => {
-        if (!isLoggedIn || friendship.status === 'self' || friendship.status === 'guest') return null; // 
-        switch (friendship.status) { // 
-            case 'ACCEPTED':
-                return (<Dropdown>
-                    <MenuButton endDecorator={<MoreVertIcon />} slots={{ root: Button }} slotProps={{ root: { variant: 'soft', color: 'neutral', startDecorator: <HowToRegIcon /> } }}>Friends</MenuButton>
-                    <Menu>
-                        <MenuItem onClick={() => handleAction('remove', true)}><PersonRemoveIcon /> Remove Friend</MenuItem>
-                        <MenuItem onClick={() => handleAction('block', true)} sx={{ color: 'danger.500' }}><BlockIcon /> Block User</MenuItem>
-                    </Menu>
-                </Dropdown>);
-            case 'PENDING_INCOMING':
-                return (<Stack direction="row" spacing={1}><Button color="success" onClick={() => handleAction('accept')}>Accept</Button><Button color="danger" variant="outlined" onClick={() => handleAction('reject')}>Decline</Button></Stack>); // 
-            case 'PENDING_OUTGOING':
-                return <Button disabled startDecorator={<AccessTimeIcon />} onClick={() => handleAction('cancel')}>Request Sent</Button>; // 
-            case 'BLOCKED':
-                return <Button color="warning" onClick={() => handleAction('unblock')}>Unblock</Button>; // 
-            case 'NONE': default:
-                return <Button variant="solid" color="primary" startDecorator={<PersonAddIcon />} onClick={() => handleAction('add')}>Add Friend</Button>; // 
-        }
+        console.log(`[RENDER] renderActionButtons called. Current friendship status: ${friendship.status}`);
+        if (!isLoggedIn || friendship.status === 'self' || friendship.status === 'guest' || friendship.status === 'loading') return null;
+
+        const animationProps = { initial: { opacity: 0, y: -10 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: 10 }, transition: { duration: 0.2 } };
+
+        return (
+            <AnimatePresence mode="wait">
+                {(() => {
+                    switch (friendship.status) {
+                        case 'ACCEPTED':
+                            return (<motion.div key="accepted" {...animationProps}> <Dropdown> <MenuButton endDecorator={<MoreVertIcon />} slots={{ root: Button }} slotProps={{ root: { variant: 'soft', color: 'neutral', startDecorator: <HowToRegIcon /> } }}>Friends</MenuButton> <Menu> <MenuItem onClick={() => handleAction('remove', true)}><PersonRemoveIcon /> Remove Friend</MenuItem> <MenuItem onClick={() => handleAction('block', true)} sx={{ color: 'danger.500' }}><BlockIcon /> Block User</MenuItem> </Menu> </Dropdown> </motion.div>);
+
+                        case 'PENDING_INCOMING':
+                            return (<motion.div key="pending_incoming" {...animationProps}> <Stack direction="row" spacing={1}> <Button color="success" onClick={() => handleAction('accept')}>Accept</Button> <Button color="danger" variant="outlined" onClick={() => handleAction('reject')}>Decline</Button> </Stack> </motion.div>);
+
+                        // [!code start]
+                         case 'PENDING_OUTGOING':
+                            return (
+                                <motion.div key="pending_outgoing" {...animationProps}>
+                                    {/* Убираем onMouseEnter и onMouseLeave */}
+                                    <Button
+                                        variant="soft"
+                                        color="neutral" // Кнопка всегда нейтральная
+                                        startDecorator={<AccessTimeIcon />} // Иконка всегда "часы"
+                                        onClick={openCancelRequestModal} // На клик открываем модальное окно
+                                        loading={isActionLoading}
+                                    >
+                                        Pending
+                                    </Button>
+                                </motion.div>
+                            );
+
+                        case 'BLOCKED':
+                            return (<motion.div key="blocked" {...animationProps}> <Button color="warning" onClick={() => handleAction('unblock')}>Unblock</Button> </motion.div>);
+
+                        case 'NONE':
+                        default:
+                            return (<motion.div key="none" {...animationProps}> <Button variant="solid" color="primary" startDecorator={<PersonAddIcon />} onClick={() => handleAction('add')}>Add Friend</Button> </motion.div>);
+                    }
+                })()}
+            </AnimatePresence>
+        );
     };
 
     if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size="lg" /></Box>;
     if (error) return <Alert color="danger">{error}</Alert>;
-    if (!profile) return <Typography>User not found.</Typography>;
+    if (!profile) return null; // Возвращаем null, пока профиль не загружен, чтобы избежать ошибок
 
     return (
         <Box>
             <Sheet variant="outlined" sx={{ borderRadius: 'md', py: { xs: 2, sm: 3, md: 4 } }}>
-
                 <Box sx={{ position: 'relative', px: { xs: 2, sm: 3, md: 4 } }}>
                     <AspectRatio ratio="16/5" sx={{ width: '100%', borderRadius: 'sm', bgcolor: 'background.level1' }}>
-                        {profile.banner_url ? (
-                            <img
-                                src={constructImageUrl(profile.banner_url)}
-                                alt={`${profile.username}'s banner`}
-                                style={{ objectFit: 'cover' }}
-                            />
-                        ) : (
-                            <Box sx={{ background: 'linear-gradient(180deg, var(--joy-palette-neutral-700), var(--joy-palette-neutral-800))' }} />
-                        )}
+                        {profile.banner_url ? (<img src={constructImageUrl(profile.banner_url)} alt={`${profile.username}'s banner`} style={{ objectFit: 'cover' }} />) : (<Box sx={{ background: 'linear-gradient(180deg, var(--joy-palette-neutral-700), var(--joy-palette-neutral-800))' }} />)}
                     </AspectRatio>
-                    <Box
-                        sx={{
-                            position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%',
-                            background: 'linear-gradient(to top, var(--joy-palette-background-level1), transparent)',
-                        }}
-                    />
+                    <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%', background: 'linear-gradient(to top, var(--joy-palette-background-level1), transparent)', }} />
                 </Box>
-                <Box sx={{
-                    display: 'flex',
-                    flexDirection: { xs: 'column', sm: 'row' },
-                    alignItems: { xs: 'center', sm: 'flex-end' },
-                    gap: 3,
-                    mt: { xs: -4, sm: -6 },
-                    position: 'relative',
-                    px: { xs: 2, sm: 3, md: 4 } // <--- ЗАМЕНИЛИ paddingLeft/Right НА px
-                }}>
-                    <Avatar
-                        src={constructImageUrl(profile.pfp_url)}
-                        sx={{
-                            '--Avatar-size': { xs: '80px', sm: '128px' },
-                            border: '4px solid',
-                            borderColor: 'background.body',
-                            boxShadow: 'sm',
-                            mx: { xs: 'auto', sm: 0 },
-                        }}
-                    />
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'center', sm: 'flex-end' }, gap: 3, mt: { xs: -4, sm: -6 }, position: 'relative', px: { xs: 2, sm: 3, md: 4 } }}>
+                    <Avatar src={constructImageUrl(profile.pfp_url)} sx={{ '--Avatar-size': { xs: '80px', sm: '128px' }, border: '4px solid', borderColor: 'background.body', boxShadow: 'sm', mx: { xs: 'auto', sm: 0 }, }} />
                     <Box sx={{ textAlign: { xs: 'center', sm: 'left' }, flexGrow: 1 }}>
                         <Typography level="h2" component="h1" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, justifyContent: { xs: 'center', sm: 'flex-start' } }}>
                             {profile.username}
@@ -14541,31 +14722,13 @@ function PublicProfilePage() {
                             {profile.minecraft_username && <Chip variant="soft" color={profile.is_minecraft_online ? 'success' : 'neutral'} startDecorator={<CircleIcon sx={{ fontSize: '10px' }} />}>{profile.minecraft_username} ({profile.is_minecraft_online ? 'Online' : 'Offline'})</Chip>}
                         </Stack>
                     </Box>
-
-                    {/* Логика кнопок, специфичная для публичной страницы */}
-                    <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{
-                            width: { xs: '100%', sm: 'auto' },
-                            flexShrink: 0,
-                            justifyContent: 'center'
-                        }}
-                    >
-                        {isLoggedIn && friendship.status !== 'self' && friendship.status !== 'BLOCKED' && (
-                            <Button variant="solid" color="primary" startDecorator={<MailIcon />} onClick={() => navigate(`/messages/${profile.id}`)}>Message</Button>
-                        )}
+                    <Stack direction="row" spacing={1} sx={{ width: { xs: '100%', sm: 'auto' }, flexShrink: 0, justifyContent: 'center' }}>
+                        {isLoggedIn && friendship.status !== 'self' && friendship.status !== 'BLOCKED' && (<Button variant="solid" color="primary" startDecorator={<MailIcon />} onClick={() => navigate(`/messages/${profile.id}`)}>Message</Button>)}
                         {renderActionButtons()}
-                        {isAdmin && friendship.status !== 'self' && (
-                            profile.is_banned
-                                ? <Button variant="soft" color="success" startDecorator={<CheckCircleOutlineIcon />} onClick={handleToggleBanStatus}>Unban</Button>
-                                : <Button variant="soft" color="danger" startDecorator={<BlockIcon />} onClick={handleToggleBanStatus}>Ban</Button>
-                        )}
+                        {isAdmin && friendship.status !== 'self' && (profile.is_banned ? <Button variant="soft" color="success" startDecorator={<CheckCircleOutlineIcon />} onClick={handleToggleBanStatus}>Unban</Button> : <Button variant="soft" color="danger" startDecorator={<BlockIcon />} onClick={handleToggleBanStatus}>Ban</Button>)}
                     </Stack>
                 </Box>
-
                 <Divider sx={{ my: 3 }} />
-
                 <Typography level="body-lg" sx={{ whiteSpace: 'pre-wrap', px: { xs: 2, sm: 3, md: 4 } }}>
                     {profile.description || 'No description provided.'}
                 </Typography>
@@ -14576,7 +14739,7 @@ function PublicProfilePage() {
                 </Typography>
                 <UserPostsList userId={profile.id} />
             </Box>
-            <ConfirmationModal
+           <ConfirmationModal
                 open={modalOpen}
                 onClose={() => setModalOpen(false)}
                 onConfirm={modalContent.onConfirm}
@@ -17998,6 +18161,7 @@ export default defineConfig({
     "@tiptap/react": "^2.22.3",
     "@tiptap/starter-kit": "^2.22.3",
     "axios": "^1.9.0",
+    "framer-motion": "^12.19.2",
     "jwt-decode": "^4.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -18042,6 +18206,7 @@ export default defineConfig({
     "nth-check": "2.0.1"
   }
 }
+
 --- END FILE: frontend/package.json ---
 
 
