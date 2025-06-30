@@ -7,6 +7,8 @@ services:
   #    dockerfile: backend/Dockerfile.prod
     image: sknery/flamewall-backend:latest # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     container_name: flamewall_backend_prod
+    ports: # <-- ДОБАВЛЯЕМ ЭТУ СЕКЦИЮ
+      - "3000:3000" # <-- И ЭТУ СТРОКУ
     restart: unless-stopped
     environment:
       - FORCE_COLOR=1 # Значение может быть 1, 2 или 3. 1 - базовые цвета.
