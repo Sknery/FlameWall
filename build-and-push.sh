@@ -17,7 +17,7 @@ docker push $DOCKER_USERNAME/flamewall-backend:latest
 
 echo "🛠️ Building and pushing frontend image..."
 # Передаем переменную для Vite во время сборки
-docker build --build-arg VITE_API_BASE_URL=$VITE_API_BASE_URL -f frontend/Dockerfile.prod -t $DOCKER_USERNAME/flamewall-frontend:latest .
+docker build -f frontend/Dockerfile.prod -t $DOCKER_USERNAME/flamewall-frontend:latest .
 docker push $DOCKER_USERNAME/flamewall-frontend:latest
 
 echo "✅ All images pushed successfully!"
