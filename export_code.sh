@@ -14,7 +14,6 @@ DIRS_TO_EXPORT=(
     "nginx"
     "FlameWallBridge/FlameWallProxyBridge/src" # <-- ДОБАВЛЕНО: Папка с исходниками плагина
     "FlameWallBridge/FlameWallSpigotHelper/src"
-    "FlameWallBridge/VanillaAchievementTriggers/src"
 )
 
 # Список отдельных файлов, которые нужно добавить
@@ -31,7 +30,6 @@ FILES_TO_EXPORT=(
     "frontend/package.json"
     "FlameWallBridge/FlameWallProxyBridge/pom.xml" # <-- ДОБАВЛЕНО: Файл конфигурации Maven для плагина
     "FlameWallBridge/FlameWallSpigotHelper/pom.xml"
-    "FlameWallBridge/VanillaAchievementTriggers/pom.xml"
 )
 
 # --- ЛОГИКА СКРИПТА (без изменений) ---
