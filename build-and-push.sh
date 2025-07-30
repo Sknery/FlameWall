@@ -16,8 +16,10 @@ docker build -f backend/Dockerfile.prod -t $DOCKER_USERNAME/flamewall-backend:la
 docker push $DOCKER_USERNAME/flamewall-backend:latest
 
 echo "🛠️ Building and pushing frontend image..."
-# Передаем переменную для Vite во время сборки
-docker build -f frontend/Dockerfile.prod -t $DOCKER_USERNAME/flamewall-frontend:latest .
+# [!code focus start]
+# --- ДОБАВЛЯЕМ ФЛАГ --no-cache ---
+docker build --no-cache -f frontend/Dockerfile.prod -t $DOCKER_USERNAME/flamewall-frontend:latest .
+# [!code focus end]
 docker push $DOCKER_USERNAME/flamewall-frontend:latest
 
 echo "✅ All images pushed successfully!"
