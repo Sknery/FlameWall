@@ -17,8 +17,14 @@ docker push $DOCKER_USERNAME/flamewall-backend:latest
 
 echo "🛠️ Building and pushing frontend image..."
 # [!code focus start]
-# --- ДОБАВЛЯЕМ ФЛАГ --no-cache ---
-docker build --no-cache -f frontend/Dockerfile.prod -t $DOCKER_USERNAME/flamewall-frontend:latest .
+# --- ИЗМЕНИТЕ ЭТУ СТРОКУ ---
+# Мы берем переменную $VAPID_PUBLIC_KEY из корневого .env и передаем ее
+# в сборку как аргумент с именем VITE_VAPID_PUBLIC_KEY
+echo "--- DEBUG: Passing VAPID Key to build: $VAPID_PUBLIC_KEY ---"
+
+docker build --no-cache \
+  --build-arg VITE_VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY \
+  -f frontend/Dockerfile.prod -t $DOCKER_USERNAME/flamewall-frontend:latest .
 # [!code focus end]
 docker push $DOCKER_USERNAME/flamewall-frontend:latest
 
