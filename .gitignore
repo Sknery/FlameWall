@@ -4,5 +4,5 @@
 .env.production.local
 .env.local
 
-full_project_snapshot.txt
+flamewall.txt
 export_code.sh 
