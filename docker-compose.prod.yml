@@ -37,7 +37,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile.prod
       args:
-        - VITE_VAPID_PUBLIC_KEY=${VITE_VAPID_PUBLIC_KEY}
+        - VITE_VAPID_PUBLIC_KEY=${VITE_VAPID_PUBLIC_KEY} # <-- Теперь ищет новое имя
     container_name: flamewall_frontend_prod
     restart: unless-stopped
     networks:
