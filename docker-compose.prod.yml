@@ -69,7 +69,7 @@ services:
       # Nginx будет читать файлы из этого общего хранилища
       - uploads_data:/usr/share/nginx/html/uploads:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
-      - /var/www/certbot:/var/www/certbot:ro
+      - /var/www/certbot:/var/www/certbot
     depends_on:
       - frontend
       - backend
