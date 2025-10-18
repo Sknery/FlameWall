@@ -1,12 +1,28 @@
 #!/bin/bash
 set -e # Скрипт остановится, если любая команда вернет ошибку
 
-# --- 1. Проверка аргумента ---
+# --- 1. Определение команды Docker Compose ---
+# Проверяем, доступна ли команда 'docker compose' (новый синтаксис)
+if docker compose version &>/dev/null; then
+    DOCKER_COMPOSE_CMD="docker compose"
+# Если нет, проверяем 'docker-compose' (старый синтаксис)
+elif docker-compose version &>/dev/null; then
+    DOCKER_COMPOSE_CMD="docker-compose"
+# Если ни одна из команд не найдена, выходим с ошибкой
+else
+    echo "❌ Ошибка: Не удалось найти ни 'docker compose', ни 'docker-compose'."
+    echo "Пожалуйста, убедитесь, что Docker Compose установлен на сервере."
+    exit 1
+fi
+echo "✅ Используется команда: '$DOCKER_COMPOSE_CMD'"
+
+
+# --- 2. Проверка аргумента ---
 if [ -z "$1" ]; then
     echo "Usage: ./deploy.sh [pull | build]"
     echo ""
-    echo "  pull  - Pull pre-built images from Docker Hub (faster deployment)."
-    echo "  build - Build images from source directly on the server (for development)."
+    echo "  pull  - Скачать готовые образы из Docker Hub (быстрое развертывание)."
+    echo "  build - Собрать образы из исходного кода прямо на сервере (для разработки)."
     exit 1
 fi
 
@@ -16,42 +32,43 @@ MODE=$1
 export $(grep -v '^#' .env | xargs)
 
 # --- Вход в Docker Hub ---
-echo "🔐 Logging in to Docker Hub to pull private images..."
+echo "🔐 Вход в Docker Hub для скачивания приватных образов..."
 echo "$DOCKER_HUB_PASSWORD" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
 
-echo "🚀 Starting deployment in '$MODE' mode..."
+echo "🚀 Запуск развертывания в режиме '$MODE'..."
 
-# 2. Скачиваем последние изменения из Git
-echo "🔄 Pulling latest changes from Git..."
+# --- 3. Скачиваем последние изменения из Git ---
+echo "🔄 Получение последних изменений из Git..."
 git pull origin main
 git submodule sync --recursive
 git submodule update --init --remote --merge
 
-# --- 3. Обработка Docker-образов в зависимости от режима ---
+# --- 4. Обработка Docker-образов в зависимости от режима ---
 if [ "$MODE" == "pull" ]; then
-    echo "🔽 Pulling new Docker images from Docker Hub..."
-    docker compose -f docker-compose.prod.yml pull
+    echo "🔽 Скачивание новых Docker-образов из Docker Hub..."
+    $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml pull
 elif [ "$MODE" == "build" ]; then
-    echo "🛠️  Building all images from source (ignoring cache)..."
+    echo "🛠️  Сборка всех образов из исходного кода (игнорируя кеш)..."
     # Добавляем --no-cache, чтобы принудительно пересобрать все слои
-    docker compose -f docker-compose.prod.yml build --no-cache
+    $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml build --no-cache
 else
-    echo "❌ Invalid mode: '$MODE'. Please use 'pull' or 'build'."
+    echo "❌ Неверный режим: '$MODE'. Пожалуйста, используйте 'pull' или 'build'."
     exit 1
 fi
 
-# 4. Применяем миграции (если есть новые)
-echo "🔄 Applying database migrations..."
+# --- 5. Применяем миграции (если есть новые) ---
+echo "🔄 Применение миграций базы данных..."
 # Образ backend уже был собран на шаге выше, поэтому команда run сработает
-docker compose -f docker-compose.prod.yml run --rm backend npm run migration:run:prod
+$DOCKER_COMPOSE_CMD -f docker-compose.prod.yml run --rm backend npm run migration:run:prod
 
-# 5. Принудительно удаляем старый контейнер Nginx, чтобы он гарантированно подхватил новый конфиг
-echo "🔨 Forcing Nginx container recreation..."
-docker compose -f docker-compose.prod.yml rm -s -f nginx || true
+# --- 6. Принудительно удаляем старый контейнер Nginx ---
+# Это гарантирует, что он подхватит новый конфиг, если он изменился
+echo "🔨 Принудительное пересоздание контейнера Nginx..."
+$DOCKER_COMPOSE_CMD -f docker-compose.prod.yml rm -s -f nginx || true
 
-# 6. Запускаем все сервисы
-echo "🚀 Starting all services..."
+# --- 7. Запускаем все сервисы ---
+echo "🚀 Запуск всех сервисов..."
 # Флаг --build больше не нужен, так как мы уже всё собрали явно
-docker compose -f docker-compose.prod.yml up -d
+$DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d
 
-echo "✅ Deployment finished successfully!"
+echo "✅ Развертывание успешно завершено!"
